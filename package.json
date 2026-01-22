@@ -1,0 +1,48 @@
+{
+  "name": "chat-api",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": "cobuild",
+  "main": "dist/index.js",
+  "typings": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@tsconfig/recommended": "^1.0.1",
+    "@types/node": "^22.14.1",
+    "@types/pg": "^8.11.10",
+    "@vitest/coverage-v8": "^2.1.8",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.9",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/request-context": "^6.0.2",
+    "@neynar/nodejs-sdk": "^3.34.0",
+    "ai": "^6.0.30",
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.38.4",
+    "fastify": "^5.1.0",
+    "jose": "^5.9.6",
+    "pg": "^8.13.1",
+    "redis": "^4.7.0",
+    "zod": "^4.1.8"
+  },
+  "packageManager": "pnpm@9.15.9"
+}
