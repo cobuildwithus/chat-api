@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { type RedisClientType, createClient } from "redis";
 
-const redisClient = createClient({ url: process.env.COBUILD_REDIS_URL });
+const redisClient = createClient({ url: process.env.REDIS_URL });
 redisClient.on("error", (err) => console.error("Redis Client Error", err));
 
 let client: Promise<typeof redisClient> | null = null;

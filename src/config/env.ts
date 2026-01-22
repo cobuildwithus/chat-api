@@ -15,9 +15,9 @@ const replicaUrlsSchema = z.preprocess(
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production"]),
   OPENAI_API_KEY: z.string().min(1),
-  COBUILD_REDIS_URL: z.string().min(1),
-  COBUILD_POSTGRES_URL: z.string().min(1),
-  COBUILD_POSTGRES_REPLICA_URLS: replicaUrlsSchema,
+  REDIS_URL: z.string().min(1),
+  POSTGRES_URL: z.string().min(1),
+  POSTGRES_REPLICA_URLS: replicaUrlsSchema,
   PRIVY_APP_ID: z.string().min(1).optional(),
   PRIVY_VERIFICATION_KEY: z.string().min(1).optional(),
   CHAT_GRANT_SECRET: z.string().min(1),
@@ -61,8 +61,8 @@ export type DatabaseConfig = {
 export function loadDatabaseConfig(): DatabaseConfig {
   const env = validateEnvVariables();
   return {
-    primaryUrl: env.COBUILD_POSTGRES_URL,
-    replicaUrls: env.COBUILD_POSTGRES_REPLICA_URLS ?? [],
+    primaryUrl: env.POSTGRES_URL,
+    replicaUrls: env.POSTGRES_REPLICA_URLS ?? [],
   };
 }
 

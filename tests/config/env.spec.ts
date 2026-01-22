@@ -11,8 +11,8 @@ import {
 const baseEnv = {
   NODE_ENV: "development",
   OPENAI_API_KEY: "key",
-  COBUILD_REDIS_URL: "redis://localhost",
-  COBUILD_POSTGRES_URL: "postgres://localhost",
+  REDIS_URL: "redis://localhost",
+  POSTGRES_URL: "postgres://localhost",
   PRIVY_APP_ID: "privy",
   CHAT_GRANT_SECRET: "secret",
   NEYNAR_API_KEY: "neynar",
@@ -40,7 +40,7 @@ describe("env helpers", () => {
     process.env = {
       ...process.env,
       ...baseEnv,
-      COBUILD_POSTGRES_REPLICA_URLS: "postgres://a, postgres://b",
+      POSTGRES_REPLICA_URLS: "postgres://a, postgres://b",
       DEBUG_CHAT: "1",
     };
 

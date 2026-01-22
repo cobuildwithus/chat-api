@@ -76,12 +76,13 @@ curl -H "x-chat-user: 0xabc0000000000000000000000000000000000000" \
 See `.env.example` for required values.
 
 Key variables:
-- `COBUILD_POSTGRES_URL`
-- `COBUILD_REDIS_URL`
+- `POSTGRES_URL`
+- `REDIS_URL`
 - `OPENAI_API_KEY`
 - `PRIVY_APP_ID` (required unless `SELF_HOSTED_MODE=true`)
 - `PRIVY_VERIFICATION_KEY` (required in production unless `SELF_HOSTED_MODE=true`)
 - `CHAT_GRANT_SECRET`
+- `DOCS_VECTOR_STORE_ID` (optional, enable docs search tool)
 - `NEYNAR_API_KEY` (optional, for getCast tool)
 - `SELF_HOSTED_MODE` (optional, set to `true` to bypass Privy)
 - `SELF_HOSTED_DEFAULT_ADDRESS` (optional, fallback address in self-hosted mode)
@@ -93,12 +94,29 @@ Generate a `CHAT_GRANT_SECRET` with:
 openssl rand -hex 32
 ```
 
+## Docs tool vector store ID (optional)
+
+If you want the docs search tool, you’ll need an OpenAI vector store ID loaded into `DOCS_VECTOR_STORE_ID`.
+
+The easiest way to get it is from the docs repo upload script:
+
+1. In the docs repo ([github.com/cobuildwithus/cobuild-docs](https://github.com/cobuildwithus/cobuild-docs)), run:
+
+   ```bash
+   OPENAI_API_KEY=... DOCS_VECTOR_STORE_ID=... pnpm upload-docs
+   ```
+
+2. If you omit `DOCS_VECTOR_STORE_ID`, the script creates a new vector store named “Cobuild Docs”.
+3. Copy the ID printed in the output (it logs `Using vector store: vs_...` and `Created vector store: vs_...`) into this repo’s `.env`.
+
+Re-run the script when docs change; add `--purge` to replace existing files in the store.
+
 ## Database setup (minimal)
 
 Use the provided migration to create the minimal schema (`cobuild` + `farcaster`).
 
 ```bash
-psql "$COBUILD_POSTGRES_URL" -f migrations/0001_minimal_chat.sql
+psql "$POSTGRES_URL" -f migrations/0001_minimal_chat.sql
 ```
 
 Notes:
@@ -122,8 +140,8 @@ Hosted option: https://railway.app
 1. Create a new Railway project and link this repo.
 2. Add Postgres + Redis plugins (or your own managed services).
 3. Set environment variables from `.env.example`:
-   - `COBUILD_POSTGRES_URL` = Railway Postgres connection string
-   - `COBUILD_REDIS_URL` = Railway Redis connection string
+   - `POSTGRES_URL` = Railway Postgres connection string
+   - `REDIS_URL` = Railway Redis connection string
    - `OPENAI_API_KEY`
    - `CHAT_GRANT_SECRET`
    - `PRIVY_APP_ID` / `PRIVY_VERIFICATION_KEY` (unless `SELF_HOSTED_MODE=true`)
