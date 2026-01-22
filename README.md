@@ -62,6 +62,15 @@ curl -H "x-chat-user: 0xabc0000000000000000000000000000000000000" \
   -d '{"type":"chat-default"}'
 ```
 
+## Built with
+
+- Fastify (HTTP server)
+- Drizzle ORM + Postgres (storage)
+- Redis (cache + rate limiting)
+- Vercel AI SDK + OpenAI Responses API (LLM runtime)
+- Zod (request validation)
+- Neynar SDK (optional Farcaster tools)
+
 ## Environment
 
 See `.env.example` for required values.
@@ -78,6 +87,12 @@ Key variables:
 - `SELF_HOSTED_DEFAULT_ADDRESS` (optional, fallback address in self-hosted mode)
 - `SELF_HOSTED_SHARED_SECRET` (optional, require `x-chat-auth` in self-hosted mode)
 
+Generate a `CHAT_GRANT_SECRET` with:
+
+```bash
+openssl rand -hex 32
+```
+
 ## Database setup (minimal)
 
 Use the provided migration to create the minimal schema (`cobuild` + `farcaster`).
@@ -89,6 +104,7 @@ psql "$COBUILD_POSTGRES_URL" -f migrations/0001_minimal_chat.sql
 Notes:
 - The `farcaster.profiles` table is required for the `getUser` tool and user data prompt.
 - If you do not plan to use Farcaster tools, you can still create it empty.
+Migration file: [migrations/0001_minimal_chat.sql](https://github.com/cobuildwithus/chat-api/blob/main/migrations/0001_minimal_chat.sql)
 
 ## Tests
 

@@ -217,7 +217,7 @@ describe("storeChatMessages", () => {
 
     await storeChatMessages({
       chatId: "chat-6",
-      messages: [{ role: "user", parts: [{ type: "text", text: "hello" }] } as UIMessage],
+      messages: [{ id: "m9", role: "user", parts: [{ type: "text", text: "hello" }] } as UIMessage],
       type: "chat-default",
       data: {},
       user: baseUser,
