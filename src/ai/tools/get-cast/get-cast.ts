@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { neynarClientNotifications as neynarClient } from "../../../infra/neynar/client";
+import { getNeynarClient } from "../../../infra/neynar/client";
 import type { Tool } from "../tool";
 
 export const getCastTool = {
@@ -20,17 +20,17 @@ export const getCastTool = {
     description: "Get cast details by hash or URL",
     execute: async ({ identifier, type }) => {
       console.debug(`Getting cast ${identifier} with type ${type}`);
-      return await getCast(identifier, type);
+      const neynarClient = getNeynarClient();
+      if (!neynarClient) {
+        return { error: "Neynar API key is not configured." };
+      }
+      try {
+        const response = await neynarClient.lookupCastByHashOrUrl({ identifier, type });
+        return response.cast;
+      } catch (error) {
+        console.error("Error getting cast", error);
+        return null;
+      }
     },
   }),
 } satisfies Tool;
-
-async function getCast(identifier: string, type: "hash" | "url") {
-  try {
-    const response = await neynarClient.lookupCastByHashOrUrl({ identifier, type });
-    return response.cast;
-  } catch (error) {
-    console.error("Error getting cast", error);
-    return null;
-  }
-}

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   COBUILD_AI_CONTEXT_URL,
+  fetchCobuildAiContextFresh,
   formatCobuildAiContextError,
   getCobuildAiContextSnapshot,
 } from "../../src/infra/cobuild-ai-context";
@@ -23,6 +24,7 @@ describe("cobuild ai context", () => {
     expect(formatCobuildAiContextError(new Error("boom"))).toBe("boom");
     expect(formatCobuildAiContextError("fail")).toBe("fail");
     expect(formatCobuildAiContextError({})).toBe("Unknown error");
+    expect(formatCobuildAiContextError("x".repeat(200))).toHaveLength(120);
   });
 
   it("caches the ai context snapshot", async () => {
@@ -46,5 +48,15 @@ describe("cobuild ai context", () => {
     const result = await getCobuildAiContextSnapshot();
     expect(result.data).toBeNull();
     expect(result.error).toBe("HTTP 500");
+  });
+
+  it("fetches fresh context with a custom timeout", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ hello: "fresh" }),
+    });
+
+    const result = await fetchCobuildAiContextFresh(1);
+    expect(result).toEqual({ hello: "fresh" });
   });
 });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { extractAttachments, getAttachmentsPrompt, getMessagesWithoutVideos } from "../../../src/ai/utils/attachments";
+import type { ModelMessage } from "ai";
+import {
+  extractAttachments,
+  getAttachmentsPrompt,
+  getMessagesWithoutVideos,
+} from "../../../src/ai/utils/attachments";
 
 const baseMessages = [
   {
@@ -15,23 +20,23 @@ const baseMessages = [
     role: "assistant",
     content: "ok",
   },
-];
+] as unknown as ModelMessage[];
 
 describe("attachments", () => {
   it("extracts attachments and builds prompt", () => {
-    const attachments = extractAttachments(baseMessages as any);
+    const attachments = extractAttachments(baseMessages);
     expect(attachments).toEqual([
       "[Image](https://image)",
       "[Video](https://video)",
       "[Image](https://image2)",
     ]);
 
-    const prompt = getAttachmentsPrompt(baseMessages as any);
+    const prompt = getAttachmentsPrompt(baseMessages);
     expect(prompt?.content).toContain("attachments");
   });
 
   it("removes video parts from user messages", () => {
-    const cleaned = getMessagesWithoutVideos(baseMessages as any);
+    const cleaned = getMessagesWithoutVideos(baseMessages);
     const userParts = cleaned[0].content as Array<{ type: string; mediaType?: string }>;
     expect(userParts.find((part) => part.mediaType?.startsWith("video/"))).toBeUndefined();
   });

@@ -15,10 +15,11 @@ vi.mock("../../src/infra/redis", () => ({
 describe("rate-limit", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getRedisClient).mockResolvedValue({
+    const redisClient = {
       eval: evalMock,
       multi: multiMock,
-    } as any);
+    } as unknown as Awaited<ReturnType<typeof getRedisClient>>;
+    vi.mocked(getRedisClient).mockResolvedValue(redisClient);
   });
 
   it("gets usage and logs in non-production", async () => {

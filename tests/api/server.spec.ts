@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 
-let serverMock: FastifyInstance & {
+type ServerMock = FastifyInstance & {
   register: ReturnType<typeof vi.fn>;
   post: ReturnType<typeof vi.fn>;
   get: ReturnType<typeof vi.fn>;
   setErrorHandler: ReturnType<typeof vi.fn>;
 };
+
+let serverMock: ServerMock;
 
 const corsMock = vi.fn();
 const requestContextMock = vi.fn();
@@ -43,7 +45,7 @@ describe("setupServer", () => {
       post: vi.fn(),
       get: vi.fn(),
       setErrorHandler: vi.fn(),
-    } as any;
+    } as unknown as ServerMock;
     vi.clearAllMocks();
     vi.resetModules();
   });
@@ -70,6 +72,20 @@ describe("setupServer", () => {
 
     const corsCall = serverMock.register.mock.calls.find((call) => call[0] === corsMock);
     expect(corsCall?.[1]?.origin).toEqual(["https://co.build", "https://www.co.build"]);
+  });
+
+  it("always includes production defaults when env list is provided", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.CHAT_ALLOWED_ORIGINS = "https://extra.example, https://co.build";
+
+    await setupTest();
+
+    const corsCall = serverMock.register.mock.calls.find((call) => call[0] === corsMock);
+    expect(corsCall?.[1]?.origin).toEqual([
+      "https://co.build",
+      "https://www.co.build",
+      "https://extra.example",
+    ]);
   });
 
   it("defaults to localhost origins in development", async () => {

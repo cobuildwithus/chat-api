@@ -68,6 +68,19 @@ describe("getFarcasterProfileByAddress", () => {
     expect(result).toBeNull();
   });
 
+  it("skips caching when sorted result is falsy", async () => {
+    redisGet.mockResolvedValueOnce(null);
+    whereMock.mockResolvedValueOnce([undefined]);
+
+    const { getFarcasterProfileByAddress } = await import(
+      "../../../../src/infra/db/queries/profiles/get-profile"
+    );
+
+    const result = await getFarcasterProfileByAddress("0xabc");
+    expect(result).toBeUndefined();
+    expect(redisSet).not.toHaveBeenCalled();
+  });
+
   it("handles errors gracefully", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     redisGet.mockRejectedValueOnce(new Error("boom"));

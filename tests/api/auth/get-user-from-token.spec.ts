@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserAddressFromToken } from "../../../src/api/auth/get-user-from-token";
 import { importSPKI, jwtVerify } from "jose";
+import type { JWTVerifyResult, KeyLike } from "jose";
 
 vi.mock("jose", () => ({
   importSPKI: vi.fn(),
@@ -17,7 +18,7 @@ describe("getUserAddressFromToken", () => {
     originalEnv = { ...process.env };
     process.env.PRIVY_APP_ID = "privy";
     process.env.PRIVY_VERIFICATION_KEY = "test-key";
-    importSPKIMock.mockResolvedValue("key" as any);
+    importSPKIMock.mockResolvedValue({} as KeyLike);
   });
 
   afterEach(() => {
@@ -33,7 +34,9 @@ describe("getUserAddressFromToken", () => {
           { type: "wallet", address: "0xAbC" },
         ]),
       },
-    } as any);
+      protectedHeader: {},
+      key: {} as KeyLike,
+    } as unknown as Awaited<ReturnType<typeof jwtVerify>>);
 
     const result = await getUserAddressFromToken("token");
     expect(result).toBe("0xabc");

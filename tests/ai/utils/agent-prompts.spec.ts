@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import type { Tool as AITool } from "ai";
 import { getAgentPrompts } from "../../../src/ai/utils/agent-prompts";
 import { getGoalPrompt } from "../../../src/ai/prompts/goal";
+import type { Tool as CobuildTool } from "../../../src/ai/tools/tool";
 
 vi.mock("../../../src/ai/prompts/about", () => ({
   aboutPrompt: vi.fn(async () => "about"),
@@ -23,17 +25,16 @@ vi.mock("../../../src/ai/prompts/user-data", () => ({
 
 describe("getAgentPrompts", () => {
   it("builds prompts with tools and extra prompts", async () => {
+    const tool: CobuildTool = {
+      name: "tool-1",
+      prompt: async () => "tool prompt",
+      tool: {} as AITool,
+    };
     const prompts = await getAgentPrompts({
       personality: "persona",
       user: null,
-      data: { foo: "bar", flowId: "skip" } as any,
-      tools: [
-        {
-          name: "tool-1",
-          prompt: async () => "tool prompt",
-          tool: {} as any,
-        },
-      ],
+      data: { goalAddress: "0xabc", grantId: "skip" },
+      tools: [tool],
       extraPrompts: ["extra"],
     });
 

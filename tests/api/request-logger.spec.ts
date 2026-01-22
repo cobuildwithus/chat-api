@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { FastifyInstance } from "fastify";
 import { registerRequestLogging } from "../../src/api/request-logger";
 import { requestContext } from "@fastify/request-context";
 
@@ -11,6 +12,8 @@ vi.mock("@fastify/request-context", () => ({
 
 describe("registerRequestLogging", () => {
   const originalEnv = process.env;
+  type HookFn = (...args: unknown[]) => void;
+  type HookedServer = { addHook: (name: string, fn: HookFn) => void };
 
   beforeEach(() => {
     process.env = { ...originalEnv };
@@ -20,8 +23,8 @@ describe("registerRequestLogging", () => {
   it("skips hook registration when debug is disabled", () => {
     delete process.env.DEBUG_HTTP;
 
-    const server = { addHook: vi.fn() } as any;
-    registerRequestLogging(server);
+    const server: HookedServer = { addHook: vi.fn() };
+    registerRequestLogging(server as unknown as FastifyInstance);
 
     expect(server.addHook).not.toHaveBeenCalled();
   });
@@ -29,17 +32,17 @@ describe("registerRequestLogging", () => {
   it("registers hooks and logs request lifecycle when debug enabled", () => {
     process.env.DEBUG_HTTP = "true";
 
-    const hooks: Record<string, any> = {};
-    const server = {
-      addHook: vi.fn((name: string, fn: any) => {
+    const hooks: Record<string, HookFn> = {};
+    const server: HookedServer = {
+      addHook: vi.fn((name: string, fn: HookFn) => {
         hooks[name] = fn;
       }),
-    } as any;
+    };
 
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    registerRequestLogging(server);
+    registerRequestLogging(server as unknown as FastifyInstance);
 
     expect(server.addHook).toHaveBeenCalledTimes(4);
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const NeynarAPIClientMock = vi.fn();
 
@@ -7,21 +7,34 @@ vi.mock("@neynar/nodejs-sdk", () => ({
 }));
 
 describe("neynar client", () => {
-  it("throws when api key is missing", async () => {
-    vi.resetModules();
-    delete process.env.NEYNAR_API_KEY_NOTIFICATIONS;
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-    await expect(import("../../src/infra/neynar/client")).rejects.toThrow(
-      "NEYNAR_API_KEY_NOTIFICATIONS is not set",
-    );
+  it("returns null when api key is missing", async () => {
+    vi.resetModules();
+    delete process.env.NEYNAR_API_KEY;
+    const module = await import("../../src/infra/neynar/client");
+    expect(module.getNeynarClient()).toBeNull();
   });
 
   it("creates a client when api key is provided", async () => {
     vi.resetModules();
-    process.env.NEYNAR_API_KEY_NOTIFICATIONS = "key";
+    process.env.NEYNAR_API_KEY = "key";
 
     const module = await import("../../src/infra/neynar/client");
-    expect(module.neynarClientNotifications).toBeDefined();
+    expect(module.getNeynarClient()).toBeDefined();
     expect(NeynarAPIClientMock).toHaveBeenCalledWith({ apiKey: "key" });
+  });
+
+  it("caches the client", async () => {
+    vi.resetModules();
+    process.env.NEYNAR_API_KEY = "key";
+
+    const module = await import("../../src/infra/neynar/client");
+    const first = module.getNeynarClient();
+    const second = module.getNeynarClient();
+    expect(first).toBe(second);
+    expect(NeynarAPIClientMock).toHaveBeenCalledTimes(1);
   });
 });

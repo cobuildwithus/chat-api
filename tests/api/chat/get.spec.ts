@@ -1,9 +1,11 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyRequest } from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleChatGetRequest } from "../../../src/api/chat/get";
 import { chat, chatMessage } from "../../../src/infra/db/schema";
 import { getChatUserOrThrow } from "../../../src/api/auth/validate-chat-user";
 import { signChatGrant } from "../../../src/chat/grant";
+import { createReply } from "../../utils/fastify";
+import { buildChatUser } from "../../utils/fixtures/chat-user";
 import { resetAllMocks, setCobuildDbResponse } from "../../utils/mocks/db";
 
 vi.mock("../../../src/api/auth/validate-chat-user", () => ({
@@ -20,23 +22,10 @@ const signChatGrantMock = vi.mocked(signChatGrant);
 const buildRequest = (chatId: string) =>
   ({ params: { chatId } } as unknown as FastifyRequest);
 
-const buildReply = () =>
-  ({
-    status: vi.fn().mockReturnThis(),
-    send: vi.fn(),
-    header: vi.fn(),
-  }) as unknown as FastifyReply;
-
 beforeEach(() => {
   vi.clearAllMocks();
   resetAllMocks();
-  getChatUserOrThrowMock.mockReturnValue({
-    address: "0xabc0000000000000000000000000000000000000",
-    city: null,
-    country: null,
-    countryRegion: null,
-    userAgent: null,
-  });
+  getChatUserOrThrowMock.mockReturnValue(buildChatUser());
   signChatGrantMock.mockResolvedValue("chat-grant");
 });
 
@@ -44,7 +33,7 @@ describe("handleChatGetRequest", () => {
   it("returns 404 when chat is missing", async () => {
     setCobuildDbResponse(chat, []);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatGetRequest(buildRequest("chat-1"), reply);
 
     expect(reply.status).toHaveBeenCalledWith(404);
@@ -56,7 +45,7 @@ describe("handleChatGetRequest", () => {
       { user: "0xdef0000000000000000000000000000000000000", type: "chat-default", data: "{}" },
     ]);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatGetRequest(buildRequest("chat-2"), reply);
 
     expect(reply.status).toHaveBeenCalledWith(404);
@@ -81,7 +70,7 @@ describe("handleChatGetRequest", () => {
       },
     ]);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatGetRequest(buildRequest("chat-3"), reply);
 
     expect(reply.header).toHaveBeenCalledWith("x-chat-grant", "chat-grant");
@@ -118,7 +107,7 @@ describe("handleChatGetRequest", () => {
       },
     ]);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatGetRequest(buildRequest("chat-4"), reply);
 
     expect(reply.send).toHaveBeenCalledWith({

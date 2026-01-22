@@ -1,14 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { handleError } from "../../src/api/server-helpers";
-
-const buildReply = () => ({
-  status: vi.fn().mockReturnThis(),
-  send: vi.fn(),
-});
+import { createReply } from "../utils/fastify";
 
 describe("handleError", () => {
   it("returns structured error details when status is provided", () => {
-    const reply = buildReply();
+    const reply = createReply();
     const error = Object.assign(new Error("Bad"), { statusCode: 400, name: "BadRequest" });
 
     handleError(error, { method: "GET", url: "/", headers: {}, body: null }, reply);
@@ -22,7 +18,7 @@ describe("handleError", () => {
   });
 
   it("defaults to internal server error when fields are missing", () => {
-    const reply = buildReply();
+    const reply = createReply();
     handleError({}, { method: "GET", url: "/", headers: {}, body: null }, reply);
 
     expect(reply.status).toHaveBeenCalledWith(500);

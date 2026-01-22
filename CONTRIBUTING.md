@@ -25,6 +25,11 @@ pnpm typecheck
 - External services and storage live in `src/infra/`.
 - Config and env parsing live in `src/config/`.
 
+## Testing tips
+
+- Use `tests/utils/mocks` for DB/cache/AI mocks.
+- Run `pnpm test` and `pnpm typecheck` before opening a PR.
+
 ## Checklist
 
 - [ ] Tests pass (`pnpm test`)

@@ -7,7 +7,7 @@ const openAIProvider = {
   },
 };
 
-const tool = vi.fn((config: any) => config);
+const tool = vi.fn((config: unknown) => config);
 
 // Mock external AI SDK helpers used by generation code
 vi.mock("ai", () => ({
@@ -19,8 +19,8 @@ vi.mock("ai", () => ({
 // Mock internal model selectors used by generation code
 vi.mock("../../../src/ai/ai", () => ({
   openAIProvider,
-  openAIModel: {} as any,
-  openAIModel5Mini: {} as any,
+  openAIModel: {} as Record<string, unknown>,
+  openAIModel5Mini: {} as Record<string, unknown>,
 }));
 
 export { openAIProvider, tool };

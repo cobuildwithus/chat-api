@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bootstrapCobuildDb } from "../../../src/infra/db/create-cobuild-db";
 
 const { poolInstances, PoolMock, drizzleMock, withReplicasMock } = vi.hoisted(() => {
-  const poolInstances: any[] = [];
+  type PoolInstance = { connectionString: string; on: ReturnType<typeof vi.fn> };
+  const poolInstances: PoolInstance[] = [];
   const PoolMock = vi.fn().mockImplementation((opts: { connectionString: string }) => {
-    const pool = {
+    const pool: PoolInstance = {
       connectionString: opts.connectionString,
       on: vi.fn(),
     };
@@ -13,7 +14,10 @@ const { poolInstances, PoolMock, drizzleMock, withReplicasMock } = vi.hoisted(()
   });
 
   const drizzleMock = vi.fn();
-  const withReplicasMock = vi.fn((primary: any, replicas: any[]) => ({ primary, replicas }));
+  const withReplicasMock = vi.fn((primary: unknown, replicas: unknown[]) => ({
+    primary,
+    replicas,
+  }));
 
   return { poolInstances, PoolMock, drizzleMock, withReplicasMock };
 });
@@ -23,14 +27,14 @@ vi.mock("pg", () => ({
 }));
 
 vi.mock("drizzle-orm/node-postgres", () => ({
-  drizzle: (pool: any, options: any) => drizzleMock(pool, options),
+  drizzle: (pool: unknown, options: unknown) => drizzleMock(pool, options),
 }));
 
 vi.mock("drizzle-orm/pg-core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("drizzle-orm/pg-core")>();
   return {
     ...actual,
-    withReplicas: (primary: any, replicas: any[]) => withReplicasMock(primary, replicas),
+    withReplicas: (primary: unknown, replicas: unknown[]) => withReplicasMock(primary, replicas),
   };
 });
 

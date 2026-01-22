@@ -47,7 +47,6 @@ export async function getAgentPrompts(props: Props): Promise<SystemModelMessage[
 function getDataPrompt(data: ChatData) {
   if (!data || Object.keys(data).length === 0) return "";
   const hiddenKeys = new Set([
-    "flowId",
     "grantId",
     "impactId",
     "opportunityId",

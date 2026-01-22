@@ -19,14 +19,20 @@ const DEFAULT_PROD_ORIGINS = ["https://co.build", "https://www.co.build"];
 
 const getAllowedOrigins = () => {
   const raw = process.env.CHAT_ALLOWED_ORIGINS;
+  const isProd = process.env.NODE_ENV === "production";
   if (raw) {
     const parsed = raw
       .split(",")
       .map((origin) => origin.trim())
       .filter((origin) => origin.length > 0);
-    if (parsed.length > 0) return parsed;
+    if (parsed.length > 0) {
+      if (isProd) {
+        return Array.from(new Set([...DEFAULT_PROD_ORIGINS, ...parsed]));
+      }
+      return parsed;
+    }
   }
-  return process.env.NODE_ENV === "production" ? DEFAULT_PROD_ORIGINS : "http://localhost:3000";
+  return isProd ? DEFAULT_PROD_ORIGINS : "http://localhost:3000";
 };
 
 export const setupServer = async () => {
@@ -42,6 +48,8 @@ export const setupServer = async () => {
       "privy-id-token",
       "x-chat-grant",
       "x-client-device",
+      "x-chat-user",
+      "x-chat-auth",
       "city",
       "country",
       "country-region",

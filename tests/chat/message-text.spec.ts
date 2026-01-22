@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { UIMessage } from "ai";
 import { extractTextFromParts, getFirstUserText } from "../../src/chat/message-text";
 
 describe("chat message text helpers", () => {
@@ -16,16 +17,18 @@ describe("chat message text helpers", () => {
   });
 
   it("finds the first user message text", () => {
-    const messages = [
-      { role: "assistant", parts: [{ type: "text", text: "ignore" }] },
-      { role: "user", parts: [{ type: "text", text: "hello" }] },
-      { role: "user", parts: [{ type: "text", text: "later" }] },
-    ] as any;
+    const messages: UIMessage[] = [
+      { id: "m1", role: "assistant", parts: [{ type: "text", text: "ignore" }] },
+      { id: "m2", role: "user", parts: [{ type: "text", text: "hello" }] },
+      { id: "m3", role: "user", parts: [{ type: "text", text: "later" }] },
+    ];
     expect(getFirstUserText(messages)).toBe("hello");
   });
 
   it("returns null when no user text is present", () => {
-    const messages = [{ role: "assistant", parts: [{ type: "text", text: "nope" }] }] as any;
+    const messages: UIMessage[] = [
+      { id: "m1", role: "assistant", parts: [{ type: "text", text: "nope" }] },
+    ];
     expect(getFirstUserText(messages)).toBeNull();
   });
 });

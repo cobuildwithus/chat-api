@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { getUserDataPrompt } from "../../../src/ai/prompts/user-data";
 import { getFarcasterProfileByAddress } from "../../../src/infra/db/queries/profiles/get-profile";
+import type { FarcasterProfile } from "../../../src/infra/db/schema";
 
 vi.mock("../../../src/infra/db/queries/profiles/get-profile", () => ({
   getFarcasterProfileByAddress: vi.fn(),
@@ -33,8 +34,8 @@ describe("getUserDataPrompt", () => {
       bio: "bio",
       verifiedAddresses: ["0xabc"],
       manualVerifiedAddresses: [],
-      updatedAt: new Date().toISOString(),
-    } as any);
+      updatedAt: new Date(),
+    } as FarcasterProfile);
 
     const prompt = await getUserDataPrompt({
       address: "0xabc",

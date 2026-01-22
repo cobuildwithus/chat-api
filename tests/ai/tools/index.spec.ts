@@ -13,8 +13,8 @@ const setup = async (vectorStoreId?: string) => {
 
   vi.doMock("../../../src/ai/ai", () => ({
     openAIProvider: { tools: { fileSearch, webSearch } },
-    openAIModel: {} as any,
-    openAIModel5Mini: {} as any,
+    openAIModel: {} as Record<string, unknown>,
+    openAIModel5Mini: {} as Record<string, unknown>,
   }));
 
   const module = await import("../../../src/ai/tools/index");

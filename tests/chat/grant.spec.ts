@@ -23,7 +23,7 @@ describe("chat grants", () => {
   });
 
   it("returns null for invalid payload fields", async () => {
-    const badPerm = await new SignJWT({ cid: "chat-1", perm: "read" as any })
+    const badPerm = await new SignJWT({ cid: "chat-1", perm: "read" })
       .setProtectedHeader({ alg: "HS256" })
       .setSubject("0xabc")
       .setIssuer("cobuild-chat")

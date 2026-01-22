@@ -1,36 +1,43 @@
 import { vi } from "vitest";
 
-type ResponseProvider = () => any[];
+type ResponseProvider = () => unknown[];
 
-const responses = new Map<any, ResponseProvider[]>();
-const callCounts = new Map<any, number>();
+const responses = new Map<unknown, ResponseProvider[]>();
+const callCounts = new Map<unknown, number>();
 
-function makeSelectChain(rows: any[]) {
-  const chain: any = {
-    groupBy: (_cols?: any) => Promise.resolve(rows),
+type SelectChain = {
+  groupBy: (_cols?: unknown) => Promise<unknown[]>;
+  limit: (_n?: number) => SelectChain;
+  orderBy: (_o?: unknown) => SelectChain;
+  then: (resolve: (rows: unknown[]) => unknown) => unknown;
+};
+
+function makeSelectChain(rows: unknown[]): SelectChain {
+  const chain: SelectChain = {
+    groupBy: (_cols?: unknown) => Promise.resolve(rows),
     limit: (_n?: number) => chain,
-    orderBy: (_o?: any) => chain,
-    then: (resolve: any) => resolve(rows),
+    orderBy: (_o?: unknown) => chain,
+    then: (resolve: (rows: unknown[]) => unknown) => resolve(rows),
   };
   return chain;
 }
 
-function makeInsertChain(table: any) {
+function makeInsertChain(table: unknown) {
   return {
-    values: (_vals?: any) => {
+    values: (_vals?: unknown) => {
       callCounts.set(table, (callCounts.get(table) ?? 0) + 1);
       return {
         onConflictDoNothing: () => ({
-          returning: (_sel?: any) => Promise.resolve(takeResponse(table)),
+          returning: (_sel?: unknown) => Promise.resolve(takeResponse(table)),
         }),
-        onConflictDoUpdate: (_opts?: any) => Promise.resolve(takeResponse(table)),
-        returning: (_sel?: any) => Promise.resolve(takeResponse(table)),
+        onConflictDoUpdate: (_opts?: unknown) => Promise.resolve(takeResponse(table)),
+        returning: (_sel?: unknown) => Promise.resolve(takeResponse(table)),
       };
     },
   };
 }
 
-function takeResponse(table: any) {
+function takeResponse(table: unknown) {
   const queue = responses.get(table);
   if (!queue || queue.length === 0) return [];
   const provider = queue.length > 1 ? queue.shift()! : queue[0]!;
@@ -38,7 +45,7 @@ function takeResponse(table: any) {
   return Array.isArray(value) ? value : [];
 }
 
-function normalizeResponse(rows: any[] | ResponseProvider): ResponseProvider {
+function normalizeResponse(rows: unknown[] | ResponseProvider): ResponseProvider {
   if (typeof rows === "function") return rows as ResponseProvider;
   if (Array.isArray(rows)) return () => rows;
   return () => [];
@@ -46,24 +53,41 @@ function normalizeResponse(rows: any[] | ResponseProvider): ResponseProvider {
 
 // Mock cobuildDb select/from/where/limit chain and update/set/where chain
 vi.mock("../../../src/infra/db/cobuildDb", () => {
-  const cobuildDb = {
-    select: (_sel?: any) => ({
-      from: (table: any) => ({
-        innerJoin: (_otherTable: any, _on: any) => ({
-          where: (_cond?: any) => {
+  type CobuildDbMock = {
+    select: (_sel?: unknown) => {
+      from: (table: unknown) => {
+        innerJoin: (_otherTable: unknown, _on: unknown) => {
+          where: (_cond?: unknown) => SelectChain;
+        };
+        where: (_cond?: unknown) => SelectChain;
+      };
+    };
+    update: (table: unknown) => {
+      set: (vals: unknown) => { where: (_cond?: unknown) => Promise<void> };
+    };
+    insert: (table: unknown) => ReturnType<typeof makeInsertChain>;
+    delete: (table: unknown) => { where: (_cond?: unknown) => Promise<void> };
+    $primary?: CobuildDbMock;
+  };
+
+  const cobuildDb: CobuildDbMock = {
+    select: (_sel?: unknown) => ({
+      from: (table: unknown) => ({
+        innerJoin: (_otherTable: unknown, _on: unknown) => ({
+          where: (_cond?: unknown) => {
             callCounts.set(table, (callCounts.get(table) ?? 0) + 1);
             const rows = takeResponse(table);
             return makeSelectChain(rows);
           },
         }),
-        where: (_cond?: any) => {
+        where: (_cond?: unknown) => {
           callCounts.set(table, (callCounts.get(table) ?? 0) + 1);
           const rows = takeResponse(table);
           return makeSelectChain(rows);
         },
       }),
     }),
-    update: (table: any) => ({
+    update: (table: unknown) => ({
       set: (vals: unknown) => ({
         where: (_cond?: unknown) => {
           callCounts.set(table, (callCounts.get(table) ?? 0) + 1);
@@ -72,14 +96,14 @@ vi.mock("../../../src/infra/db/cobuildDb", () => {
         },
       }),
     }),
-    insert: (table: any) => makeInsertChain(table),
-    delete: (table: any) => ({
+    insert: (table: unknown) => makeInsertChain(table),
+    delete: (table: unknown) => ({
       where: (_cond?: unknown) => {
         callCounts.set(table, (callCounts.get(table) ?? 0) + 1);
         return Promise.resolve();
       },
     }),
-  } as any;
+  };
   cobuildDb.$primary = cobuildDb;
   return { cobuildDb };
 });
@@ -91,17 +115,17 @@ vi.mock("../../../src/infra/db/queries/profiles/get-profile", () => {
   };
 });
 
-export function setCobuildDbResponse(table: any, rows: any[] | ResponseProvider) {
+export function setCobuildDbResponse(table: unknown, rows: unknown[] | ResponseProvider) {
   responses.set(table, [normalizeResponse(rows)]);
 }
 
-export function queueCobuildDbResponse(table: any, rows: any[] | ResponseProvider) {
+export function queueCobuildDbResponse(table: unknown, rows: unknown[] | ResponseProvider) {
   const queue = responses.get(table) ?? [];
   queue.push(normalizeResponse(rows));
   responses.set(table, queue);
 }
 
-export function getDbCallCount(table: any): number {
+export function getDbCallCount(table: unknown): number {
   return callCounts.get(table) ?? 0;
 }
 

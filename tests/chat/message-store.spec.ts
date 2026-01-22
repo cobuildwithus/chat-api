@@ -104,8 +104,8 @@ describe("storeChatMessages", () => {
       chatId: "chat-4",
       messages: [
         { id: "m1", role: "user", parts: [{ type: "text", text: "hi" }] },
-        { role: "user", parts: [{ type: "text", text: "hi again" }] } as UIMessage,
-        { role: "assistant", parts: [] } as UIMessage,
+        { id: "m-new", role: "user", parts: [{ type: "text", text: "hi again" }] },
+        { id: "m-assistant", role: "assistant", parts: [] },
       ],
       type: "chat-default",
       data: {},
@@ -123,8 +123,8 @@ describe("storeChatMessages", () => {
     await storeChatMessages({
       chatId: "chat-4b",
       messages: [
-        { role: "user", parts: [{ type: "text", text: "new" }] } as UIMessage,
-        { role: "assistant", parts: [] } as UIMessage,
+        { id: "m-new-user", role: "user", parts: [{ type: "text", text: "new" }] },
+        { id: "m-new-assistant", role: "assistant", parts: [] },
       ],
       type: "chat-default",
       data: {},
@@ -134,6 +134,44 @@ describe("storeChatMessages", () => {
     expect(generateChatTitleMock).not.toHaveBeenCalled();
   });
 
+  it("reuses existing ids when only a client id matches", async () => {
+    const createdAt = new Date("2024-01-01T00:00:00Z");
+    setCobuildDbResponse(chatMessage, [
+      { id: "existing-id", clientId: "client-123", createdAt },
+    ]);
+    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
+
+    let insertedRows: Array<{ id: string; clientId: string | null; createdAt: Date }> = [];
+    const originalInsert = cobuildDb.insert.bind(cobuildDb);
+    type InsertTable = Parameters<typeof originalInsert>[0];
+    const insertSpy = vi.spyOn(cobuildDb, "insert").mockImplementation((table: InsertTable) => {
+      const chain = originalInsert(table);
+      if (table !== chatMessage) return chain;
+      return {
+        values: (vals: typeof insertedRows) => {
+          insertedRows = vals;
+          return chain.values(vals);
+        },
+      } as typeof chain;
+    });
+
+    await storeChatMessages({
+      chatId: "chat-4c",
+      messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] } as UIMessage],
+      type: "chat-default",
+      data: {},
+      user: baseUser,
+      clientMessageId: "client-123",
+    });
+
+    expect(insertedRows).toHaveLength(1);
+    expect(insertedRows[0]).toEqual(
+      expect.objectContaining({ id: "existing-id", clientId: "client-123" }),
+    );
+    expect(insertedRows[0]?.createdAt).toBe(createdAt);
+    insertSpy.mockRestore();
+  });
+
   it("skips title generation when no user message exists", async () => {
     setCobuildDbResponse(chatMessage, []);
     setCobuildDbResponse(chat, [{ title: null }]);
@@ -141,7 +179,7 @@ describe("storeChatMessages", () => {
 
     await storeChatMessages({
       chatId: "chat-5",
-      messages: [{ role: "assistant", parts: [] } as UIMessage],
+      messages: [{ id: "m-assistant-only", role: "assistant", parts: [] }],
       type: "chat-default",
       data: {},
       user: baseUser,
@@ -161,7 +199,7 @@ describe("storeChatMessages", () => {
 
     await storeChatMessages({
       chatId: "chat-5b",
-      messages: [{ role: "user", parts: [{ type: "text", text: "hello" }] } as UIMessage],
+      messages: [{ id: "m-user", role: "user", parts: [{ type: "text", text: "hello" }] }],
       type: "chat-default",
       data: {},
       user: baseUser,
