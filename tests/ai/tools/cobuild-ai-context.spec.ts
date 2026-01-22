@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ModelMessage } from "ai";
 import { cobuildAiContextTool } from "../../../src/ai/tools/cobuild-ai-context/tool";
 import { fetchCobuildAiContextFresh, formatCobuildAiContextError } from "../../../src/infra/cobuild-ai-context";
 
@@ -12,7 +13,11 @@ describe("cobuildAiContextTool", () => {
   it("returns fresh data when fetch succeeds", async () => {
     vi.mocked(fetchCobuildAiContextFresh).mockResolvedValue({ ok: true });
 
-    const result = await cobuildAiContextTool.tool.execute!({} as any, {} as any);
+    const context: { toolCallId: string; messages: ModelMessage[] } = {
+      toolCallId: "tool",
+      messages: [],
+    };
+    const result = await cobuildAiContextTool.tool.execute!({}, context);
     expect(result).toEqual({ ok: true });
   });
 
@@ -20,7 +25,11 @@ describe("cobuildAiContextTool", () => {
     vi.mocked(fetchCobuildAiContextFresh).mockRejectedValue(new Error("down"));
     vi.mocked(formatCobuildAiContextError).mockReturnValue("down");
 
-    const result = await cobuildAiContextTool.tool.execute!({} as any, {} as any);
+    const context: { toolCallId: string; messages: ModelMessage[] } = {
+      toolCallId: "tool",
+      messages: [],
+    };
+    const result = await cobuildAiContextTool.tool.execute!({}, context);
     expect(result).toEqual({ error: "down" });
   });
 

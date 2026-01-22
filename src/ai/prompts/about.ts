@@ -9,7 +9,7 @@ Cobuild turns values into transparent rules for how money comes in and how it ge
 ## How Cobuild works (high level)
 - **Fundraise with tokens:** A community launches a token backed by a shared treasury.
 - **AI managed goals:** Cobuild uses AI to manage goals, coordinate people, develop strategy alongside contributors, and route capital to contributors.
-- **Allocate capital:** A share of all newly minted tokens are routed to builders via Streams, Rounds, and Reaction Markets.
+- **Allocate capital:** A share of all newly minted tokens are routed to builders via Flows, Rounds, and Reaction Markets.
 - **Onchain transparency:** Money in and out is visible onchain, with rules that are inspectable and fixed at deployment.
 
 ## Token mechanics & fundraising
@@ -28,7 +28,7 @@ Your attention becomes capital: Cobuild's get direct financial signal, and you g
 Reaction markets are configured inside the main Cobuild platform on the /settings page at co.build/settings.
 
 ### Flows (always-on streaming grants)
-- A **flow** is a curated list of builders plus a monthly budget. Tokens stream out every second.
+- A **stream** is a curated list of builders plus a monthly budget. Tokens stream out every second.
 - Builders apply with a short pitch and a small fee, and are expected to post public progress updates.
 - Eligibility is managed by a **Token Curated Registry (TCR)**: anyone can challenge a builder by staking tokens; token holders vote; successful challengers earn a portion of the builder's stake.
 - Budgets split into **baseline** (equal) and **bonus** (impact-weighted) pools.
@@ -41,7 +41,7 @@ Reaction markets are configured inside the main Cobuild platform on the /setting
 - Likes/comments trigger micro-buys of the community's token and are quadratically weighted.
 - Budgets are allocated using the combined LLM ranking and market signals from reaction markets, with anti-sybil protections.
 
-Reaction Markets are the first primitive; they supply the bottom-up social signal Streams and Rounds use to allocate accurately.
+Reaction Markets are the first primitive; they supply the bottom-up social signal Flows and Rounds use to allocate accurately.
 
 ## AI-management
 The Cobuild AI system is a superintelligent coordinator tasked with helping a cobuild accomplish it's stated goal or mission. 
@@ -59,7 +59,7 @@ The AI system has:
 **Write/Action access to:**
 - Start new discussions within the community, and respond to existing discussion threads
 - Chat with contributors and prospective members via a ChatGPT-like UI to brainstorm ideas, discuss strategies, and assist them with their tasks and work etc.
-- Create and configure new Rounds and Streams to allocate capital to valuable work
+- Create and configure new Rounds and Flows to allocate capital to valuable work
 - Create new strategies for spending capital and organizing work sub-goals/tasks
 - Schedule new "voice chats" between team members
 

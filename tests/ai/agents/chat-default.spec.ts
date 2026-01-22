@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { getChatDefault } from "../../../src/ai/agents/chat-default/chat-default";
 import { getAgentPrompts } from "../../../src/ai/utils/agent-prompts";
 import { webSearchTool } from "../../../src/ai/tools/web-search/web-search";
+import type { Tool as AITool } from "ai";
 
 vi.mock("../../../src/ai/utils/agent-prompts", () => ({
   getAgentPrompts: vi.fn(async () => []),
@@ -12,7 +13,11 @@ vi.mock("../../../src/ai/ai", () => ({
 }));
 
 vi.mock("../../../src/ai/tools/web-search/web-search", () => ({
-  webSearchTool: { name: "web_search" },
+  webSearchTool: {
+    name: "web_search",
+    prompt: async () => "",
+    tool: {} as AITool,
+  },
 }));
 
 vi.mock("../../../src/ai/tools/docs/docs", () => ({
@@ -21,7 +26,7 @@ vi.mock("../../../src/ai/tools/docs/docs", () => ({
 
 describe("getChatDefault", () => {
   it("uses the responses model for the default chat agent", async () => {
-    const agent = await getChatDefault(null, {}, [webSearchTool as any]);
+    const agent = await getChatDefault(null, {}, [webSearchTool]);
     expect(getAgentPrompts).toHaveBeenCalled();
     expect(agent.defaultModel).toEqual({ id: "responses" });
   });

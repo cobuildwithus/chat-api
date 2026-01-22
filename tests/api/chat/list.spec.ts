@@ -1,8 +1,10 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyRequest } from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleChatListRequest } from "../../../src/api/chat/list";
 import { chat } from "../../../src/infra/db/schema";
 import { getChatUserOrThrow } from "../../../src/api/auth/validate-chat-user";
+import { createReply } from "../../utils/fastify";
+import { buildChatUser } from "../../utils/fixtures/chat-user";
 import { resetAllMocks, setCobuildDbResponse } from "../../utils/mocks/db";
 
 vi.mock("../../../src/api/auth/validate-chat-user", () => ({
@@ -14,21 +16,10 @@ const getChatUserOrThrowMock = vi.mocked(getChatUserOrThrow);
 const buildRequest = (query: Record<string, unknown> = {}) =>
   ({ query } as unknown as FastifyRequest);
 
-const buildReply = () =>
-  ({
-    send: vi.fn(),
-  }) as unknown as FastifyReply;
-
 beforeEach(() => {
   vi.clearAllMocks();
   resetAllMocks();
-  getChatUserOrThrowMock.mockReturnValue({
-    address: "0xabc0000000000000000000000000000000000000",
-    city: null,
-    country: null,
-    countryRegion: null,
-    userAgent: null,
-  });
+  getChatUserOrThrowMock.mockReturnValue(buildChatUser());
 });
 
 describe("handleChatListRequest", () => {
@@ -61,7 +52,7 @@ describe("handleChatListRequest", () => {
       },
     ]);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatListRequest(
       buildRequest({ goalAddress: "0xabc0000000000000000000000000000000000000" }),
       reply,
@@ -93,7 +84,7 @@ describe("handleChatListRequest", () => {
       },
     ]);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatListRequest(buildRequest(), reply);
 
     expect(reply.send).toHaveBeenCalledWith({

@@ -1,20 +1,22 @@
 import { describe, expect, it } from "vitest";
+import type { Tool as AITool } from "ai";
 import { cachedPrompts, getToolPrompts, getTools } from "../../../src/ai/tools/tool";
+import type { Tool } from "../../../src/ai/tools/tool";
 
-const tools = [
-  { name: "a", prompt: async () => "prompt-a", tool: { name: "a" } as any },
-  { name: "b", prompt: async () => "prompt-b", tool: { name: "b" } as any },
+const tools: Tool[] = [
+  { name: "a", prompt: async () => "prompt-a", tool: { name: "a" } as unknown as AITool },
+  { name: "b", prompt: async () => "prompt-b", tool: { name: "b" } as unknown as AITool },
 ];
 
 describe("tool helpers", () => {
   it("maps tools to a toolset", () => {
-    const toolset = getTools(tools as any);
+    const toolset = getTools(tools);
     expect(toolset.a).toEqual({ name: "a" });
     expect(toolset.b).toEqual({ name: "b" });
   });
 
   it("builds tool prompts", async () => {
-    const prompts = await getToolPrompts(tools as any);
+    const prompts = await getToolPrompts(tools);
     expect(prompts).toEqual([
       { role: "system", content: "prompt-a" },
       { role: "system", content: "prompt-b" },

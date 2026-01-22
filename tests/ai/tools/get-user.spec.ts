@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { ModelMessage } from "ai";
 import { getUser } from "../../../src/ai/tools/get-user/get-user";
 import { farcasterProfiles } from "../../../src/infra/db/schema";
 import { queueCobuildDbResponse, resetAllMocks, setCobuildDbResponse } from "../../utils/mocks/db";
@@ -13,7 +14,11 @@ describe("getUser tool", () => {
       { fid: 1, fname: "alice", verifiedAddresses: ["0xabc"] },
     ]);
 
-    const result = await getUser.execute!({ fname: "alice" } as any, {} as any);
+    const context: { toolCallId: string; messages: ModelMessage[] } = {
+      toolCallId: "tool",
+      messages: [],
+    };
+    const result = await getUser.execute!({ fname: "alice" }, context);
     expect(result).toEqual({ fid: 1, fname: "alice", addresses: ["0xabc"] });
   });
 
@@ -23,7 +28,11 @@ describe("getUser tool", () => {
       { fid: 2, fname: "alice2", verifiedAddresses: [] },
     ]);
 
-    const result = await getUser.execute!({ fname: "ali" } as any, {} as any);
+    const context: { toolCallId: string; messages: ModelMessage[] } = {
+      toolCallId: "tool",
+      messages: [],
+    };
+    const result = await getUser.execute!({ fname: "ali" }, context);
     expect(result).toEqual({
       usedLikeQuery: true,
       users: [{ fid: 2, fname: "alice2", verifiedAddresses: [] }],

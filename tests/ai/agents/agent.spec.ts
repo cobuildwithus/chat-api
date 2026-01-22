@@ -15,7 +15,8 @@ describe("agent helpers", () => {
   });
 
   it("throws for unsupported agent types", async () => {
-    await expect(getAgent("unknown" as any, null, {})).rejects.toThrow("Unsupported agent");
+    const badType = "unknown" as unknown as Parameters<typeof getAgent>[0];
+    await expect(getAgent(badType, null, {})).rejects.toThrow("Unsupported agent");
   });
 
   it("gets agent by fid", async () => {

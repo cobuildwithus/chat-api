@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const createOpenAIMock = vi.fn();
 
 vi.mock("@ai-sdk/openai", () => ({
-  createOpenAI: (...args: any[]) => createOpenAIMock(...args),
+  createOpenAI: (...args: unknown[]) => createOpenAIMock(...args),
 }));
 
 describe("ai module", () => {
@@ -15,7 +15,10 @@ describe("ai module", () => {
 
   it("initializes OpenAI provider and models", async () => {
     const responsesMock = vi.fn(() => ({ id: "responses-model" }));
-    const provider = { responses: responsesMock, tools: {} } as any;
+    const provider = {
+      responses: responsesMock,
+      tools: {},
+    } as { responses: (model: string) => unknown; tools: Record<string, unknown> };
     createOpenAIMock.mockReturnValue(provider);
 
     process.env.OPENAI_API_KEY = "test-key";

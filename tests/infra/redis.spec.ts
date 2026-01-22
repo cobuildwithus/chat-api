@@ -5,12 +5,19 @@ const onMock = vi.fn();
 const setMock = vi.fn();
 const evalMock = vi.fn();
 
-const client = {
+type RedisClientMock = {
+  connect: typeof connectMock;
+  on: typeof onMock;
+  set: typeof setMock;
+  eval: typeof evalMock;
+};
+
+const client: RedisClientMock = {
   connect: connectMock,
   on: onMock,
   set: setMock,
   eval: evalMock,
-} as any;
+};
 
 vi.mock("redis", () => ({
   createClient: vi.fn(() => client),

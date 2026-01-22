@@ -4,11 +4,11 @@ const setupServerMock = vi.fn();
 const validateEnvVariablesMock = vi.fn();
 
 vi.mock("../src/api/server", () => ({
-  setupServer: (...args: any[]) => setupServerMock(...args),
+  setupServer: (...args: unknown[]) => setupServerMock(...args),
 }));
 
 vi.mock("../src/config/env", () => ({
-  validateEnvVariables: (...args: any[]) => validateEnvVariablesMock(...args),
+  validateEnvVariables: (...args: unknown[]) => validateEnvVariablesMock(...args),
 }));
 
 describe("index", () => {
@@ -54,7 +54,13 @@ describe("index", () => {
 
   it("logs and exits when server startup fails", async () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => undefined) as any);
+    const exitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(
+        ((_code?: number | string | null) => undefined as never) as unknown as (
+          code?: number | string | null,
+        ) => never,
+      );
     setupServerMock.mockRejectedValue(new Error("boom"));
 
     await import("../src/index");

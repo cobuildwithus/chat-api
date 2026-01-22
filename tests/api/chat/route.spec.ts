@@ -8,7 +8,8 @@ import type {
   TextStreamPart,
   ToolSet,
 } from "ai";
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyRequest } from "fastify";
+import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleChatPostRequest } from "../../../src/api/chat/route";
 import { getAgent } from "../../../src/ai/agents/agent";
@@ -24,6 +25,8 @@ import type { ChatBody } from "../../../src/ai/types";
 import { signChatGrant, verifyChatGrant } from "../../../src/chat/grant";
 import { isChatDebugEnabled } from "../../../src/config/env";
 import { CHAT_PERSIST_ERROR } from "../../../src/api/chat/chat-helpers";
+import { createReply } from "../../utils/fastify";
+import { buildChatUser } from "../../utils/fixtures/chat-user";
 import { getDbCallCount, resetAllMocks, setCobuildDbResponse } from "../../utils/mocks/db";
 
 vi.mock("ai", async () => {
@@ -62,6 +65,10 @@ vi.mock("../../../src/chat/grant", () => ({
   verifyChatGrant: vi.fn(),
 }));
 
+vi.mock("node:crypto", () => ({
+  randomUUID: vi.fn(),
+}));
+
 vi.mock("../../../src/config/env", () => ({
   isChatDebugEnabled: vi.fn(() => false),
 }));
@@ -77,6 +84,7 @@ const verifyChatGrantMock = vi.mocked(verifyChatGrant);
 const markAssistantMessageFailedMock = vi.mocked(markAssistantMessageFailed);
 const clearPendingAssistantIfUnclaimedMock = vi.mocked(clearPendingAssistantIfUnclaimed);
 const isChatDebugEnabledMock = vi.mocked(isChatDebugEnabled);
+const randomUUIDMock = vi.mocked(randomUUID);
 let mockModel: LanguageModel;
 const storeChatMessagesMock = vi.mocked(storeChatMessages);
 
@@ -91,12 +99,6 @@ const baseBody: ChatBody = {
   type: "chat-default",
   messages: [],
 };
-
-const buildReply = () =>
-  ({
-    status: vi.fn().mockReturnThis(),
-    send: vi.fn(),
-  }) as unknown as FastifyReply;
 
 const baseUsage = {
   inputTokens: 0,
@@ -140,13 +142,9 @@ const buildStreamResult = (overrides: Partial<ReturnType<typeof streamText>> = {
 beforeEach(() => {
   vi.clearAllMocks();
   resetAllMocks();
-  getChatUserOrThrowMock.mockReturnValue({
-    address: "0xabc0000000000000000000000000000000000000",
-    city: null,
-    country: null,
-    countryRegion: null,
-    userAgent: null,
-  });
+  randomUUIDMock.mockReset();
+  randomUUIDMock.mockReturnValue("00000000-0000-0000-0000-000000000000");
+  getChatUserOrThrowMock.mockReturnValue(buildChatUser());
   mockModel = {} as LanguageModel;
   getAgentMock.mockResolvedValue({
     system: [{ role: "system", content: "sys" }],
@@ -163,7 +161,7 @@ describe("handleChatPostRequest", () => {
     isAiUsageAvailableMock.mockResolvedValue(false);
     streamTextMock.mockReturnValue(buildStreamResult().result);
 
-    const reply = buildReply();
+    const reply = createReply();
     const result = await handleChatPostRequest(buildRequest(baseBody), reply);
 
     expect(reply.status).toHaveBeenCalledWith(429);
@@ -197,7 +195,7 @@ describe("handleChatPostRequest", () => {
     convertToModelMessagesMock.mockResolvedValue(modelMessages);
     streamTextMock.mockReturnValue(buildStreamResult().result);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatPostRequest(
       buildRequest({
         ...baseBody,
@@ -240,7 +238,7 @@ describe("handleChatPostRequest", () => {
     convertToModelMessagesMock.mockResolvedValue([]);
     streamTextMock.mockReturnValue(buildStreamResult().result);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatPostRequest(buildRequest(baseBody, { "x-client-device": "mobile" }), reply);
 
     const options = streamTextMock.mock.calls[0]?.[0];
@@ -251,15 +249,13 @@ describe("handleChatPostRequest", () => {
     isAiUsageAvailableMock.mockResolvedValue(true);
     convertToModelMessagesMock.mockResolvedValue([]);
     streamTextMock.mockReturnValue(buildStreamResult().result);
-    getChatUserOrThrowMock.mockReturnValue({
-      address: "0xabc0000000000000000000000000000000000000",
-      city: null,
-      country: null,
-      countryRegion: null,
-      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
-    });
+    getChatUserOrThrowMock.mockReturnValue(
+      buildChatUser({
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+      }),
+    );
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatPostRequest(buildRequest(baseBody), reply);
 
     const options = streamTextMock.mock.calls[0]?.[0];
@@ -270,15 +266,13 @@ describe("handleChatPostRequest", () => {
     isAiUsageAvailableMock.mockResolvedValue(true);
     convertToModelMessagesMock.mockResolvedValue([]);
     streamTextMock.mockReturnValue(buildStreamResult().result);
-    getChatUserOrThrowMock.mockReturnValue({
-      address: "0xabc0000000000000000000000000000000000000",
-      city: null,
-      country: null,
-      countryRegion: null,
-      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
-    });
+    getChatUserOrThrowMock.mockReturnValue(
+      buildChatUser({
+        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+      }),
+    );
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatPostRequest(buildRequest(baseBody, { "x-client-device": "desktop" }), reply);
 
     const options = streamTextMock.mock.calls[0]?.[0];
@@ -306,7 +300,7 @@ describe("handleChatPostRequest", () => {
     });
     streamTextMock.mockReturnValue(result);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatPostRequest(buildRequest(baseBody), reply);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -324,7 +318,7 @@ describe("handleChatPostRequest", () => {
     const { result, toUIMessageStream } = buildStreamResult();
     streamTextMock.mockReturnValue(result);
 
-    const reply = buildReply();
+    const reply = createReply();
     const response = await handleChatPostRequest(
       buildRequest({
         id: "chat-99",
@@ -392,7 +386,7 @@ describe("handleChatPostRequest", () => {
         return result;
       });
 
-      const reply = buildReply();
+      const reply = createReply();
       const response = await handleChatPostRequest(
         buildRequest({
           id: "chat-100",
@@ -428,18 +422,41 @@ describe("handleChatPostRequest", () => {
     const { result, toUIMessageStream, consumeStream } = buildStreamResult();
     streamTextMock.mockReturnValue(result);
 
-    const reply = buildReply();
+    const reply = createReply();
     const response = await handleChatPostRequest(buildRequest(baseBody), reply);
     expect(response).toBeInstanceOf(Response);
     expect(consumeStream).toHaveBeenCalledTimes(1);
     expect(toUIMessageStream).toHaveBeenCalled();
+
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    options?.generateMessageId?.();
+    options?.generateMessageId?.();
+  });
+
+  it("uses the pending assistant id before generating a new id", async () => {
+    isAiUsageAvailableMock.mockResolvedValue(true);
+    convertToModelMessagesMock.mockResolvedValue([]);
+    const { result, toUIMessageStream } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
+    randomUUIDMock
+      .mockImplementationOnce(() => "11111111-1111-1111-1111-111111111111")
+      .mockImplementationOnce(() => "22222222-2222-2222-2222-222222222222");
+
+    const reply = createReply();
+    await handleChatPostRequest(buildRequest(baseBody), reply);
+
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    const first = options?.generateMessageId?.();
+    const second = options?.generateMessageId?.();
+    expect(first).toBe("11111111-1111-1111-1111-111111111111");
+    expect(second).toBe("22222222-2222-2222-2222-222222222222");
   });
 
   it("returns 404 when chat does not exist", async () => {
     setCobuildDbResponse(chat, []);
     isAiUsageAvailableMock.mockResolvedValue(true);
 
-    const reply = buildReply();
+    const reply = createReply();
     const result = await handleChatPostRequest(buildRequest(baseBody), reply);
 
     expect(reply.status).toHaveBeenCalledWith(404);
@@ -452,7 +469,7 @@ describe("handleChatPostRequest", () => {
     setCobuildDbResponse(chat, [{ user: "0xdef0000000000000000000000000000000000000" }]);
     isAiUsageAvailableMock.mockResolvedValue(true);
 
-    const reply = buildReply();
+    const reply = createReply();
     const result = await handleChatPostRequest(buildRequest(baseBody), reply);
 
     expect(reply.status).toHaveBeenCalledWith(404);
@@ -471,7 +488,7 @@ describe("handleChatPostRequest", () => {
     convertToModelMessagesMock.mockResolvedValue([]);
     streamTextMock.mockReturnValue(buildStreamResult().result);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatPostRequest(buildRequest(baseBody, { "x-chat-grant": "grant" }), reply);
 
     expect(getDbCallCount(chat)).toBe(0);
@@ -484,7 +501,7 @@ describe("handleChatPostRequest", () => {
     const { result, toUIMessageStream } = buildStreamResult();
     streamTextMock.mockReturnValue(result);
 
-    const reply = buildReply();
+    const reply = createReply();
     const response = await handleChatPostRequest(buildRequest(baseBody), reply);
 
     expect(response.headers.get("x-chat-grant")).toBe("chat-grant");
@@ -496,11 +513,7 @@ describe("handleChatPostRequest", () => {
     convertToModelMessagesMock.mockResolvedValue([]);
     streamTextMock.mockReturnValue(buildStreamResult().result);
 
-    const reply = {
-      status: vi.fn().mockReturnThis(),
-      send: vi.fn(),
-      header: vi.fn(),
-    } as unknown as FastifyReply;
+    const reply = createReply();
 
     await handleChatPostRequest(buildRequest(baseBody), reply);
 
@@ -512,7 +525,7 @@ describe("handleChatPostRequest", () => {
     isAiUsageAvailableMock.mockResolvedValue(true);
     storeChatMessagesMock.mockRejectedValueOnce(new Error("db down"));
 
-    const reply = buildReply();
+    const reply = createReply();
     await expect(handleChatPostRequest(buildRequest(baseBody), reply)).rejects.toThrow(
       CHAT_PERSIST_ERROR,
     );
@@ -524,11 +537,11 @@ describe("handleChatPostRequest", () => {
     streamTextMock.mockReturnValue(buildStreamResult().result);
     getAgentMock.mockResolvedValue({
       system: [],
-      tools: { file_search: {} } as any,
+      tools: { file_search: {} } as unknown as ToolSet,
       defaultModel: mockModel,
     });
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatPostRequest(buildRequest(baseBody), reply);
 
     const options = streamTextMock.mock.calls[0]?.[0];
@@ -541,7 +554,7 @@ describe("handleChatPostRequest", () => {
     const { result, toUIMessageStream } = buildStreamResult();
     streamTextMock.mockReturnValue(result);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatPostRequest(buildRequest(baseBody), reply);
 
     const options = toUIMessageStream.mock.calls[0]?.[0];
@@ -559,7 +572,7 @@ describe("handleChatPostRequest", () => {
     streamTextMock.mockReturnValue(result);
     isChatDebugEnabledMock.mockReturnValue(true);
 
-    const reply = buildReply();
+    const reply = createReply();
     const response = await handleChatPostRequest(buildRequest(baseBody), reply);
 
     const options = toUIMessageStream.mock.calls[0]?.[0];
@@ -590,7 +603,7 @@ describe("handleChatPostRequest", () => {
     streamTextMock.mockReturnValue(result);
     storeChatMessagesMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("fail"));
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatPostRequest(buildRequest(baseBody), reply);
 
     const options = toUIMessageStream.mock.calls[0]?.[0];

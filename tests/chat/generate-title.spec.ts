@@ -3,6 +3,7 @@ import { generateText } from "ai";
 import { generateChatTitle } from "../../src/chat/generate-title";
 
 const generateTextMock = vi.mocked(generateText);
+type GenerateTextResponse = Awaited<ReturnType<typeof generateText>>;
 
 describe("generateChatTitle", () => {
   it("returns null for empty input", async () => {
@@ -12,7 +13,7 @@ describe("generateChatTitle", () => {
   });
 
   it("strips surrounding quotes from the model response", async () => {
-    generateTextMock.mockResolvedValue({ text: "\"Cobuild roadmap\"" } as any);
+    generateTextMock.mockResolvedValue({ text: "\"Cobuild roadmap\"" } as unknown as GenerateTextResponse);
 
     const result = await generateChatTitle("some message");
 
@@ -25,7 +26,7 @@ describe("generateChatTitle", () => {
     generateTextMock.mockResolvedValue({
       text: "   ",
       response: { body: longBody, messages: [] },
-    } as any);
+    } as unknown as GenerateTextResponse);
 
     const result = await generateChatTitle("message");
     expect(result).toBeNull();
@@ -38,14 +39,50 @@ describe("generateChatTitle", () => {
     logSpy.mockRestore();
   });
 
+  it("logs short response bodies when title is empty", async () => {
+    const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    generateTextMock.mockResolvedValue({
+      text: "",
+      response: { body: { foo: "bar" }, messages: [] },
+    } as unknown as GenerateTextResponse);
+
+    const result = await generateChatTitle("message");
+    expect(result).toBeNull();
+    expect(logSpy).toHaveBeenCalledWith(
+      "Chat title generation returned empty text.",
+      expect.objectContaining({
+        responseBody: "{\"foo\":\"bar\"}",
+      }),
+    );
+    logSpy.mockRestore();
+  });
+
+  it("handles empty titles with missing response bodies", async () => {
+    const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    generateTextMock.mockResolvedValue({
+      text: "",
+      response: undefined,
+    } as unknown as GenerateTextResponse);
+
+    const result = await generateChatTitle("message");
+    expect(result).toBeNull();
+    expect(logSpy).toHaveBeenCalledWith(
+      "Chat title generation returned empty text.",
+      expect.objectContaining({
+        responseBody: null,
+      }),
+    );
+    logSpy.mockRestore();
+  });
+
   it("handles unserializable response bodies", async () => {
     const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-    const circular: any = { value: "x" };
+    const circular: { value: string; self?: unknown } = { value: "x" };
     circular.self = circular;
     generateTextMock.mockResolvedValue({
       text: "",
       response: { body: circular, messages: [] },
-    } as any);
+    } as unknown as GenerateTextResponse);
 
     const result = await generateChatTitle("message");
     expect(result).toBeNull();

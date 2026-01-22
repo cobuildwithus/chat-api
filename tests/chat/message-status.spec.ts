@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import type { UIMessage } from "ai";
 import { clearPendingAssistantIfUnclaimed, markAssistantMessageFailed } from "../../src/chat/message-status";
 import { chatMessage } from "../../src/infra/db/schema";
 import { getDbCallCount, resetAllMocks } from "../utils/mocks/db";
@@ -19,9 +20,10 @@ describe("message status", () => {
   });
 
   it("does not clear pending assistant when claimed", async () => {
-    await clearPendingAssistantIfUnclaimed("chat-1", "pending-1", [
+    const finishedMessages: UIMessage[] = [
       { id: "pending-1", role: "assistant", parts: [] },
-    ] as any);
+    ];
+    await clearPendingAssistantIfUnclaimed("chat-1", "pending-1", finishedMessages);
     expect(getDbCallCount(chatMessage)).toBe(0);
   });
 });

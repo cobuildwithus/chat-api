@@ -1,10 +1,12 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyRequest } from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { handleChatCreateRequest } from "../../../src/api/chat/create";
 import { chat } from "../../../src/infra/db/schema";
 import { getChatUserOrThrow } from "../../../src/api/auth/validate-chat-user";
 import { signChatGrant } from "../../../src/chat/grant";
+import { createReply } from "../../utils/fastify";
+import { buildChatUser } from "../../utils/fixtures/chat-user";
 import { queueCobuildDbResponse, resetAllMocks, setCobuildDbResponse } from "../../utils/mocks/db";
 
 vi.mock("node:crypto", () => ({
@@ -26,22 +28,10 @@ const randomUUIDMock = vi.mocked(randomUUID);
 const buildRequest = (body: { type: string; data?: Record<string, unknown> }) =>
   ({ body } as unknown as FastifyRequest);
 
-const buildReply = () =>
-  ({
-    status: vi.fn().mockReturnThis(),
-    send: vi.fn(),
-  }) as unknown as FastifyReply;
-
 beforeEach(() => {
   vi.clearAllMocks();
   resetAllMocks();
-  getChatUserOrThrowMock.mockReturnValue({
-    address: "0xabc0000000000000000000000000000000000000",
-    city: null,
-    country: null,
-    countryRegion: null,
-    userAgent: null,
-  });
+  getChatUserOrThrowMock.mockReturnValue(buildChatUser());
   signChatGrantMock.mockResolvedValue("chat-grant");
 });
 
@@ -52,7 +42,7 @@ describe("handleChatCreateRequest", () => {
     );
     setCobuildDbResponse(chat, [{ id: "chat-1" }]);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatCreateRequest(
       buildRequest({
         type: "chat-default",
@@ -73,7 +63,7 @@ describe("handleChatCreateRequest", () => {
     queueCobuildDbResponse(chat, []);
     queueCobuildDbResponse(chat, []);
 
-    const reply = buildReply();
+    const reply = createReply();
     await handleChatCreateRequest(buildRequest({ type: "chat-default" }), reply);
 
     expect(reply.status).toHaveBeenCalledWith(500);
