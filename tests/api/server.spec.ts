@@ -6,13 +6,22 @@ type ServerMock = FastifyInstance & {
   post: ReturnType<typeof vi.fn>;
   get: ReturnType<typeof vi.fn>;
   setErrorHandler: ReturnType<typeof vi.fn>;
+  server: {
+    headersTimeout: number;
+    requestTimeout: number;
+    keepAliveTimeout: number;
+    maxRequestsPerSocket: number;
+    setTimeout: ReturnType<typeof vi.fn>;
+  };
 };
 
 let serverMock: ServerMock;
 
 const corsMock = vi.fn();
 const requestContextMock = vi.fn();
+const requestContextGetMock = vi.fn();
 const registerRequestLoggingMock = vi.fn();
+const rateLimitMock = vi.fn();
 
 vi.mock("fastify", () => ({
   default: vi.fn(() => serverMock),
@@ -22,8 +31,15 @@ vi.mock("@fastify/cors", () => ({
   default: corsMock,
 }));
 
+vi.mock("@fastify/rate-limit", () => ({
+  default: rateLimitMock,
+}));
+
 vi.mock("@fastify/request-context", () => ({
   fastifyRequestContext: requestContextMock,
+  requestContext: {
+    get: (...args: unknown[]) => requestContextGetMock(...args),
+  },
 }));
 
 vi.mock("../../src/api/request-logger", () => ({
@@ -40,11 +56,21 @@ describe("setupServer", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    delete process.env.RATE_LIMIT_ENABLED;
+    delete process.env.RATE_LIMIT_MAX;
+    delete process.env.RATE_LIMIT_WINDOW_MS;
     serverMock = {
       register: vi.fn(),
       post: vi.fn(),
       get: vi.fn(),
       setErrorHandler: vi.fn(),
+      server: {
+        headersTimeout: 0,
+        requestTimeout: 0,
+        keepAliveTimeout: 0,
+        maxRequestsPerSocket: 0,
+        setTimeout: vi.fn(),
+      },
     } as unknown as ServerMock;
     vi.clearAllMocks();
     vi.resetModules();
@@ -96,5 +122,52 @@ describe("setupServer", () => {
 
     const corsCall = serverMock.register.mock.calls.find((call) => call[0] === corsMock);
     expect(corsCall?.[1]?.origin).toBe("http://localhost:3000");
+  });
+
+  it("configures HTTP timeouts", async () => {
+    await setupTest();
+
+    expect(serverMock.server.headersTimeout).toBe(60_000);
+    expect(serverMock.server.requestTimeout).toBe(120_000);
+    expect(serverMock.server.keepAliveTimeout).toBe(5_000);
+    expect(serverMock.server.maxRequestsPerSocket).toBe(1_000);
+    expect(serverMock.server.setTimeout).toHaveBeenCalledWith(120_000);
+  });
+
+  it("registers rate limiting when enabled", async () => {
+    process.env.RATE_LIMIT_ENABLED = "true";
+    process.env.RATE_LIMIT_MAX = "5";
+    process.env.RATE_LIMIT_WINDOW_MS = "1000";
+
+    await setupTest();
+
+    const rateLimitCalls = serverMock.register.mock.calls.filter((call) => call[0] === rateLimitMock);
+    expect(rateLimitCalls).toHaveLength(2);
+    const ipLimitCall = rateLimitCalls.find((call) => call[1]?.hook === "onRequest");
+    const userLimitCall = rateLimitCalls.find((call) => call[1]?.hook === "preHandler");
+    expect(ipLimitCall?.[1]?.max).toBe(15);
+    expect(ipLimitCall?.[1]?.timeWindow).toBe(1000);
+    expect(userLimitCall?.[1]?.max).toBe(5);
+    expect(userLimitCall?.[1]?.timeWindow).toBe(1000);
+
+    const ipKey = ipLimitCall?.[1]?.keyGenerator?.({
+      headers: {},
+      ip: "127.0.0.1",
+    } as { headers: Record<string, string>; ip: string });
+    expect(ipKey).toBe("127.0.0.1");
+
+    requestContextGetMock.mockReturnValue({ address: "0xabc" });
+    const userKey = userLimitCall?.[1]?.keyGenerator?.({
+      headers: { "x-chat-user": "0xspoof" },
+      ip: "127.0.0.1",
+    } as { headers: Record<string, string>; ip: string });
+    expect(userKey).toBe("user:0xabc");
+
+    requestContextGetMock.mockReturnValue(undefined);
+    const fallbackKey = userLimitCall?.[1]?.keyGenerator?.({
+      headers: {},
+      ip: "127.0.0.1",
+    } as { headers: Record<string, string>; ip: string });
+    expect(fallbackKey).toBe("127.0.0.1");
   });
 });

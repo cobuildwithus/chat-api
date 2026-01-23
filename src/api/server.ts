@@ -1,6 +1,8 @@
 import cors from "@fastify/cors";
-import { fastifyRequestContext } from "@fastify/request-context";
+import { fastifyRequestContext, requestContext } from "@fastify/request-context";
+import rateLimit from "@fastify/rate-limit";
 import fastify from "fastify";
+import type { FastifyInstance } from "fastify";
 import { handleChatCreateRequest } from "./chat/create";
 import { handleChatGetRequest } from "./chat/get";
 import { handleChatListRequest } from "./chat/list";
@@ -12,10 +14,28 @@ import {
   chatListSchema,
   chatSchema,
 } from "./chat/schema";
+import { getRateLimitConfig } from "../config/env";
 import { handleError } from "./server-helpers";
 import { registerRequestLogging } from "./request-logger";
 
 const DEFAULT_PROD_ORIGINS = ["https://co.build", "https://www.co.build"];
+const SERVER_TIMEOUTS = {
+  headersTimeoutMs: 60_000,
+  requestTimeoutMs: 120_000,
+  keepAliveTimeoutMs: 5_000,
+  socketTimeoutMs: 120_000,
+  maxRequestsPerSocket: 1_000,
+};
+
+const applyServerTimeouts = (server: FastifyInstance["server"]) => {
+  server.headersTimeout = SERVER_TIMEOUTS.headersTimeoutMs;
+  server.requestTimeout = SERVER_TIMEOUTS.requestTimeoutMs;
+  server.keepAliveTimeout = SERVER_TIMEOUTS.keepAliveTimeoutMs;
+  server.maxRequestsPerSocket = SERVER_TIMEOUTS.maxRequestsPerSocket;
+  server.setTimeout(SERVER_TIMEOUTS.socketTimeoutMs);
+};
+
+const IP_RATE_LIMIT_MULTIPLIER = 3;
 
 const getAllowedOrigins = () => {
   const raw = process.env.CHAT_ALLOWED_ORIGINS;
@@ -37,8 +57,32 @@ const getAllowedOrigins = () => {
 
 export const setupServer = async () => {
   const server = fastify();
+  applyServerTimeouts(server.server);
   server.register(fastifyRequestContext);
   registerRequestLogging(server);
+
+  const rateLimitConfig = getRateLimitConfig();
+  if (rateLimitConfig.enabled) {
+    const ipMax = Math.max(1, Math.floor(rateLimitConfig.max * IP_RATE_LIMIT_MULTIPLIER));
+    server.register(rateLimit, {
+      max: ipMax,
+      timeWindow: rateLimitConfig.windowMs,
+      hook: "onRequest",
+      keyGenerator: (request) => request.ip,
+    });
+    server.register(rateLimit, {
+      max: rateLimitConfig.max,
+      timeWindow: rateLimitConfig.windowMs,
+      hook: "preHandler",
+      keyGenerator: (request) => {
+        const user = requestContext.get("user");
+        if (user?.address) {
+          return `user:${user.address}`;
+        }
+        return request.ip;
+      },
+    });
+  }
 
   server.register(cors, {
     origin: getAllowedOrigins(),

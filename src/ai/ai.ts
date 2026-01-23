@@ -1,6 +1,11 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { getOpenAiTimeoutMs } from "../config/env";
+import { createTimeoutFetch } from "../infra/http/timeout";
 
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = createOpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  fetch: createTimeoutFetch({ timeoutMs: getOpenAiTimeoutMs(), name: "OpenAI" }),
+});
 
 export const openAIProvider = openai;
 export const openAIModel = openai.responses("gpt-5.2-2025-12-11");

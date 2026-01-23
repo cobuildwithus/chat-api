@@ -1,5 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { getNeynarTimeoutMs } from "../../../config/env";
+import { withTimeout } from "../../../infra/http/timeout";
 import { getNeynarClient } from "../../../infra/neynar/client";
 import type { Tool } from "../tool";
 
@@ -25,7 +27,11 @@ export const getCastTool = {
         return { error: "Neynar API key is not configured." };
       }
       try {
-        const response = await neynarClient.lookupCastByHashOrUrl({ identifier, type });
+        const response = await withTimeout(
+          neynarClient.lookupCastByHashOrUrl({ identifier, type }),
+          getNeynarTimeoutMs(),
+          "Neynar getCast",
+        );
         return response.cast;
       } catch (error) {
         console.error("Error getting cast", error);
