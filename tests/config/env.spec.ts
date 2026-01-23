@@ -5,6 +5,7 @@ import {
   getNeynarTimeoutMs,
   getOpenAiTimeoutMs,
   getPostgresPoolOptions,
+  getPostgresPoolStatsIntervalMs,
   getRateLimitConfig,
   getPrivyAppId,
   getPrivyVerificationKey,
@@ -76,6 +77,36 @@ describe("env helpers", () => {
       max: 10,
       windowMs: 5000,
     });
+  });
+
+  it("uses defaults when optional pool and rate limit settings are missing", () => {
+    process.env = { ...process.env, ...baseEnv, POSTGRES_POOL_MAX: " " };
+    delete process.env.POSTGRES_POOL_IDLE_TIMEOUT_MS;
+    delete process.env.POSTGRES_POOL_CONNECTION_TIMEOUT_MS;
+    delete process.env.POSTGRES_POOL_STATS_INTERVAL_MS;
+    delete process.env.RATE_LIMIT_ENABLED;
+    delete process.env.RATE_LIMIT_MAX;
+    delete process.env.RATE_LIMIT_WINDOW_MS;
+
+    expect(getPostgresPoolOptions()).toEqual({});
+    expect(getPostgresPoolStatsIntervalMs()).toBeNull();
+    expect(getRateLimitConfig()).toEqual({
+      enabled: false,
+      max: 30,
+      windowMs: 60_000,
+    });
+  });
+
+  it("parses pool stats interval when configured", () => {
+    process.env = { ...process.env, ...baseEnv, POSTGRES_POOL_STATS_INTERVAL_MS: "15000" };
+
+    expect(getPostgresPoolStatsIntervalMs()).toBe(15000);
+  });
+
+  it("throws when numeric env values are invalid", () => {
+    process.env = { ...process.env, ...baseEnv, POSTGRES_POOL_MAX: "not-a-number" };
+
+    expect(() => getPostgresPoolOptions()).toThrow();
   });
 
   it("uses timeout defaults when not configured", () => {

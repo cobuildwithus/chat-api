@@ -140,10 +140,21 @@ describe("setupServer", () => {
     const rateLimitCall = serverMock.register.mock.calls.find((call) => call[0] === rateLimitMock);
     expect(rateLimitCall?.[1]?.max).toBe(5);
     expect(rateLimitCall?.[1]?.timeWindow).toBe(1000);
-    const key = rateLimitCall?.[1]?.keyGenerator?.({
+    const keyGenerator = rateLimitCall?.[1]?.keyGenerator;
+    const key = keyGenerator?.({
       headers: { "x-chat-user": "0xabc" },
       ip: "127.0.0.1",
     } as { headers: Record<string, string>; ip: string });
     expect(key).toBe("user:0xabc");
+    const grantKey = keyGenerator?.({
+      headers: { "x-chat-grant": "grant-1" },
+      ip: "127.0.0.1",
+    } as { headers: Record<string, string>; ip: string });
+    expect(grantKey).toBe("grant:grant-1");
+    const ipKey = keyGenerator?.({
+      headers: {},
+      ip: "127.0.0.1",
+    } as { headers: Record<string, string>; ip: string });
+    expect(ipKey).toBe("127.0.0.1");
   });
 });

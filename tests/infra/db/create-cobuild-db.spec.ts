@@ -100,6 +100,32 @@ describe("bootstrapCobuildDb", () => {
     expect(poolInstances[0]?.on).toHaveBeenCalledWith("error", expect.any(Function));
   });
 
+  it("registers replica read-only handlers and pool stats when enabled", () => {
+    process.env.NODE_ENV = "production";
+    process.env.POSTGRES_POOL_STATS_INTERVAL_MS = "1000";
+    const unrefMocks: Array<ReturnType<typeof vi.fn>> = [];
+    const setIntervalSpy = vi
+      .spyOn(global, "setInterval")
+      .mockImplementation((() => {
+        const unref = vi.fn();
+        unrefMocks.push(unref);
+        return { unref } as unknown as NodeJS.Timeout;
+      }) as typeof setInterval);
+    const primaryDb = { id: "primary" };
+    const replicaDb = { id: "replica" };
+    drizzleMock.mockReturnValueOnce(primaryDb).mockReturnValueOnce(replicaDb);
+
+    createCobuildDbResources({
+      primaryUrl: "pg://primary",
+      replicaUrls: ["pg://replica"],
+    });
+
+    expect(poolInstances[1]?.on).toHaveBeenCalledWith("connect", expect.any(Function));
+    expect(setIntervalSpy).toHaveBeenCalledTimes(2);
+    unrefMocks.forEach((mock) => expect(mock).toHaveBeenCalledTimes(1));
+    setIntervalSpy.mockRestore();
+  });
+
   it("throws when replica drizzle returns undefined", () => {
     const primaryDb = { id: "primary" };
     drizzleMock.mockReturnValueOnce(primaryDb).mockReturnValueOnce(undefined);
@@ -123,5 +149,25 @@ describe("bootstrapCobuildDb", () => {
 
     expect(poolInstances[0]?.end).toHaveBeenCalledTimes(1);
     expect(poolInstances[1]?.end).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs errors when pools fail to close", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const primaryDb = { id: "primary" };
+    drizzleMock.mockReturnValueOnce(primaryDb);
+
+    const resources = createCobuildDbResources({
+      primaryUrl: "pg://primary",
+      replicaUrls: [],
+    });
+    poolInstances[0]?.end.mockRejectedValueOnce(new Error("close failed"));
+
+    await resources.close();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("failed to close"),
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
   });
 });

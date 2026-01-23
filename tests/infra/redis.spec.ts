@@ -121,4 +121,14 @@ describe("redis helpers", () => {
 
     expect(disconnectMock).toHaveBeenCalledTimes(1);
   });
+
+  it("does nothing when redis is not open", async () => {
+    client.isOpen = false;
+
+    const { closeRedisClient } = await import("../../src/infra/redis");
+    await closeRedisClient();
+
+    expect(quitMock).not.toHaveBeenCalled();
+    expect(disconnectMock).not.toHaveBeenCalled();
+  });
 });
