@@ -6,9 +6,15 @@ import * as schema from "./schema";
 
 export function bootstrapCobuildDb({ primaryUrl, replicaUrls }: DatabaseConfig) {
   const primaryPool = new Pool({ connectionString: primaryUrl });
+  primaryPool.on("error", (error) => {
+    console.error("[db] primary pool error", error);
+  });
 
   const replicaPools = replicaUrls.map((connectionString) => {
     const pool = new Pool({ connectionString });
+    pool.on("error", (error) => {
+      console.error("[db] replica pool error", error);
+    });
     pool.on("connect", (client) => {
       void client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
     });
