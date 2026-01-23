@@ -1,10 +1,11 @@
+import { getCobuildAiContextTimeoutMs } from "../config/env";
 import { cacheResult, getCachedResult } from "./cache/cacheResult";
 
 export const COBUILD_AI_CONTEXT_URL = "https://co.build/api/cobuild/ai-context";
 const CACHE_PREFIX = "cobuild:ai-context:";
 const CACHE_KEY = "snapshot";
 const CACHE_TTL_SECONDS = 60 * 15;
-const DEFAULT_TIMEOUT_MS = 7000;
+const DEFAULT_TIMEOUT_MS = getCobuildAiContextTimeoutMs();
 const ERROR_MAX_CHARS = 120;
 
 export type CobuildAiContextResponse = Record<string, unknown>;

@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getChatGrantSecret,
+  getCobuildAiContextTimeoutMs,
+  getNeynarTimeoutMs,
+  getOpenAiTimeoutMs,
+  getPostgresPoolOptions,
+  getRateLimitConfig,
   getPrivyAppId,
   getPrivyVerificationKey,
   isChatDebugEnabled,
@@ -47,6 +52,40 @@ describe("env helpers", () => {
     const config = loadDatabaseConfig();
     expect(config.replicaUrls).toEqual(["postgres://a", "postgres://b"]);
     expect(isChatDebugEnabled()).toBe(true);
+  });
+
+  it("parses pool options and rate limit config", () => {
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      POSTGRES_POOL_MAX: "12",
+      POSTGRES_POOL_IDLE_TIMEOUT_MS: "4000",
+      POSTGRES_POOL_CONNECTION_TIMEOUT_MS: "2000",
+      RATE_LIMIT_ENABLED: "true",
+      RATE_LIMIT_MAX: "10",
+      RATE_LIMIT_WINDOW_MS: "5000",
+    };
+
+    expect(getPostgresPoolOptions()).toEqual({
+      max: 12,
+      idleTimeoutMillis: 4000,
+      connectionTimeoutMillis: 2000,
+    });
+    expect(getRateLimitConfig()).toEqual({
+      enabled: true,
+      max: 10,
+      windowMs: 5000,
+    });
+  });
+
+  it("uses timeout defaults when not configured", () => {
+    process.env = { ...process.env, ...baseEnv };
+    delete process.env.OPENAI_REQUEST_TIMEOUT_MS;
+    delete process.env.NEYNAR_REQUEST_TIMEOUT_MS;
+    delete process.env.COBUILD_AI_CONTEXT_TIMEOUT_MS;
+    expect(getOpenAiTimeoutMs()).toBe(30_000);
+    expect(getNeynarTimeoutMs()).toBe(8_000);
+    expect(getCobuildAiContextTimeoutMs()).toBe(7_000);
   });
 
   it("handles missing privy verification key outside production", () => {

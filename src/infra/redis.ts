@@ -20,6 +20,22 @@ export async function getRedisClient() {
   return client as unknown as RedisClientType;
 }
 
+export async function closeRedisClient(): Promise<void> {
+  if (!redisClient.isOpen) return;
+  try {
+    await redisClient.quit();
+  } catch (error) {
+    console.error("[redis] failed to quit cleanly", error);
+    try {
+      await redisClient.disconnect();
+    } catch (disconnectError) {
+      console.error("[redis] failed to disconnect", disconnectError);
+    }
+  } finally {
+    client = null;
+  }
+}
+
 type LockOpts = {
   ttlMs?: number;
   maxWaitMs?: number;

@@ -33,6 +33,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^3.0.9",
     "@fastify/cors": "^10.0.2",
+    "@fastify/rate-limit": "^10.3.0",
     "@fastify/request-context": "^6.0.2",
     "@neynar/nodejs-sdk": "^3.34.0",
     "ai": "^6.0.30",

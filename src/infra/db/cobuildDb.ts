@@ -1,7 +1,7 @@
 import { loadDatabaseConfig } from "../../config/env";
-import { bootstrapCobuildDb } from "./create-cobuild-db";
+import { createCobuildDbResources } from "./create-cobuild-db";
 
 const databaseConfig = loadDatabaseConfig();
-const cobuildDb = bootstrapCobuildDb(databaseConfig);
+const { db: cobuildDb, close: closeCobuildDb } = createCobuildDbResources(databaseConfig);
 
-export { cobuildDb };
+export { cobuildDb, closeCobuildDb };

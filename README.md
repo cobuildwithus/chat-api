@@ -87,6 +87,16 @@ Key variables:
 - `SELF_HOSTED_MODE` (optional, set to `true` to bypass Privy)
 - `SELF_HOSTED_DEFAULT_ADDRESS` (optional, fallback address in self-hosted mode)
 - `SELF_HOSTED_SHARED_SECRET` (optional, require `x-chat-auth` in self-hosted mode)
+- `POSTGRES_POOL_MAX` (optional, tune Postgres pool size)
+- `POSTGRES_POOL_IDLE_TIMEOUT_MS` (optional)
+- `POSTGRES_POOL_CONNECTION_TIMEOUT_MS` (optional)
+- `POSTGRES_POOL_STATS_INTERVAL_MS` (optional, log pool stats when > 0)
+- `RATE_LIMIT_ENABLED` (optional, enable app-side rate limiting)
+- `RATE_LIMIT_MAX` (optional, default 30)
+- `RATE_LIMIT_WINDOW_MS` (optional, default 60000)
+- `OPENAI_REQUEST_TIMEOUT_MS` (optional, default 30000)
+- `NEYNAR_REQUEST_TIMEOUT_MS` (optional, default 8000)
+- `COBUILD_AI_CONTEXT_TIMEOUT_MS` (optional, default 7000)
 
 Generate a `CHAT_GRANT_SECRET` with:
 

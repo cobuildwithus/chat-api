@@ -4,12 +4,17 @@ const connectMock = vi.fn();
 const onMock = vi.fn();
 const setMock = vi.fn();
 const evalMock = vi.fn();
+const quitMock = vi.fn();
+const disconnectMock = vi.fn();
 
 type RedisClientMock = {
   connect: typeof connectMock;
   on: typeof onMock;
   set: typeof setMock;
   eval: typeof evalMock;
+  quit: typeof quitMock;
+  disconnect: typeof disconnectMock;
+  isOpen: boolean;
 };
 
 const client: RedisClientMock = {
@@ -17,6 +22,9 @@ const client: RedisClientMock = {
   on: onMock,
   set: setMock,
   eval: evalMock,
+  quit: quitMock,
+  disconnect: disconnectMock,
+  isOpen: false,
 };
 
 vi.mock("redis", () => ({
@@ -27,6 +35,7 @@ describe("redis helpers", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    client.isOpen = false;
   });
 
   it("caches the redis client connection", async () => {
@@ -91,5 +100,25 @@ describe("redis helpers", () => {
     const { withRedisLock } = await import("../../src/infra/redis");
 
     await expect(withRedisLock("lock-release", async () => "done")).resolves.toBe("done");
+  });
+
+  it("closes redis when open", async () => {
+    client.isOpen = true;
+    quitMock.mockResolvedValue(undefined);
+
+    const { closeRedisClient } = await import("../../src/infra/redis");
+    await closeRedisClient();
+
+    expect(quitMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("disconnects when quit fails", async () => {
+    client.isOpen = true;
+    quitMock.mockRejectedValueOnce(new Error("quit failed"));
+
+    const { closeRedisClient } = await import("../../src/infra/redis");
+    await closeRedisClient();
+
+    expect(disconnectMock).toHaveBeenCalledTimes(1);
   });
 });

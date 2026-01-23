@@ -25,7 +25,9 @@ describe("ai module", () => {
 
     const ai = await import("../../src/ai/ai");
 
-    expect(createOpenAIMock).toHaveBeenCalledWith({ apiKey: "test-key" });
+    expect(createOpenAIMock).toHaveBeenCalledWith(
+      expect.objectContaining({ apiKey: "test-key", fetch: expect.any(Function) }),
+    );
     expect(responsesMock).toHaveBeenCalledWith("gpt-5.2-2025-12-11");
     expect(responsesMock).toHaveBeenCalledWith("gpt-5-mini-2025-08-07");
     expect(ai.openAIProvider).toBe(provider);
