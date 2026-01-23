@@ -19,6 +19,7 @@ let serverMock: ServerMock;
 
 const corsMock = vi.fn();
 const requestContextMock = vi.fn();
+const requestContextGetMock = vi.fn();
 const registerRequestLoggingMock = vi.fn();
 const rateLimitMock = vi.fn();
 
@@ -36,6 +37,9 @@ vi.mock("@fastify/rate-limit", () => ({
 
 vi.mock("@fastify/request-context", () => ({
   fastifyRequestContext: requestContextMock,
+  requestContext: {
+    get: (...args: unknown[]) => requestContextGetMock(...args),
+  },
 }));
 
 vi.mock("../../src/api/request-logger", () => ({
@@ -137,24 +141,33 @@ describe("setupServer", () => {
 
     await setupTest();
 
-    const rateLimitCall = serverMock.register.mock.calls.find((call) => call[0] === rateLimitMock);
-    expect(rateLimitCall?.[1]?.max).toBe(5);
-    expect(rateLimitCall?.[1]?.timeWindow).toBe(1000);
-    const keyGenerator = rateLimitCall?.[1]?.keyGenerator;
-    const key = keyGenerator?.({
-      headers: { "x-chat-user": "0xabc" },
-      ip: "127.0.0.1",
-    } as { headers: Record<string, string>; ip: string });
-    expect(key).toBe("user:0xabc");
-    const grantKey = keyGenerator?.({
-      headers: { "x-chat-grant": "grant-1" },
-      ip: "127.0.0.1",
-    } as { headers: Record<string, string>; ip: string });
-    expect(grantKey).toBe("grant:grant-1");
-    const ipKey = keyGenerator?.({
+    const rateLimitCalls = serverMock.register.mock.calls.filter((call) => call[0] === rateLimitMock);
+    expect(rateLimitCalls).toHaveLength(2);
+    const ipLimitCall = rateLimitCalls.find((call) => call[1]?.hook === "onRequest");
+    const userLimitCall = rateLimitCalls.find((call) => call[1]?.hook === "preHandler");
+    expect(ipLimitCall?.[1]?.max).toBe(15);
+    expect(ipLimitCall?.[1]?.timeWindow).toBe(1000);
+    expect(userLimitCall?.[1]?.max).toBe(5);
+    expect(userLimitCall?.[1]?.timeWindow).toBe(1000);
+
+    const ipKey = ipLimitCall?.[1]?.keyGenerator?.({
       headers: {},
       ip: "127.0.0.1",
     } as { headers: Record<string, string>; ip: string });
     expect(ipKey).toBe("127.0.0.1");
+
+    requestContextGetMock.mockReturnValue({ address: "0xabc" });
+    const userKey = userLimitCall?.[1]?.keyGenerator?.({
+      headers: { "x-chat-user": "0xspoof" },
+      ip: "127.0.0.1",
+    } as { headers: Record<string, string>; ip: string });
+    expect(userKey).toBe("user:0xabc");
+
+    requestContextGetMock.mockReturnValue(undefined);
+    const fallbackKey = userLimitCall?.[1]?.keyGenerator?.({
+      headers: {},
+      ip: "127.0.0.1",
+    } as { headers: Record<string, string>; ip: string });
+    expect(fallbackKey).toBe("127.0.0.1");
   });
 });

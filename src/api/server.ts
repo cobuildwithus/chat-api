@@ -1,5 +1,5 @@
 import cors from "@fastify/cors";
-import { fastifyRequestContext } from "@fastify/request-context";
+import { fastifyRequestContext, requestContext } from "@fastify/request-context";
 import rateLimit from "@fastify/rate-limit";
 import fastify from "fastify";
 import type { FastifyInstance } from "fastify";
@@ -35,6 +35,8 @@ const applyServerTimeouts = (server: FastifyInstance["server"]) => {
   server.setTimeout(SERVER_TIMEOUTS.socketTimeoutMs);
 };
 
+const IP_RATE_LIMIT_MULTIPLIER = 3;
+
 const getAllowedOrigins = () => {
   const raw = process.env.CHAT_ALLOWED_ORIGINS;
   const isProd = process.env.NODE_ENV === "production";
@@ -61,18 +63,21 @@ export const setupServer = async () => {
 
   const rateLimitConfig = getRateLimitConfig();
   if (rateLimitConfig.enabled) {
+    const ipMax = Math.max(1, Math.floor(rateLimitConfig.max * IP_RATE_LIMIT_MULTIPLIER));
+    server.register(rateLimit, {
+      max: ipMax,
+      timeWindow: rateLimitConfig.windowMs,
+      hook: "onRequest",
+      keyGenerator: (request) => request.ip,
+    });
     server.register(rateLimit, {
       max: rateLimitConfig.max,
       timeWindow: rateLimitConfig.windowMs,
-      hook: "onRequest",
+      hook: "preHandler",
       keyGenerator: (request) => {
-        const headerUser = request.headers["x-chat-user"];
-        if (typeof headerUser === "string" && headerUser.trim().length > 0) {
-          return `user:${headerUser.trim()}`;
-        }
-        const grant = request.headers["x-chat-grant"];
-        if (typeof grant === "string" && grant.trim().length > 0) {
-          return `grant:${grant.trim()}`;
+        const user = requestContext.get("user");
+        if (user?.address) {
+          return `user:${user.address}`;
         }
         return request.ip;
       },
