@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { farcasterProfiles } from "../../../infra/db/schema";
 import { cobuildDb } from "../../../infra/db/cobuildDb";
-import { getOrSetCachedResult } from "../../../infra/cache/cacheResult";
+import { getOrSetCachedResultWithLock } from "../../../infra/cache/cacheResult";
 
 const CACHE_PREFIX = "farcaster:get-user:";
 const CACHE_TTL_SECONDS = 60 * 10;
@@ -16,7 +16,7 @@ export const getUser = tool({
     const cacheKey = fname.trim().toLowerCase();
     console.debug(`Getting user details for ${fname}`);
 
-    return getOrSetCachedResult(
+    return getOrSetCachedResultWithLock(
       cacheKey,
       CACHE_PREFIX,
       async () => {

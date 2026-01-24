@@ -4,6 +4,7 @@ const redisGet = vi.fn();
 const redisSet = vi.fn();
 const redisDel = vi.fn();
 const redisScanIterator = vi.fn();
+const withRedisLock = vi.fn(async (_key: string, fn: () => Promise<unknown>) => fn());
 
 vi.mock("../../src/infra/redis", () => ({
   getRedisClient: vi.fn(async () => ({
@@ -12,6 +13,7 @@ vi.mock("../../src/infra/redis", () => ({
     del: redisDel,
     scanIterator: redisScanIterator,
   })),
+  withRedisLock,
 }));
 
 describe("cacheResult", () => {
@@ -61,7 +63,13 @@ describe("cacheResult", () => {
 
   it("reads cached values and handles invalid json", async () => {
     process.env.NODE_ENV = "production";
-    const { deleteCachedResult, deleteCachedResultsByPrefix, getCachedResult, getOrSetCachedResult } =
+    const {
+      deleteCachedResult,
+      deleteCachedResultsByPrefix,
+      getCachedResult,
+      getOrSetCachedResult,
+      getOrSetCachedResultWithLock,
+    } = await import("../../src/infra/cache/cacheResult");
       await import("../../src/infra/cache/cacheResult");
 
     redisGet.mockResolvedValueOnce("plain");
@@ -84,6 +92,25 @@ describe("cacheResult", () => {
     redisGet.mockResolvedValueOnce(null);
     await expect(
       getOrSetCachedResult("key", "prefix:", async () => "fresh"),
+    ).resolves.toBe("fresh");
+    expect(redisSet).toHaveBeenCalled();
+
+    redisGet.mockResolvedValueOnce(null).mockResolvedValueOnce("locked");
+    const lockedResult = await getOrSetCachedResultWithLock(
+      "key-lock",
+      "prefix:",
+      async () => "fresh",
+    );
+    expect(lockedResult).toBe("locked");
+    expect(withRedisLock).toHaveBeenCalledWith(
+      "prefix:lock:key-lock",
+      expect.any(Function),
+      expect.any(Object),
+    );
+
+    redisGet.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    await expect(
+      getOrSetCachedResultWithLock("key-miss", "prefix:", async () => "fresh"),
     ).resolves.toBe("fresh");
     expect(redisSet).toHaveBeenCalled();
 

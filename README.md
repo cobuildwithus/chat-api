@@ -104,6 +104,12 @@ Generate a `CHAT_GRANT_SECRET` with:
 openssl rand -hex 32
 ```
 
+## Postgres & cache guardrails
+
+- Read replicas are used for read traffic; use `$primary` for read-after-write paths to avoid replica lag.
+- Pool connections apply fixed safety timeouts (statement/lock/idle-in-tx) to prevent long-running queries from stalling the system.
+- Cache-miss paths use Redis locks for high-fanout reads to avoid stampedes; prefer the lock-backed cache helpers for expensive lookups.
+
 ## Docs tool vector store ID (optional)
 
 If you want the docs search tool, you’ll need an OpenAI vector store ID loaded into `DOCS_VECTOR_STORE_ID`.
