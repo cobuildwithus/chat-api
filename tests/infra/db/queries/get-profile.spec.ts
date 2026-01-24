@@ -13,6 +13,7 @@ vi.mock("../../../../src/infra/redis", () => ({
     set: redisSet,
     del: redisDel,
   })),
+  withRedisLock: vi.fn(async (_key: string, fn: () => Promise<unknown>) => fn()),
 }));
 
 vi.mock("../../../../src/infra/db/cobuildDb", () => ({

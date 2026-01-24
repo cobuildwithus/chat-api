@@ -35,6 +35,21 @@ vi.mock("../../../src/infra/cache/cacheResult", () => {
         return value;
       },
     ),
+    getOrSetCachedResultWithLock: vi.fn(
+      async (
+        key: string,
+        prefix: string,
+        fetchFn: () => Promise<unknown>,
+        ttlSeconds: number,
+      ) => {
+        const existing = cacheStore.get(`${prefix}${key}`);
+        if (existing) return existing.value;
+        const value = await fetchFn();
+        if (value === null || value === undefined) return value;
+        cacheStore.set(`${prefix}${key}`, { value, ttl: ttlSeconds });
+        return value;
+      },
+    ),
     deleteCachedResult: vi.fn(async (key: string, prefix: string) => {
       cacheStore.delete(`${prefix}${key}`);
     }),

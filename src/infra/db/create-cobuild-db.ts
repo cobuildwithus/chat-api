@@ -25,7 +25,7 @@ const applySessionSettings = (label: string, client: { query: (sql: string) => P
     `SET idle_in_transaction_session_timeout = '${IDLE_IN_TX_TIMEOUT_MS}ms'`,
   ];
   for (const statement of statements) {
-    void client.query(statement).catch((error) => {
+    void Promise.resolve(client.query(statement)).catch((error) => {
       console.warn(`[db] ${label} session setting failed`, error);
     });
   }
