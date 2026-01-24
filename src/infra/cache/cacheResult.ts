@@ -60,11 +60,7 @@ export async function getOrSetCachedResult<T>(
   const cached = await getCachedResult<T>(key, prefix);
   if (cached !== null) return cached;
 
-  const result = await fetchFn();
-  if (!shouldCacheResult(result)) return result;
-
-  await setCachedResult(key, prefix, result, ttlSeconds);
-  return result;
+  return fetchAndCacheResult(key, prefix, fetchFn, ttlSeconds);
 }
 
 export async function getOrSetCachedResultWithLock<T>(
@@ -74,25 +70,31 @@ export async function getOrSetCachedResultWithLock<T>(
   ttlSeconds: number = DEFAULT_TTL,
   opts?: { lockTtlMs?: number; maxWaitMs?: number },
 ): Promise<T> {
-  const cached = await getCachedResult<T>(key, prefix);
+  const loadCached = () => getCachedResult<T>(key, prefix);
+  const cached = await loadCached();
   if (cached !== null) return cached;
 
   const lockKey = `${prefix}lock:${key}`;
   const { lockTtlMs = 5_000, maxWaitMs = 5_000 } = opts ?? {};
+  const runFetchAndCache = () => fetchAndCacheResult(key, prefix, fetchFn, ttlSeconds);
 
-  return withRedisLock(
-    lockKey,
-    async () => {
-      const cachedAfterLock = await getCachedResult<T>(key, prefix);
-      if (cachedAfterLock !== null) return cachedAfterLock;
+  try {
+    return await withRedisLock(
+      lockKey,
+      async () => {
+        const cachedAfterLock = await loadCached();
+        if (cachedAfterLock !== null) return cachedAfterLock;
 
-      const result = await fetchFn();
-      if (!shouldCacheResult(result)) return result;
-      await setCachedResult(key, prefix, result, ttlSeconds);
-      return result;
-    },
-    { ttlMs: lockTtlMs, maxWaitMs },
-  );
+        return runFetchAndCache();
+      },
+      { ttlMs: lockTtlMs, maxWaitMs },
+    );
+  } catch (error) {
+    if (!isNonceLockTimeout(error)) throw error;
+    const cachedAfterTimeout = await loadCached();
+    if (cachedAfterTimeout !== null) return cachedAfterTimeout;
+    return runFetchAndCache();
+  }
 }
 
 export async function deleteCachedResult(key: string, prefix: string): Promise<void> {
@@ -129,4 +131,20 @@ async function setCachedResult<T>(
   const redis = await getRedisClient();
   const ttl = Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? Math.floor(ttlSeconds) : DEFAULT_TTL;
   await redis.set(getCacheKey(key, prefix), valueToCache, { EX: ttl });
+}
+
+async function fetchAndCacheResult<T>(
+  key: string,
+  prefix: string,
+  fetchFn: () => Promise<T>,
+  ttlSeconds: number,
+): Promise<T> {
+  const result = await fetchFn();
+  if (!shouldCacheResult(result)) return result;
+  await setCachedResult(key, prefix, result, ttlSeconds);
+  return result;
+}
+
+function isNonceLockTimeout(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith("NonceLockTimeout:");
 }
