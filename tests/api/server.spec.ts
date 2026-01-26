@@ -86,7 +86,7 @@ describe("setupServer", () => {
     expect(corsCall?.[1]?.origin).toEqual(["https://a.com", "https://b.com"]);
     expect(registerRequestLoggingMock).toHaveBeenCalledWith(serverMock);
     expect(serverMock.post).toHaveBeenCalledTimes(2);
-    expect(serverMock.get).toHaveBeenCalledTimes(2);
+    expect(serverMock.get).toHaveBeenCalledTimes(3);
     expect(serverMock.setErrorHandler).toHaveBeenCalledTimes(1);
   });
 

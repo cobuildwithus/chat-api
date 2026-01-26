@@ -147,6 +147,12 @@ pnpm test
 pnpm typecheck
 ```
 
+## License
+
+Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later).
+If you interact with this service over a network, the corresponding source is available at
+`/source` (or set `SOURCE_CODE_URL` to point to your fork).
+
 ## Deployment tips
 
 ### Railway
