@@ -26,6 +26,7 @@ export async function storeChatMessages({
   clientMessageId,
   generateTitle = true,
 }: StoreChatMessagesArgs) {
+  const primaryDb = cobuildDb.$primary ?? cobuildDb;
   const now = new Date();
   const serializedData = JSON.stringify(data ?? {});
 
@@ -51,7 +52,7 @@ export async function storeChatMessages({
   if (messages.length === 0) {
     await cobuildDb.delete(chatMessage).where(eq(chatMessage.chatId, chatId));
     if (generateTitle) {
-      const [storedChat] = await cobuildDb
+      const [storedChat] = await primaryDb
         .select({ title: chat.title })
         .from(chat)
         .where(eq(chat.id, chatId))
@@ -152,7 +153,7 @@ export async function storeChatMessages({
     .where(and(eq(chatMessage.chatId, chatId), not(inArray(chatMessage.id, ids))));
 
   if (generateTitle) {
-    const [storedChat] = await cobuildDb
+    const [storedChat] = await primaryDb
       .select({ title: chat.title })
       .from(chat)
       .where(eq(chat.id, chatId))

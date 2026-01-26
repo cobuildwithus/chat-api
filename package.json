@@ -1,7 +1,7 @@
 {
   "name": "chat-api",
   "version": "0.1.0",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "author": "cobuild",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",

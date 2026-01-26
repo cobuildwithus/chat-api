@@ -1,5 +1,5 @@
 import { getCobuildAiContextTimeoutMs } from "../config/env";
-import { cacheResult, getCachedResult } from "./cache/cacheResult";
+import { getOrSetCachedResultWithLock } from "./cache/cacheResult";
 
 export const COBUILD_AI_CONTEXT_URL = "https://co.build/api/cobuild/ai-context";
 const CACHE_PREFIX = "cobuild:ai-context:";
@@ -56,12 +56,13 @@ export async function getCobuildAiContextSnapshot(): Promise<{
   data: CobuildAiContextResponse | null;
   error?: string;
 }> {
-  const cached = await getCachedResult<CobuildAiContextResponse>(CACHE_KEY, CACHE_PREFIX);
-  if (cached) return { data: cached };
-
   try {
-    const data = await fetchCobuildAiContext();
-    await cacheResult(CACHE_KEY, CACHE_PREFIX, async () => data, CACHE_TTL_SECONDS);
+    const data = await getOrSetCachedResultWithLock(
+      CACHE_KEY,
+      CACHE_PREFIX,
+      () => fetchCobuildAiContext(),
+      CACHE_TTL_SECONDS,
+    );
     return { data };
   } catch (error) {
     return { data: null, error: formatCobuildAiContextError(error) };

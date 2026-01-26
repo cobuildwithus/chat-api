@@ -104,6 +104,12 @@ Generate a `CHAT_GRANT_SECRET` with:
 openssl rand -hex 32
 ```
 
+## Postgres & cache guardrails
+
+- Read replicas are used for read traffic; use `$primary` for read-after-write paths to avoid replica lag.
+- Pool connections apply fixed safety timeouts (statement/lock/idle-in-tx) to prevent long-running queries from stalling the system.
+- Cache-miss paths use Redis locks for high-fanout reads to avoid stampedes; prefer the lock-backed cache helpers for expensive lookups.
+
 ## Docs tool vector store ID (optional)
 
 If you want the docs search tool, you’ll need an OpenAI vector store ID loaded into `DOCS_VECTOR_STORE_ID`.
@@ -140,6 +146,12 @@ Migration file: [migrations/0001_minimal_chat.sql](https://github.com/cobuildwit
 pnpm test
 pnpm typecheck
 ```
+
+## License
+
+Licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later).
+If you interact with this service over a network, the corresponding source is available at
+`/source` (or set `SOURCE_CODE_URL` to point to your fork).
 
 ## Deployment tips
 

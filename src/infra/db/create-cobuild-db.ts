@@ -10,8 +10,25 @@ type CobuildDbResources = {
   close: () => Promise<void>;
 };
 
+const STATEMENT_TIMEOUT_MS = 10_000;
+const LOCK_TIMEOUT_MS = 2_000;
+const IDLE_IN_TX_TIMEOUT_MS = 60_000;
+
 const logPoolError = (label: string, error: unknown) => {
   console.error(`[db] ${label} pool error`, error);
+};
+
+const applySessionSettings = (label: string, client: { query: (sql: string) => Promise<unknown> }) => {
+  const statements = [
+    `SET statement_timeout = '${STATEMENT_TIMEOUT_MS}ms'`,
+    `SET lock_timeout = '${LOCK_TIMEOUT_MS}ms'`,
+    `SET idle_in_transaction_session_timeout = '${IDLE_IN_TX_TIMEOUT_MS}ms'`,
+  ];
+  for (const statement of statements) {
+    void Promise.resolve(client.query(statement)).catch((error) => {
+      console.warn(`[db] ${label} session setting failed`, error);
+    });
+  }
 };
 
 const createPool = (
@@ -35,7 +52,12 @@ const createPool = (
   }
   if (readOnly) {
     pool.on("connect", (client) => {
+      applySessionSettings(label, client);
       void client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+    });
+  } else {
+    pool.on("connect", (client) => {
+      applySessionSettings(label, client);
     });
   }
   return pool;

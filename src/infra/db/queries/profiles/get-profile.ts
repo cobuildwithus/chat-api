@@ -1,5 +1,5 @@
 import { arrayContains } from "drizzle-orm";
-import { getRedisClient } from "../../../redis";
+import { getRedisClient, withRedisLock } from "../../../redis";
 import { type FarcasterProfile, farcasterProfiles } from "../../schema";
 import { cobuildDb } from "../../cobuildDb";
 
@@ -15,24 +15,38 @@ export const getFarcasterProfileByAddress = async (
       if (profile.fid > 0) return profile as FarcasterProfile;
       await redisClient.del(cacheKey); // delete invalid cache
     }
+    const lockKey = `${cacheKey}:lock`;
 
-    // Query database if not in cache
-    const profile = await cobuildDb
-      .select()
-      .from(farcasterProfiles)
-      .where(arrayContains(farcasterProfiles.verifiedAddresses, [address]));
+    return await withRedisLock(
+      lockKey,
+      async () => {
+        const cachedAfterLock = await redisClient.get(cacheKey);
+        if (cachedAfterLock) {
+          const profile = JSON.parse(cachedAfterLock);
+          if (profile.fid > 0) return profile as FarcasterProfile;
+          await redisClient.del(cacheKey);
+        }
 
-    if (profile.length === 0) return null;
+        // Query database if not in cache
+        const profile = await cobuildDb
+          .select()
+          .from(farcasterProfiles)
+          .where(arrayContains(farcasterProfiles.verifiedAddresses, [address]));
 
-    const result = profile.sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0];
+        if (profile.length === 0) return null;
 
-    if (result) {
-      await redisClient.set(cacheKey, JSON.stringify(result), {
-        EX: 60 * 60 * 24, // 24 hour TTL
-      });
-    }
+        const result = profile.sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0];
 
-    return result;
+        if (result) {
+          await redisClient.set(cacheKey, JSON.stringify(result), {
+            EX: 60 * 60 * 24, // 24 hour TTL
+          });
+        }
+
+        return result;
+      },
+      { ttlMs: 5_000, maxWaitMs: 5_000 },
+    );
   } catch (error) {
     console.error(error);
     return null;

@@ -98,6 +98,7 @@ describe("bootstrapCobuildDb", () => {
       connectionTimeoutMillis: 2000,
     });
     expect(poolInstances[0]?.on).toHaveBeenCalledWith("error", expect.any(Function));
+    expect(poolInstances[0]?.on).toHaveBeenCalledWith("connect", expect.any(Function));
   });
 
   it("registers replica read-only handlers and pool stats when enabled", () => {
@@ -121,9 +122,49 @@ describe("bootstrapCobuildDb", () => {
     });
 
     expect(poolInstances[1]?.on).toHaveBeenCalledWith("connect", expect.any(Function));
+    expect(poolInstances[0]?.on).toHaveBeenCalledWith("connect", expect.any(Function));
     expect(setIntervalSpy).toHaveBeenCalledTimes(2);
     unrefMocks.forEach((mock) => expect(mock).toHaveBeenCalledTimes(1));
     setIntervalSpy.mockRestore();
+  });
+
+  it("applies session timeouts on connect", () => {
+    const primaryDb = { id: "primary" };
+    drizzleMock.mockReturnValueOnce(primaryDb);
+
+    bootstrapCobuildDb({ primaryUrl: "pg://primary", replicaUrls: [] });
+
+    const connectHandler = poolInstances[0]?.on.mock.calls.find(
+      ([event]) => event === "connect",
+    )?.[1];
+    const query = vi.fn();
+    connectHandler?.({ query });
+
+    expect(query).toHaveBeenCalledWith("SET statement_timeout = '10000ms'");
+    expect(query).toHaveBeenCalledWith("SET lock_timeout = '2000ms'");
+    expect(query).toHaveBeenCalledWith("SET idle_in_transaction_session_timeout = '60000ms'");
+  });
+
+  it("applies read-only and session settings for replica pools", () => {
+    const primaryDb = { id: "primary" };
+    const replicaDb = { id: "replica" };
+    drizzleMock.mockReturnValueOnce(primaryDb).mockReturnValueOnce(replicaDb);
+
+    createCobuildDbResources({
+      primaryUrl: "pg://primary",
+      replicaUrls: ["pg://replica"],
+    });
+
+    const connectHandler = poolInstances[1]?.on.mock.calls.find(
+      ([event]) => event === "connect",
+    )?.[1];
+    const query = vi.fn();
+    connectHandler?.({ query });
+
+    expect(query).toHaveBeenCalledWith("SET statement_timeout = '10000ms'");
+    expect(query).toHaveBeenCalledWith("SET lock_timeout = '2000ms'");
+    expect(query).toHaveBeenCalledWith("SET idle_in_transaction_session_timeout = '60000ms'");
+    expect(query).toHaveBeenCalledWith("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
   });
 
   it("throws when replica drizzle returns undefined", () => {

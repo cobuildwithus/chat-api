@@ -86,7 +86,7 @@ describe("setupServer", () => {
     expect(corsCall?.[1]?.origin).toEqual(["https://a.com", "https://b.com"]);
     expect(registerRequestLoggingMock).toHaveBeenCalledWith(serverMock);
     expect(serverMock.post).toHaveBeenCalledTimes(2);
-    expect(serverMock.get).toHaveBeenCalledTimes(2);
+    expect(serverMock.get).toHaveBeenCalledTimes(3);
     expect(serverMock.setErrorHandler).toHaveBeenCalledTimes(1);
   });
 
@@ -169,5 +169,46 @@ describe("setupServer", () => {
       ip: "127.0.0.1",
     } as { headers: Record<string, string>; ip: string });
     expect(fallbackKey).toBe("127.0.0.1");
+  });
+
+  it("exposes source info with default url", async () => {
+    delete process.env.SOURCE_CODE_URL;
+
+    await setupTest();
+
+    const sourceCall = serverMock.get.mock.calls.find((call) => call[0] === "/source");
+    const handler = sourceCall?.[1];
+    expect(typeof handler).toBe("function");
+
+    const reply = { header: vi.fn().mockReturnThis() };
+    const result = await handler?.({}, reply);
+
+    expect(reply.header).toHaveBeenCalledWith(
+      "X-Source-URL",
+      "https://github.com/cobuildwithus/chat-api",
+    );
+    expect(result).toMatchObject({
+      license: "AGPL-3.0-or-later",
+      source: "https://github.com/cobuildwithus/chat-api",
+    });
+  });
+
+  it("exposes source info with override url", async () => {
+    process.env.SOURCE_CODE_URL = "https://example.com/source";
+
+    await setupTest();
+
+    const sourceCall = serverMock.get.mock.calls.find((call) => call[0] === "/source");
+    const handler = sourceCall?.[1];
+    expect(typeof handler).toBe("function");
+
+    const reply = { header: vi.fn().mockReturnThis() };
+    const result = await handler?.({}, reply);
+
+    expect(reply.header).toHaveBeenCalledWith("X-Source-URL", "https://example.com/source");
+    expect(result).toMatchObject({
+      license: "AGPL-3.0-or-later",
+      source: "https://example.com/source",
+    });
   });
 });

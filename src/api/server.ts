@@ -19,6 +19,7 @@ import { handleError } from "./server-helpers";
 import { registerRequestLogging } from "./request-logger";
 
 const DEFAULT_PROD_ORIGINS = ["https://co.build", "https://www.co.build"];
+const DEFAULT_SOURCE_URL = "https://github.com/cobuildwithus/chat-api";
 const SERVER_TIMEOUTS = {
   headersTimeoutMs: 60_000,
   requestTimeoutMs: 120_000,
@@ -53,6 +54,14 @@ const getAllowedOrigins = () => {
     }
   }
   return isProd ? DEFAULT_PROD_ORIGINS : "http://localhost:3000";
+};
+
+const getSourceUrl = () => {
+  const raw = process.env.SOURCE_CODE_URL;
+  if (raw && raw.trim().length > 0) {
+    return raw.trim();
+  }
+  return DEFAULT_SOURCE_URL;
 };
 
 export const setupServer = async () => {
@@ -106,6 +115,17 @@ export const setupServer = async () => {
     { preHandler: [validateChatUser], schema: chatSchema },
     handleChatPostRequest,
   );
+
+  server.get("/source", async (_request, reply) => {
+    const sourceUrl = getSourceUrl();
+    reply.header("X-Source-URL", sourceUrl);
+    return {
+      license: "AGPL-3.0-or-later",
+      source: sourceUrl,
+      notice:
+        "If you are interacting with this service over a network, you can obtain the corresponding source code from the URL above.",
+    };
+  });
 
   server.post(
     "/api/chat/new",
