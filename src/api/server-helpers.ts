@@ -18,6 +18,23 @@ type ReplyDetails = {
   status: (code: number) => { send: (body: ErrorDetails & { error: string }) => unknown };
 };
 
+const REDACTED_VALUE = "[redacted]";
+const SENSITIVE_HEADERS = new Set(["x-chat-internal-key", "privy-id-token"]);
+
+function sanitizeHeaders(headers: unknown): unknown {
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) return headers;
+  const record = headers as Record<string, unknown>;
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (SENSITIVE_HEADERS.has(key.toLowerCase())) {
+      sanitized[key] = REDACTED_VALUE;
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 function toErrorDetails(error: unknown): ErrorDetails {
   if (!error || typeof error !== "object") return {};
   return error as ErrorDetails;
@@ -47,7 +64,7 @@ export function handleError(error: unknown, request: RequestDetails, reply: Repl
   console.error("Request details:", {
     method: request.method,
     url: request.url,
-    headers: request.headers,
+    headers: sanitizeHeaders(request.headers),
     body: request.body,
   });
 
