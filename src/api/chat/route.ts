@@ -31,7 +31,10 @@ import {
   streamErrorMessage,
 } from "./chat-helpers";
 
-export async function handleChatPostRequest(request: FastifyRequest, reply: FastifyReply) {
+export async function handleChatPostRequest(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
   try {
     const body = request.body as ChatBody;
     const { messages, type, context, data = {}, clientMessageId } = body;
@@ -40,10 +43,15 @@ export async function handleChatPostRequest(request: FastifyRequest, reply: Fast
     const grantHeader = request.headers?.["x-chat-grant"];
     let issuedGrant: string | null = null;
 
-    const validGrant = typeof grantHeader === "string" ? await verifyChatGrant(grantHeader) : null;
+    const validGrant =
+      typeof grantHeader === "string"
+        ? await verifyChatGrant(grantHeader)
+        : null;
 
     const grantMatches =
-      !!validGrant && validGrant.cid === chatId && isSameAddress(validGrant.sub, user.address);
+      !!validGrant &&
+      validGrant.cid === chatId &&
+      isSameAddress(validGrant.sub, user.address);
 
     if (!grantMatches) {
       const existing = await cobuildDb
@@ -73,7 +81,9 @@ export async function handleChatPostRequest(request: FastifyRequest, reply: Fast
       if (issuedGrant) {
         reply.header?.("x-chat-grant", issuedGrant);
       }
-      return reply.status(429).send("Too many AI requests. Please try again in a few hours.");
+      return reply
+        .status(429)
+        .send("Too many AI requests. Please try again in a few hours.");
     }
 
     const pendingAssistantId = randomUUID();
@@ -104,18 +114,28 @@ export async function handleChatPostRequest(request: FastifyRequest, reply: Fast
     }
 
     const modelMessages = await convertToModelMessages(messages);
-    const streamMessages = buildStreamMessages(agent.system, modelMessages, context);
+    const streamMessages = buildStreamMessages(
+      agent.system,
+      modelMessages,
+      context
+    );
     const reasoningTracker = createReasoningTracker();
 
-    const hasFileSearch = Object.prototype.hasOwnProperty.call(agent.tools, "file_search");
-    const isMobile = resolveIsMobileRequest(request.headers["x-client-device"], user.userAgent);
+    const hasFileSearch = Object.prototype.hasOwnProperty.call(
+      agent.tools,
+      "file_search"
+    );
+    const isMobile = resolveIsMobileRequest(
+      request.headers["x-client-device"],
+      user.userAgent
+    );
     const result = streamText({
       model: agent.defaultModel,
       messages: streamMessages,
       tools: agent.tools,
       providerOptions: {
         openai: {
-          reasoningEffort: "high",
+          reasoningEffort: "medium",
           reasoningSummary: "auto",
           ...(isMobile ? { textVerbosity: "low" } : {}),
           ...(hasFileSearch ? { include: ["file_search_call.results"] } : {}),
@@ -153,7 +173,7 @@ export async function handleChatPostRequest(request: FastifyRequest, reply: Fast
           await clearPendingAssistantIfUnclaimed(
             chatId,
             pendingAssistantId,
-            finishedMessages,
+            finishedMessages
           );
           if (isChatDebugEnabled()) {
             console.info("Stored chat messages", {
