@@ -56,32 +56,7 @@ Everything public-facing (posts, landing copy, FAQs, partner blurbs, spaces) mus
 
 ---
 
-## 3. Operating cadence
-
-A goal is a closed-loop control system: **sense** reality, **decide** what to do, **act** on it. Repeat.
-
-### Sense (what's actually happening)
-
-- Treasury balance and pace to target
-- Conversion funnel: where are people dropping off?
-- Distribution: what's driving attention? What isn't?
-- Who's doing real work? What's blocked?
-
-### Decide (what to do next)
-
-- Identify the single biggest bottleneck (trust, distribution, or conversion)
-- Open/close briefs based on what's actually moving the needle
-- Allocate budget only to work tied to the current bottleneck
-
-### Act (ship, distribute, transact)
-
-- Execute on the current briefs
-- Publish updates, artifacts, and progress
-- Pay contributors for verified work
-
----
-
-## 4. Failure modes we defend against
+## 3. Failure modes we defend against
 
 - **"Hype without conversion"** -> Funnel clarity + UX + trust
 - **"Spam farming rewards"** -> Stake + challenges + conservative budgets
@@ -91,28 +66,7 @@ A goal is a closed-loop control system: **sense** reality, **decide** what to do
 
 ---
 
-## 6. Strategy: how we expect to reach $1m
-
-*This is our starting hypothesis, not a fixed plan. Expect it to evolve as we learn what actually works.*
-
-### The three levers
-
-1. **Trust:** clear mechanics, risk disclosure, credible commitments, simple UX
-2. **Distribution:** consistent narrative beats + partner amplification
-3. **Conversion:** remove friction at every step of minting
-
-### Operating priorities (always pick one bottleneck)
-
-At any moment, we pick the single biggest bottleneck:
-- Trust bottleneck (confusion, fear, legitimacy gaps)
-- Distribution bottleneck (not enough qualified attention)
-- Conversion bottleneck (too hard to mint; too many errors)
-
-All new briefs must tie to the current bottleneck unless explicitly escalated.
-
----
-
-## 7. Budget policy
+## 4. Budget policy
 
 ### Disallowed by default
 
@@ -127,7 +81,7 @@ All new briefs must tie to the current bottleneck unless explicitly escalated.
 
 ---
 
-## 8. Completion and shutdown
+## 5. Completion and shutdown
 
 ### On success (exceeds $1M)
 
