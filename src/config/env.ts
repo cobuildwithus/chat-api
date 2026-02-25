@@ -60,6 +60,7 @@ const envSchema = z.object({
   SELF_HOSTED_MODE: z.string().min(1).optional(),
   SELF_HOSTED_DEFAULT_ADDRESS: z.string().min(1).optional(),
   SELF_HOSTED_SHARED_SECRET: z.string().min(1).optional(),
+  CHAT_INTERNAL_SERVICE_KEY: z.string().min(1).optional(),
   BUILD_BOT_TOOLS_INTERNAL_KEY: z.string().min(1).optional(),
 });
 
@@ -88,7 +89,8 @@ const selfHostedSchema = envSchema.pick({
   SELF_HOSTED_DEFAULT_ADDRESS: true,
   SELF_HOSTED_SHARED_SECRET: true,
 });
-const buildBotToolsInternalKeySchema = envSchema.pick({
+const chatInternalServiceKeySchema = envSchema.pick({
+  CHAT_INTERNAL_SERVICE_KEY: true,
   BUILD_BOT_TOOLS_INTERNAL_KEY: true,
 });
 
@@ -106,8 +108,9 @@ export function validateEnvVariables() {
   if (!selfHosted && env.NODE_ENV === "production" && !env.PRIVY_VERIFICATION_KEY) {
     throw new Error("Missing required env in production: PRIVY_VERIFICATION_KEY");
   }
-  if (env.NODE_ENV === "production" && !env.BUILD_BOT_TOOLS_INTERNAL_KEY) {
-    throw new Error("Missing required env in production: BUILD_BOT_TOOLS_INTERNAL_KEY");
+  const internalServiceKey = env.CHAT_INTERNAL_SERVICE_KEY ?? env.BUILD_BOT_TOOLS_INTERNAL_KEY;
+  if (env.NODE_ENV === "production" && !internalServiceKey) {
+    throw new Error("Missing required env in production: CHAT_INTERNAL_SERVICE_KEY");
   }
   return env;
 }
@@ -230,8 +233,14 @@ export function getSelfHostedSharedSecret(): string | null {
   return selfHostedSchema.parse(process.env).SELF_HOSTED_SHARED_SECRET ?? null;
 }
 
+export function getChatInternalServiceKey(): string | null {
+  const env = chatInternalServiceKeySchema.parse(process.env);
+  return env.CHAT_INTERNAL_SERVICE_KEY ?? env.BUILD_BOT_TOOLS_INTERNAL_KEY ?? null;
+}
+
+// Backward-compatible alias. Prefer getChatInternalServiceKey.
 export function getBuildBotToolsInternalKey(): string | null {
-  return buildBotToolsInternalKeySchema.parse(process.env).BUILD_BOT_TOOLS_INTERNAL_KEY ?? null;
+  return getChatInternalServiceKey();
 }
 
 function isTruthy(value?: string | null): boolean {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  getBuildBotToolsInternalKey,
+  getChatInternalServiceKey,
   getChatGrantSecret,
   getCobuildAiContextTimeoutMs,
   getNeynarTimeoutMs,
@@ -23,7 +23,7 @@ const baseEnv = {
   PRIVY_APP_ID: "privy",
   CHAT_GRANT_SECRET: "secret",
   NEYNAR_API_KEY: "neynar",
-  BUILD_BOT_TOOLS_INTERNAL_KEY: "internal-secret",
+  CHAT_INTERNAL_SERVICE_KEY: "internal-secret",
 };
 
 describe("env helpers", () => {
@@ -42,7 +42,7 @@ describe("env helpers", () => {
     expect(validateEnvVariables().PRIVY_APP_ID).toBe("privy");
     expect(getChatGrantSecret()).toBe("secret");
     expect(getPrivyAppId()).toBe("privy");
-    expect(getBuildBotToolsInternalKey()).toBe("internal-secret");
+    expect(getChatInternalServiceKey()).toBe("internal-secret");
   });
 
   it("parses replica urls and debug flag", () => {
@@ -154,17 +154,17 @@ describe("env helpers", () => {
     );
   });
 
-  it("requires buildbot tools internal key in production", () => {
+  it("requires chat internal service key in production", () => {
     process.env = {
       ...process.env,
       ...baseEnv,
       NODE_ENV: "production",
       PRIVY_VERIFICATION_KEY: "verification-key",
     };
-    delete process.env.BUILD_BOT_TOOLS_INTERNAL_KEY;
+    delete process.env.CHAT_INTERNAL_SERVICE_KEY;
 
     expect(() => validateEnvVariables()).toThrow(
-      "Missing required env in production: BUILD_BOT_TOOLS_INTERNAL_KEY",
+      "Missing required env in production: CHAT_INTERNAL_SERVICE_KEY",
     );
   });
 
@@ -187,7 +187,7 @@ describe("env helpers", () => {
       ...baseEnv,
       NODE_ENV: "production",
       SELF_HOSTED_MODE: "true",
-      BUILD_BOT_TOOLS_INTERNAL_KEY: "internal-secret",
+      CHAT_INTERNAL_SERVICE_KEY: "internal-secret",
     };
     delete process.env.PRIVY_APP_ID;
     delete process.env.PRIVY_VERIFICATION_KEY;
@@ -204,10 +204,18 @@ describe("env helpers", () => {
     expect(() => getPrivyAppId()).toThrow("Missing PRIVY_APP_ID");
   });
 
-  it("returns null from getBuildBotToolsInternalKey when missing", () => {
+  it("returns null from getChatInternalServiceKey when missing", () => {
     process.env = { ...process.env, ...baseEnv };
-    delete process.env.BUILD_BOT_TOOLS_INTERNAL_KEY;
+    delete process.env.CHAT_INTERNAL_SERVICE_KEY;
 
-    expect(getBuildBotToolsInternalKey()).toBeNull();
+    expect(getChatInternalServiceKey()).toBeNull();
+  });
+
+  it("falls back to legacy buildbot env key when new key is missing", () => {
+    process.env = { ...process.env, ...baseEnv };
+    delete process.env.CHAT_INTERNAL_SERVICE_KEY;
+    process.env.BUILD_BOT_TOOLS_INTERNAL_KEY = "legacy-secret";
+
+    expect(getChatInternalServiceKey()).toBe("legacy-secret");
   });
 });

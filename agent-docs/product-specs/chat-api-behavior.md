@@ -66,7 +66,7 @@ Behavior:
 Error behavior:
 - `401` when internal service header is missing/invalid
 - `429` when docs-search route limit is exceeded
-- `503` when internal auth configuration is missing (`BUILD_BOT_TOOLS_INTERNAL_KEY`)
+- `503` when internal auth configuration is missing (`CHAT_INTERNAL_SERVICE_KEY`)
 - `400` for empty/whitespace query
 - `503` when docs search configuration is missing
 - `502` for upstream OpenAI failure or invalid upstream payload

@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-02-25 (security hardening follow-up + trusted-id update)
+Last verified: 2026-02-25 (security hardening + trusted-id + internal-key rename)
 
 ## Purpose
 

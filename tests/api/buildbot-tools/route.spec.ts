@@ -76,6 +76,7 @@ describe("buildbot tools api route handlers", () => {
 
   describe("enforceBuildBotToolsInternalServiceAuth", () => {
     it("returns 503 when internal auth key is not configured", async () => {
+      delete process.env.CHAT_INTERNAL_SERVICE_KEY;
       delete process.env.BUILD_BOT_TOOLS_INTERNAL_KEY;
       const request = {
         ip: "127.0.0.1",
@@ -87,12 +88,12 @@ describe("buildbot tools api route handlers", () => {
 
       expect(reply.status).toHaveBeenCalledWith(503);
       expect(reply.send).toHaveBeenCalledWith({
-        error: "Build Bot tools internal auth is temporarily unavailable. Please retry.",
+        error: "Internal service auth is temporarily unavailable. Please retry.",
       });
     });
 
     it("returns 401 when header is missing", async () => {
-      process.env.BUILD_BOT_TOOLS_INTERNAL_KEY = "internal-secret";
+      process.env.CHAT_INTERNAL_SERVICE_KEY = "internal-secret";
       const request = {
         ip: "127.0.0.1",
         headers: {},
@@ -106,7 +107,7 @@ describe("buildbot tools api route handlers", () => {
     });
 
     it("returns 401 when header value is invalid", async () => {
-      process.env.BUILD_BOT_TOOLS_INTERNAL_KEY = "internal-secret";
+      process.env.CHAT_INTERNAL_SERVICE_KEY = "internal-secret";
       const request = {
         ip: "127.0.0.1",
         headers: { "x-chat-internal-key": "wrong-secret" },
@@ -120,10 +121,25 @@ describe("buildbot tools api route handlers", () => {
     });
 
     it("passes when header value matches configured key", async () => {
-      process.env.BUILD_BOT_TOOLS_INTERNAL_KEY = "internal-secret";
+      process.env.CHAT_INTERNAL_SERVICE_KEY = "internal-secret";
       const request = {
         ip: "127.0.0.1",
         headers: { "x-chat-internal-key": "internal-secret" },
+      } as unknown as FastifyRequest;
+      const reply = createReply();
+
+      await enforceBuildBotToolsInternalServiceAuth(request, reply);
+
+      expect(reply.status).not.toHaveBeenCalled();
+      expect(reply.send).not.toHaveBeenCalled();
+    });
+
+    it("uses legacy buildbot env key when new key is missing", async () => {
+      delete process.env.CHAT_INTERNAL_SERVICE_KEY;
+      process.env.BUILD_BOT_TOOLS_INTERNAL_KEY = "legacy-secret";
+      const request = {
+        ip: "127.0.0.1",
+        headers: { "x-chat-internal-key": "legacy-secret" },
       } as unknown as FastifyRequest;
       const reply = createReply();
 

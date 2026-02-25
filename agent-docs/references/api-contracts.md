@@ -69,7 +69,7 @@ Source: `src/api/chat/schema.ts`.
 ### Buildbot tools service header
 
 - All `/api/buildbot/tools/*` routes require `x-chat-internal-key`.
-- The header value must match server-side `BUILD_BOT_TOOLS_INTERNAL_KEY`.
+- The header value must match server-side `CHAT_INTERNAL_SERVICE_KEY` (legacy fallback: `BUILD_BOT_TOOLS_INTERNAL_KEY`).
 
 ## Runtime Response Summary
 
@@ -89,10 +89,10 @@ Source: `src/api/chat/schema.ts`.
 - Auth pre-handler returns `401` for invalid/missing auth.
 - Usage limiter returns `429` for token-budget overage.
 - Buildbot tools internal auth returns `401` for missing/invalid `x-chat-internal-key`.
-- Buildbot tools internal auth returns `503` when `BUILD_BOT_TOOLS_INTERNAL_KEY` config is missing.
+- Buildbot tools internal auth returns `503` when internal key config is missing (`CHAT_INTERNAL_SERVICE_KEY` or legacy fallback).
 - Buildbot tools routes apply route-local Redis-backed throttling and return `429` with `Retry-After` when exceeded.
 - Docs-search internal auth returns `401` for missing/invalid `x-chat-internal-key`.
-- Docs-search internal auth returns `503` when `BUILD_BOT_TOOLS_INTERNAL_KEY` config is missing.
+- Docs-search internal auth returns `503` when internal key config is missing (`CHAT_INTERNAL_SERVICE_KEY` or legacy fallback).
 - Docs-search applies route-local Redis-backed throttling and returns `429` with `Retry-After` when exceeded.
 
 ## Schema/Runtime Mismatches (Current)

@@ -15,6 +15,7 @@
 2. Interface backend -> buildbot tools boundary (`/api/buildbot/tools/*`)
 - Shared service header gate via `x-chat-internal-key`
 - Fail-closed semantics when internal key config is missing (`503`)
+ - Config source: `CHAT_INTERNAL_SERVICE_KEY` (legacy fallback: `BUILD_BOT_TOOLS_INTERNAL_KEY`)
 3. Interface backend -> docs-search boundary (`/api/docs/search`)
 - Shared service header gate via `x-chat-internal-key`
 - Route-local Redis-backed throttling to cap OpenAI spend/DoS surface

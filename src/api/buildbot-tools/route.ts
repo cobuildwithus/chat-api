@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { getBuildBotToolsInternalKey, getNeynarTimeoutMs } from "../../config/env";
+import { getChatInternalServiceKey, getNeynarTimeoutMs } from "../../config/env";
 import { getOrSetCachedResultWithLock } from "../../infra/cache/cacheResult";
 import { farcasterProfiles } from "../../infra/db/schema";
 import { cobuildDb } from "../../infra/db/cobuildDb";
@@ -72,10 +72,10 @@ export async function enforceBuildBotToolsInternalServiceAuth(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const configuredKey = getBuildBotToolsInternalKey();
+  const configuredKey = getChatInternalServiceKey();
   if (!configuredKey) {
     return reply.status(503).send({
-      error: "Build Bot tools internal auth is temporarily unavailable. Please retry.",
+      error: "Internal service auth is temporarily unavailable. Please retry.",
     });
   }
 
