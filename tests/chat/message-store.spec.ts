@@ -175,6 +175,43 @@ describe("storeChatMessages", () => {
     insertSpy.mockRestore();
   });
 
+  it("preserves trusted non-user message ids", async () => {
+    setCobuildDbResponse(chatMessage, []);
+    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
+
+    let insertedRows: Array<{ id: string; role: string }> = [];
+    const originalInsert = cobuildDb.insert.bind(cobuildDb);
+    type InsertTable = Parameters<typeof originalInsert>[0];
+    const insertSpy = vi.spyOn(cobuildDb, "insert").mockImplementation((table: InsertTable) => {
+      const chain = originalInsert(table);
+      if (table !== chatMessage) return chain;
+      return {
+        values: (vals: typeof insertedRows) => {
+          insertedRows = vals;
+          return chain.values(vals);
+        },
+      } as typeof chain;
+    });
+
+    await storeChatMessages({
+      chatId: "chat-trusted",
+      messages: [{ id: "trusted-assistant-id", role: "assistant", parts: [] }],
+      type: "chat-default",
+      data: {},
+      user: baseUser,
+      trustedMessageIds: ["trusted-assistant-id"],
+    });
+
+    expect(insertedRows).toHaveLength(1);
+    expect(insertedRows[0]).toEqual(
+      expect.objectContaining({
+        id: "trusted-assistant-id",
+        role: "assistant",
+      }),
+    );
+    insertSpy.mockRestore();
+  });
+
   it("reuses existing ids when only a client id matches", async () => {
     const createdAt = new Date("2024-01-01T00:00:00Z");
     setCobuildDbResponse(chatMessage, [

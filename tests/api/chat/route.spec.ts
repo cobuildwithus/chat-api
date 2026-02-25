@@ -350,6 +350,7 @@ describe("handleChatPostRequest", () => {
       expect.objectContaining({
         chatId: "chat-99",
         generateTitle: false,
+        trustedMessageIds: expect.any(Array),
         type: "chat-default",
       }),
     );
@@ -360,10 +361,12 @@ describe("handleChatPostRequest", () => {
         metadata: { pending: true },
       }),
     );
+    expect(initialCall?.trustedMessageIds).toEqual([initialCall?.messages?.[1]?.id]);
     expect(finishCall).toEqual(
       expect.objectContaining({
         chatId: "chat-99",
         messages: expect.any(Array),
+        trustedMessageIds: expect.arrayContaining([initialCall?.messages?.[1]?.id]),
         type: "chat-default",
       }),
     );

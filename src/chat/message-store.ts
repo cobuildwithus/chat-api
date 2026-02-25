@@ -14,6 +14,7 @@ type StoreChatMessagesArgs = {
   data?: ChatData;
   user: ChatUser;
   clientMessageId?: string;
+  trustedMessageIds?: string[];
   generateTitle?: boolean;
 };
 
@@ -24,6 +25,7 @@ export async function storeChatMessages({
   data,
   user,
   clientMessageId,
+  trustedMessageIds = [],
   generateTitle = true,
 }: StoreChatMessagesArgs) {
   const primaryDb = cobuildDb.$primary ?? cobuildDb;
@@ -87,6 +89,7 @@ export async function storeChatMessages({
   }
 
   const fallbackCreatedAt = new Date();
+  const trustedMessageIdSet = new Set(trustedMessageIds);
   const lastUserIndex = messages.reduce(
     (lastIndex, message, index) => (message.role === "user" ? index : lastIndex),
     -1,
@@ -119,8 +122,9 @@ export async function storeChatMessages({
       id = randomUUID();
       resolvedClientId = incomingClientId ?? messageId;
     } else {
-      // Non-user message ids are server-authoritative unless already known for this chat.
-      id = randomUUID();
+      // Non-user message ids are server-authoritative unless already known for this chat,
+      // with an explicit allowlist for trusted server-generated ids.
+      id = messageId && trustedMessageIdSet.has(messageId) ? messageId : randomUUID();
     }
 
     return {

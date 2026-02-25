@@ -52,6 +52,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 - enforce token-usage rate limit (`src/ai/ai-rate.limit.ts`)
 - load agent (`src/ai/agents/agent.ts`)
 5. Persist a pending assistant message before streaming.
+  - Non-user ids are server-authoritative; route-generated ids are passed as trusted ids to storage for lifecycle consistency.
 6. Stream model output via AI SDK (`streamText`) with registered tools.
 7. On finish:
 - persist finalized messages

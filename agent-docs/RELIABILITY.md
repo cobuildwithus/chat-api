@@ -36,6 +36,7 @@
 
 - Missing/invalid grant: fallback ownership DB check, then refresh grant.
 - Stream failure: pending assistant record is marked failed.
+- Message-store treats non-user ids as server-authoritative, with explicit trusted-id allowlisting for server-generated pending/stream ids.
 - Optional external dependency failure:
 - docs tool disabled when vector store id is absent
 - docs-search route uses timeout-bounded OpenAI fetch to avoid hung upstream calls

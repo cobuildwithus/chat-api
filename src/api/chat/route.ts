@@ -87,6 +87,7 @@ export async function handleChatPostRequest(
     }
 
     const pendingAssistantId = randomUUID();
+    const trustedAssistantIds = new Set([pendingAssistantId]);
     const pendingAssistantMessage = {
       id: pendingAssistantId,
       role: "assistant",
@@ -102,6 +103,7 @@ export async function handleChatPostRequest(
         data,
         user,
         clientMessageId,
+        trustedMessageIds: [pendingAssistantId],
         generateTitle: false,
       });
     } catch (error) {
@@ -148,11 +150,12 @@ export async function handleChatPostRequest(
 
     let usedPendingMessageId = false;
     const generateMessageId = () => {
+      const generatedId = !usedPendingMessageId ? pendingAssistantId : randomUUID();
       if (!usedPendingMessageId) {
         usedPendingMessageId = true;
-        return pendingAssistantId;
       }
-      return randomUUID();
+      trustedAssistantIds.add(generatedId);
+      return generatedId;
     };
 
     const uiStream = result.toUIMessageStream({
@@ -169,6 +172,7 @@ export async function handleChatPostRequest(
             data,
             user,
             clientMessageId,
+            trustedMessageIds: Array.from(trustedAssistantIds),
           });
           await clearPendingAssistantIfUnclaimed(
             chatId,
