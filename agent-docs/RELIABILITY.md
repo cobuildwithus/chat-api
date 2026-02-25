@@ -1,0 +1,61 @@
+# Reliability
+
+## Core Invariants
+
+1. Chat ownership is verified before read or write for protected routes.
+2. `x-chat-grant` must stay scoped to chat id + sender identity + short TTL.
+3. Streaming writes always begin with a pending assistant message and end with either:
+- persisted final messages, or
+- explicit failed status on error.
+4. Read-after-write sensitive reads should use primary-safe DB access paths.
+
+## Request Reliability Model
+
+- Transport-level controls:
+- Fastify rate limiting (optional, env-gated)
+- Request timeout/keepalive settings at server bootstrap
+- Workload-level controls:
+- Token-usage rate limiter per address over Redis sorted-set window
+- Async usage recording after successful stream finish
+
+## Timeout Matrix
+
+- `OPENAI_REQUEST_TIMEOUT_MS` default: `30000`
+- `NEYNAR_REQUEST_TIMEOUT_MS` default: `8000`
+- `COBUILD_AI_CONTEXT_TIMEOUT_MS` default: `7000`
+
+## Cache + Lock Behavior
+
+- Cache helper uses Redis get-or-set with lock to prevent stampedes.
+- Development mode bypasses cache to avoid stale local behavior.
+- Lock acquisition timeout falls back to direct compute path.
+- Lock release is token-based to prevent accidental unlock races.
+
+## Failure Handling Patterns
+
+- Missing/invalid grant: fallback ownership DB check, then refresh grant.
+- Stream failure: pending assistant record is marked failed.
+- Optional external dependency failure:
+- docs tool disabled when vector store id is absent
+- get-cast returns structured error/null rather than throwing to user path
+- cobuild context tool returns bounded error payload
+
+## Known Reliability Gaps
+
+1. Route schemas do not define `response` contracts, so response-shape regressions are easier to introduce.
+2. API schema accepts free-form `type`, while runtime agent resolver supports only `chat-default`.
+3. Usage recording is non-blocking and can undercount during transient Redis failures.
+
+## Verification Baseline
+
+- `pnpm run typecheck`
+- `pnpm run test`
+- `bash scripts/check-agent-docs-drift.sh`
+
+## High-Value Regression Suites
+
+- `tests/api/chat/route.spec.ts`
+- `tests/chat/message-store.spec.ts`
+- `tests/infra/cache-result.spec.ts`
+- `tests/infra/redis.spec.ts`
+- `tests/infra/http/timeout.spec.ts`

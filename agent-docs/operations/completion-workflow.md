@@ -1,0 +1,37 @@
+# Completion Workflow
+
+Last verified: 2026-02-25
+
+## Sequence
+
+1. Complete functional implementation first.
+2. Run simplification pass using `agent-docs/prompts/simplify.md`.
+3. Apply behavior-preserving simplifications.
+4. Run test-coverage audit using `agent-docs/prompts/test-coverage-audit.md`.
+5. Implement the highest-impact missing tests identified by the coverage pass.
+6. Re-run required checks after simplify + coverage updates.
+7. Run final completion audit using `agent-docs/prompts/task-finish-review.md`.
+8. Resolve high-severity findings before final handoff.
+
+## Coordination Ledger (Always Required)
+
+- Before coding work, add an active row to `agent-docs/exec-plans/active/COORDINATION_LEDGER.md`.
+- Update the row if file scope or symbol intent changes.
+- Remove the row immediately when the task is complete or abandoned.
+
+## Audit Handoff Packet
+
+When using a fresh subagent for coverage or completion audits, provide:
+
+- What changed and why (behavior-level summary).
+- Invariants/assumptions that must still hold.
+- Links to active execution plans (when present).
+- Verification evidence already run (commands + outcomes).
+- Current worktree context and explicit review boundaries.
+- Instruction to read and honor `COORDINATION_LEDGER.md` ownership rows.
+
+## Safety Rules
+
+- Do not overwrite, discard, or revert unrelated worktree edits.
+- Do not use reset/checkout cleanup commands to prepare audit passes.
+- If an audit suggestion conflicts with pre-existing edits, leave the file untouched and escalate in handoff notes.

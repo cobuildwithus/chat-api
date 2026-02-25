@@ -1,0 +1,22 @@
+# Drizzle ORM References (LLM)
+
+## Core docs
+
+- Overview: https://orm.drizzle.team/docs/overview
+- PostgreSQL guide: https://orm.drizzle.team/docs/get-started-postgresql
+- Schema definition: https://orm.drizzle.team/docs/sql-schema-declaration
+- Select/query builder: https://orm.drizzle.team/docs/select
+- Insert/update/delete: https://orm.drizzle.team/docs/insert
+- Transactions: https://orm.drizzle.team/docs/transactions
+- Relations: https://orm.drizzle.team/docs/relations
+
+## Migration docs
+
+- Migrations overview: https://orm.drizzle.team/docs/migrations
+- Drizzle Kit: https://orm.drizzle.team/docs/drizzle-kit-overview
+
+## Repo mapping
+
+- DB bootstrap + topology: `src/infra/db/create-cobuild-db.ts`
+- Table definitions: `src/infra/db/schema.ts`
+- Chat storage behavior: `src/chat/message-store.ts`

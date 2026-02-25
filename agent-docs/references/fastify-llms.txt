@@ -1,0 +1,22 @@
+# Fastify References (LLM)
+
+## Core docs
+
+- Fastify docs root: https://fastify.dev/docs/latest/
+- Server instance/reference: https://fastify.dev/docs/latest/Reference/Server/
+- Routes reference: https://fastify.dev/docs/latest/Reference/Routes/
+- Hooks reference: https://fastify.dev/docs/latest/Reference/Hooks/
+- Validation and serialization: https://fastify.dev/docs/latest/Reference/Validation-and-Serialization/
+- Errors reference: https://fastify.dev/docs/latest/Reference/Errors/
+
+## Plugins used in this repo
+
+- CORS plugin: https://github.com/fastify/fastify-cors
+- Rate limit plugin: https://github.com/fastify/fastify-rate-limit
+- Request context plugin: https://github.com/fastify/fastify-request-context
+
+## Repo mapping
+
+- HTTP composition root: `src/api/server.ts`
+- Global error handling: `src/api/server-helpers.ts`
+- Auth pre-handler: `src/api/auth/validate-chat-user.ts`

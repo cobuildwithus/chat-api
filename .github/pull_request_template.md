@@ -10,6 +10,9 @@
 
 - [ ] pnpm test
 - [ ] pnpm typecheck
+- [ ] pnpm test:coverage
+- [ ] bash scripts/check-agent-docs-drift.sh
+- [ ] bash scripts/doc-gardening.sh --fail-on-issues
 
 ## Tool changes (if any)
 

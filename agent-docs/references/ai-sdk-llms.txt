@@ -1,0 +1,22 @@
+# AI SDK / OpenAI References (LLM)
+
+## Core docs
+
+- AI SDK docs root: https://ai-sdk.dev/docs
+- Streaming text: https://ai-sdk.dev/docs/ai-sdk-core/generating-text
+- Tools: https://ai-sdk.dev/docs/foundations/tools
+- UI message streaming: https://ai-sdk.dev/docs/reference/ai-sdk-ui/stream-text
+
+## OpenAI API docs
+
+- Responses API: https://platform.openai.com/docs/api-reference/responses
+- File search tool docs: https://platform.openai.com/docs/guides/tools-file-search
+- Web search tool docs: https://platform.openai.com/docs/guides/tools-web-search
+
+## Repo mapping
+
+- Model client setup: `src/ai/ai.ts`
+- Agent assembly: `src/ai/agents/chat-default/chat-default.ts`
+- Prompt composition: `src/ai/utils/agent-prompts.ts`
+- Tool registry: `src/ai/tools/index.ts`
+- Stream route integration: `src/api/chat/route.ts`
