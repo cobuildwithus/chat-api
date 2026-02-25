@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { getNeynarTimeoutMs } from "../../config/env";
@@ -7,7 +6,7 @@ import { farcasterProfiles } from "../../infra/db/schema";
 import { cobuildDb } from "../../infra/db/cobuildDb";
 import { withTimeout } from "../../infra/http/timeout";
 import { getNeynarClient } from "../../infra/neynar/client";
-import { getUsage, recordUsage } from "../../infra/rate-limit";
+import { checkAndRecordUsage } from "../../infra/rate-limit";
 import { formatCobuildAiContextError, getCobuildAiContextSnapshot } from "../../infra/cobuild-ai-context";
 
 const NO_STORE_CACHE_CONTROL = "no-store";
@@ -39,59 +38,11 @@ type CastPreviewBody = {
   parent?: string;
 };
 
-type RateLimitResult = {
-  allowed: boolean;
-  retryAfterSeconds: number;
-};
-
-function hashValue(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function getBearerTokenHash(header: string | undefined): string | null {
-  if (!header) return null;
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  if (!match) return null;
-  const token = match[1]?.trim();
-  if (!token) return null;
-  return hashValue(token).slice(0, 32);
-}
-
 function getBuildBotToolsRateLimitKey(request: FastifyRequest): string {
-  const tokenHash = getBearerTokenHash(
-    typeof request.headers.authorization === "string" ? request.headers.authorization : undefined,
-  );
-  if (tokenHash) return `buildbot-tools:token:${tokenHash}`;
-  return `buildbot-tools:ip:${request.ip}`;
-}
-
-function getWindowResetAtMs(nowMs: number): number {
-  const nowSeconds = Math.floor(nowMs / 1000);
-  const windowStartSeconds =
-    nowSeconds - (nowSeconds % BUILD_BOT_TOOLS_RATE_LIMIT_WINDOW_SECONDS);
-  const windowEndSeconds =
-    windowStartSeconds + BUILD_BOT_TOOLS_RATE_LIMIT_WINDOW_SECONDS;
-  return windowEndSeconds * 1000;
-}
-
-function getRetryAfterSeconds(resetAtMs: number, nowMs: number): number {
-  return Math.max(1, Math.ceil((resetAtMs - nowMs) / 1000));
-}
-
-async function checkBuildBotToolsRateLimit(request: FastifyRequest): Promise<RateLimitResult> {
-  const nowMs = Date.now();
-  const key = getBuildBotToolsRateLimitKey(request);
-  const resetAtMs = getWindowResetAtMs(nowMs);
-  const usage = await getUsage(key, BUILD_BOT_TOOLS_RATE_LIMIT_WINDOW_MINUTES);
-  if (usage >= BUILD_BOT_TOOLS_RATE_LIMIT_MAX) {
-    return {
-      allowed: false,
-      retryAfterSeconds: getRetryAfterSeconds(resetAtMs, nowMs),
-    };
+  if (request.ip && request.ip.trim().length > 0) {
+    return `buildbot-tools:ip:${request.ip}`;
   }
-
-  await recordUsage(key, 1);
-  return { allowed: true, retryAfterSeconds: 0 };
+  return "buildbot-tools:ip:unknown";
 }
 
 export async function enforceBuildBotToolsRateLimit(
@@ -99,7 +50,11 @@ export async function enforceBuildBotToolsRateLimit(
   reply: FastifyReply,
 ) {
   try {
-    const limit = await checkBuildBotToolsRateLimit(request);
+    const limit = await checkAndRecordUsage(getBuildBotToolsRateLimitKey(request), {
+      windowMinutes: BUILD_BOT_TOOLS_RATE_LIMIT_WINDOW_MINUTES,
+      maxUsage: BUILD_BOT_TOOLS_RATE_LIMIT_MAX,
+      usageToAdd: 1,
+    });
     if (limit.allowed) return;
     reply.header("Retry-After", String(limit.retryAfterSeconds));
     return reply.status(429).send({
@@ -113,16 +68,12 @@ export async function enforceBuildBotToolsRateLimit(
   }
 }
 
-function getTrimmed(value: string): string {
-  return value.trim();
-}
-
 export async function handleBuildBotToolsGetUserRequest(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
   const body = request.body as GetUserBody;
-  const fname = getTrimmed(body.fname);
+  const fname = body.fname.trim();
   if (!fname) {
     return reply.status(400).send({ error: "fname must not be empty." });
   }
@@ -171,7 +122,7 @@ export async function handleBuildBotToolsGetCastRequest(
   reply: FastifyReply,
 ) {
   const body = request.body as GetCastBody;
-  const identifier = getTrimmed(body.identifier);
+  const identifier = body.identifier.trim();
   const { type } = body;
 
   if (!identifier) {
@@ -219,7 +170,7 @@ export async function handleBuildBotToolsCastPreviewRequest(
   reply: FastifyReply,
 ) {
   const body = request.body as CastPreviewBody;
-  const text = getTrimmed(body.text);
+  const text = body.text.trim();
   if (!text) {
     return reply.status(400).send({ error: "text must not be empty." });
   }

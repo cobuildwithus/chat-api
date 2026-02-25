@@ -99,6 +99,19 @@ describe("setupServer", () => {
     expect(
       serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/cobuild-ai-context"),
     ).toBe(true);
+    const buildbotPaths = [
+      "/api/buildbot/tools/get-user",
+      "/api/buildbot/tools/get-cast",
+      "/api/buildbot/tools/cast-preview",
+      "/api/buildbot/tools/cobuild-ai-context",
+    ];
+    for (const path of buildbotPaths) {
+      const routeCall = serverMock.post.mock.calls.find((call) => call[0] === path);
+      const routeOptions = routeCall?.[1] as { preHandler?: Array<{ name?: string }>; schema?: object };
+      expect(routeOptions?.schema).toBeTruthy();
+      expect(Array.isArray(routeOptions?.preHandler)).toBe(true);
+      expect(routeOptions?.preHandler?.[0]?.name).toBe("enforceBuildBotToolsRateLimit");
+    }
     expect(serverMock.get).toHaveBeenCalledTimes(3);
     expect(serverMock.setErrorHandler).toHaveBeenCalledTimes(1);
   });

@@ -10,8 +10,7 @@ import {
 import { createReply } from "../../utils/fastify";
 
 const mocks = vi.hoisted(() => ({
-  getUsage: vi.fn(),
-  recordUsage: vi.fn(),
+  checkAndRecordUsage: vi.fn(),
   getOrSetCachedResultWithLock: vi.fn(),
   select: vi.fn(),
   getNeynarClient: vi.fn(),
@@ -20,8 +19,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../src/infra/rate-limit", () => ({
-  getUsage: mocks.getUsage,
-  recordUsage: mocks.recordUsage,
+  checkAndRecordUsage: mocks.checkAndRecordUsage,
 }));
 
 vi.mock("../../../src/infra/cache/cacheResult", () => ({
@@ -69,9 +67,12 @@ describe("buildbot tools api route handlers", () => {
   });
 
   describe("enforceBuildBotToolsRateLimit", () => {
-    it("allows requests below the limit and records usage", async () => {
-      mocks.getUsage.mockResolvedValueOnce(0);
-      mocks.recordUsage.mockResolvedValueOnce(undefined);
+    it("allows requests below the limit and keys by ip", async () => {
+      mocks.checkAndRecordUsage.mockResolvedValueOnce({
+        allowed: true,
+        usage: 1,
+        retryAfterSeconds: 0,
+      });
       const request = {
         ip: "127.0.0.1",
         headers: { authorization: "Bearer super-secret-token" },
@@ -80,18 +81,20 @@ describe("buildbot tools api route handlers", () => {
 
       await enforceBuildBotToolsRateLimit(request, reply);
 
-      expect(mocks.getUsage).toHaveBeenCalledTimes(1);
-      expect(String(mocks.getUsage.mock.calls[0]?.[0])).toContain("buildbot-tools:token:");
-      expect(String(mocks.getUsage.mock.calls[0]?.[0])).not.toContain("super-secret-token");
-      expect(mocks.recordUsage).toHaveBeenCalledWith(
-        expect.stringContaining("buildbot-tools:token:"),
-        1,
-      );
+      expect(mocks.checkAndRecordUsage).toHaveBeenCalledWith("buildbot-tools:ip:127.0.0.1", {
+        windowMinutes: 1,
+        maxUsage: 600,
+        usageToAdd: 1,
+      });
       expect(reply.status).not.toHaveBeenCalled();
     });
 
     it("rate limits when usage exceeds the threshold", async () => {
-      mocks.getUsage.mockResolvedValueOnce(999_999);
+      mocks.checkAndRecordUsage.mockResolvedValueOnce({
+        allowed: false,
+        usage: 600,
+        retryAfterSeconds: 17,
+      });
       const request = {
         ip: "127.0.0.1",
         headers: {},
@@ -100,17 +103,18 @@ describe("buildbot tools api route handlers", () => {
 
       await enforceBuildBotToolsRateLimit(request, reply);
 
-      expect(mocks.recordUsage).not.toHaveBeenCalled();
-      expect(reply.header).toHaveBeenCalledWith("Retry-After", expect.any(String));
+      expect(reply.header).toHaveBeenCalledWith("Retry-After", "17");
       expect(reply.status).toHaveBeenCalledWith(429);
       expect(reply.send).toHaveBeenCalledWith({
         error: "Too many Build Bot tool requests. Please retry shortly.",
       });
-      expect(String(mocks.getUsage.mock.calls[0]?.[0])).toBe("buildbot-tools:ip:127.0.0.1");
+      expect(String(mocks.checkAndRecordUsage.mock.calls[0]?.[0])).toBe(
+        "buildbot-tools:ip:127.0.0.1",
+      );
     });
 
     it("returns 503 when rate limiting backend fails", async () => {
-      mocks.getUsage.mockRejectedValueOnce(new Error("redis unavailable"));
+      mocks.checkAndRecordUsage.mockRejectedValueOnce(new Error("redis unavailable"));
       const request = {
         ip: "127.0.0.1",
         headers: {},
@@ -122,6 +126,27 @@ describe("buildbot tools api route handlers", () => {
       expect(reply.status).toHaveBeenCalledWith(503);
       expect(reply.send).toHaveBeenCalledWith({
         error: "Build Bot tool rate limiting is temporarily unavailable. Please retry.",
+      });
+    });
+
+    it("falls back to an unknown key when request ip is missing", async () => {
+      mocks.checkAndRecordUsage.mockResolvedValueOnce({
+        allowed: true,
+        usage: 1,
+        retryAfterSeconds: 0,
+      });
+      const request = {
+        ip: " ",
+        headers: {},
+      } as unknown as FastifyRequest;
+      const reply = createReply();
+
+      await enforceBuildBotToolsRateLimit(request, reply);
+
+      expect(mocks.checkAndRecordUsage).toHaveBeenCalledWith("buildbot-tools:ip:unknown", {
+        windowMinutes: 1,
+        maxUsage: 600,
+        usageToAdd: 1,
       });
     });
   });

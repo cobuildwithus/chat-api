@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getUsage, recordUsage } from "../../src/infra/rate-limit";
+import { checkAndRecordUsage, getUsage, recordUsage } from "../../src/infra/rate-limit";
 import { getRedisClient } from "../../src/infra/redis";
 
 const evalMock = vi.fn();
@@ -41,12 +41,44 @@ describe("rate-limit", () => {
 
     await recordUsage("key", 10);
     expect(multiMock).toHaveBeenCalled();
-    expect(zAddMock).toHaveBeenCalledWith("key", expect.any(Object));
+    expect(zAddMock).toHaveBeenCalledWith(
+      "key",
+      expect.objectContaining({
+        score: expect.any(Number),
+        value: expect.stringMatching(/^10\|\d+\|\d+$/),
+      }),
+    );
     expect(expireMock).toHaveBeenCalledWith("key", 86400);
     expect(execMock).toHaveBeenCalled();
     expect(debugSpy).toHaveBeenCalled();
 
     debugSpy.mockRestore();
+  });
+
+  it("records unique usage members even when timestamp is identical", async () => {
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1700000000000);
+    const randomSpy = vi
+      .spyOn(Math, "random")
+      .mockReturnValueOnce(0.111111)
+      .mockReturnValueOnce(0.222222);
+
+    await recordUsage("key", 1);
+    await recordUsage("key", 1);
+
+    const firstCall = zAddMock.mock.calls[0] as unknown as
+      | [string, { score: number; value: string }]
+      | undefined;
+    const secondCall = zAddMock.mock.calls[1] as unknown as
+      | [string, { score: number; value: string }]
+      | undefined;
+    const firstValue = firstCall?.[1]?.value;
+    const secondValue = secondCall?.[1]?.value;
+    expect(firstValue).toMatch(/^1\|1700000000000\|\d+$/);
+    expect(secondValue).toMatch(/^1\|1700000000000\|\d+$/);
+    expect(secondValue).not.toBe(firstValue);
+
+    randomSpy.mockRestore();
+    nowSpy.mockRestore();
   });
 
   it("throws when redis errors", async () => {
@@ -62,6 +94,95 @@ describe("rate-limit", () => {
     execMock.mockRejectedValueOnce(new Error("fail"));
 
     await expect(recordUsage("key", 10)).rejects.toThrow("fail");
+    errorSpy.mockRestore();
+  });
+
+  it("checks and records usage atomically", async () => {
+    evalMock.mockResolvedValueOnce([1, 7, 0]);
+
+    const result = await checkAndRecordUsage("key", {
+      windowMinutes: 1,
+      maxUsage: 10,
+      usageToAdd: 2,
+      nowMs: 1234,
+    });
+
+    expect(result).toEqual({
+      allowed: true,
+      usage: 7,
+      retryAfterSeconds: 0,
+    });
+    expect(evalMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        keys: ["key"],
+        arguments: expect.arrayContaining(["1234", "60000", "10", "2", "86400"]),
+      }),
+    );
+    const args = evalMock.mock.calls[0]?.[1]?.arguments as string[];
+    expect(args?.[5]).toMatch(/^2\|1234\|\d+$/);
+  });
+
+  it("returns retry-after when atomic check blocks usage", async () => {
+    evalMock.mockResolvedValueOnce([0, 10, 2500]);
+
+    const result = await checkAndRecordUsage("key", {
+      windowMinutes: 1,
+      maxUsage: 10,
+      usageToAdd: 1,
+    });
+
+    expect(result).toEqual({
+      allowed: false,
+      usage: 10,
+      retryAfterSeconds: 3,
+    });
+  });
+
+  it("parses string usage entries from lua responses", async () => {
+    evalMock.mockResolvedValueOnce(["1", "12|1700000000000|42", "abc"]);
+
+    const result = await checkAndRecordUsage("key", {
+      windowMinutes: 1,
+      maxUsage: 50,
+      usageToAdd: 1,
+    });
+
+    expect(result).toEqual({
+      allowed: true,
+      usage: 12,
+      retryAfterSeconds: 0,
+    });
+  });
+
+  it("falls back safely when lua response fields are non-numeric", async () => {
+    evalMock.mockResolvedValueOnce(["0", {}, null]);
+
+    const result = await checkAndRecordUsage("key", {
+      windowMinutes: 1,
+      maxUsage: 10,
+      usageToAdd: 1,
+    });
+
+    expect(result).toEqual({
+      allowed: false,
+      usage: 0,
+      retryAfterSeconds: 1,
+    });
+  });
+
+  it("throws when atomic check fails", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    evalMock.mockRejectedValueOnce(new Error("atomic fail"));
+
+    await expect(
+      checkAndRecordUsage("key", {
+        windowMinutes: 1,
+        maxUsage: 10,
+        usageToAdd: 1,
+      }),
+    ).rejects.toThrow("atomic fail");
+
     errorSpy.mockRestore();
   });
 });

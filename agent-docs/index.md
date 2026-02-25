@@ -43,3 +43,4 @@ This index is the table of contents for durable, repository-local context that a
 - Update this index when `agent-docs/references/api-contracts.md` route wiring changes.
 - For multi-file/high-risk work, add a plan in `agent-docs/exec-plans/active/`.
 - Keep `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` current during active coding work.
+- Current active plan example: `agent-docs/exec-plans/active/2026-02-25-buildbot-tools-rate-limit-hardening.md`.
