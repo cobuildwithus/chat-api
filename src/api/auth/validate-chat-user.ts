@@ -1,5 +1,6 @@
 import { requestContext } from "@fastify/request-context";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { timingSafeEqual } from "node:crypto";
 import type { ChatUser } from "../../ai/types";
 import { normalizeAddress } from "../../chat/address";
 import {
@@ -15,16 +16,28 @@ declare module "@fastify/request-context" {
   }
 }
 
+function isValidSharedSecret(authHeader: string, sharedSecret: string): boolean {
+  const authBuffer = Buffer.from(authHeader, "utf8");
+  const secretBuffer = Buffer.from(sharedSecret, "utf8");
+  if (authBuffer.length !== secretBuffer.length) {
+    return false;
+  }
+  return timingSafeEqual(authBuffer, secretBuffer);
+}
+
 export async function validateChatUser(request: FastifyRequest, reply: FastifyReply) {
   try {
     if (isSelfHostedMode()) {
       const sharedSecret = getSelfHostedSharedSecret();
+      if (process.env.NODE_ENV === "production" && !sharedSecret) {
+        return reply.code(503).send({ error: "Self-hosted auth is misconfigured." });
+      }
       if (sharedSecret) {
         const authHeader = request.headers["x-chat-auth"];
         if (!authHeader || typeof authHeader !== "string") {
           return reply.code(401).send({ error: "Missing chat auth" });
         }
-        if (authHeader !== sharedSecret) {
+        if (!isValidSharedSecret(authHeader, sharedSecret)) {
           return reply.code(401).send({ error: "Invalid chat auth" });
         }
       }

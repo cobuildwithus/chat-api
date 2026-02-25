@@ -151,7 +151,7 @@ describe("buildbot tools api route handlers", () => {
 
       expect(mocks.checkAndRecordUsage).toHaveBeenCalledWith("buildbot-tools:ip:127.0.0.1", {
         windowMinutes: 1,
-        maxUsage: 600,
+        maxUsage: 300,
         usageToAdd: 1,
       });
       expect(reply.status).not.toHaveBeenCalled();
@@ -160,7 +160,7 @@ describe("buildbot tools api route handlers", () => {
     it("rate limits when usage exceeds the threshold", async () => {
       mocks.checkAndRecordUsage.mockResolvedValueOnce({
         allowed: false,
-        usage: 600,
+        usage: 300,
         retryAfterSeconds: 17,
       });
       const request = {
@@ -213,7 +213,7 @@ describe("buildbot tools api route handlers", () => {
 
       expect(mocks.checkAndRecordUsage).toHaveBeenCalledWith("buildbot-tools:ip:unknown", {
         windowMinutes: 1,
-        maxUsage: 600,
+        maxUsage: 300,
         usageToAdd: 1,
       });
     });

@@ -1,6 +1,6 @@
 import type { UIMessage } from "ai";
 import { and, eq, inArray, isNull, not, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { ChatData, ChatUser } from "../ai/types";
 import { chat, chatMessage } from "../infra/db/schema";
 import { cobuildDb } from "../infra/db/cobuildDb";
@@ -85,6 +85,7 @@ export async function storeChatMessages({
       });
     }
   }
+
   const fallbackCreatedAt = new Date();
   const lastUserIndex = messages.reduce(
     (lastIndex, message, index) => (message.role === "user" ? index : lastIndex),
@@ -118,7 +119,8 @@ export async function storeChatMessages({
       id = randomUUID();
       resolvedClientId = incomingClientId ?? messageId;
     } else {
-      id = messageId ?? randomUUID();
+      // Non-user message ids are server-authoritative unless already known for this chat.
+      id = randomUUID();
     }
 
     return {
@@ -189,7 +191,10 @@ async function maybeSetConversationTitle(
       .update(chat)
       .set({ title })
       .where(and(eq(chat.id, chatId), isNull(chat.title)));
-    console.info(`Stored title for ${chatId}: "${title}".`);
+    console.info(`Stored title for ${chatId}.`, {
+      titleLength: title.length,
+      titleHash: createHash("sha256").update(title).digest("hex").slice(0, 16),
+    });
   } catch (error) {
     console.error("Failed to store chat title", error);
   }

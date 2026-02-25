@@ -15,13 +15,16 @@
 2. Interface backend -> buildbot tools boundary (`/api/buildbot/tools/*`)
 - Shared service header gate via `x-chat-internal-key`
 - Fail-closed semantics when internal key config is missing (`503`)
-3. API -> Auth boundary (`src/api/auth/**`)
+3. Interface backend -> docs-search boundary (`/api/docs/search`)
+- Shared service header gate via `x-chat-internal-key`
+- Route-local Redis-backed throttling to cap OpenAI spend/DoS surface
+4. API -> Auth boundary (`src/api/auth/**`)
 - Privy JWT verification mode
 - Self-hosted header/shared-secret mode
-4. API -> Data boundary (`src/infra/db/**`, `src/infra/redis.ts`)
+5. API -> Data boundary (`src/infra/db/**`, `src/infra/redis.ts`)
 - Ownership checks
 - grant validation + issuance
-5. API -> External services (`OpenAI`, `Neynar`, `co.build`)
+6. API -> External services (`OpenAI`, `Neynar`, `co.build`)
 - timeout-bounded requests
 - constrained tool surfaces
 
@@ -30,8 +33,8 @@
 - Privy mode requires valid JWT and linked wallet extraction.
 - Self-hosted mode can rely on:
 - `x-chat-user` / default address
-- optional `x-chat-auth` shared secret
-- Without shared secret, self-hosted mode is only suitable for trusted/private environments.
+- `x-chat-auth` shared secret
+- Production self-hosted mode requires `SELF_HOSTED_SHARED_SECRET` at startup and middleware level.
 
 ## Grant Security Notes
 
@@ -46,9 +49,8 @@
 
 ## Current Security Gaps
 
-1. Header redaction list is narrow; sensitive custom headers can leak in logs if introduced.
-2. Response schemas are not declared, reducing automated contract enforcement.
-3. Self-hosted mode safety depends on operational configuration discipline.
+1. Response schemas are not declared, reducing automated contract enforcement.
+2. Shared-secret headers use static key auth; stronger network controls (mTLS/IP allowlisting) remain defense-in-depth options.
 
 ## Security Review Checklist (Per PR)
 

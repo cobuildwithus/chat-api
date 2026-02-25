@@ -1,4 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { getOpenAiTimeoutMs } from "../../config/env";
+import { createTimeoutFetch } from "../../infra/http/timeout";
+import { checkAndRecordUsage } from "../../infra/rate-limit";
 
 type DocsSearchBody = {
   query: string;
@@ -20,6 +23,9 @@ const DEFAULT_LIMIT = 8;
 const ERROR_MAX_LENGTH = 140;
 const SNIPPET_MAX_LENGTH = 420;
 const DOCS_BASE_URL = "https://docs.co.build";
+const DOCS_SEARCH_RATE_LIMIT_WINDOW_SECONDS = 60;
+const DOCS_SEARCH_RATE_LIMIT_WINDOW_MINUTES = DOCS_SEARCH_RATE_LIMIT_WINDOW_SECONDS / 60;
+const DOCS_SEARCH_RATE_LIMIT_MAX = process.env.NODE_ENV === "production" ? 30 : 200;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -76,6 +82,36 @@ function buildDocsUrl(slug: string | null): string | null {
   return `${DOCS_BASE_URL}${normalized}`;
 }
 
+function getDocsSearchRateLimitKey(request: FastifyRequest): string {
+  if (request.ip && request.ip.trim().length > 0) {
+    return `docs-search:ip:${request.ip}`;
+  }
+  return "docs-search:ip:unknown";
+}
+
+export async function enforceDocsSearchRateLimit(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  try {
+    const limit = await checkAndRecordUsage(getDocsSearchRateLimitKey(request), {
+      windowMinutes: DOCS_SEARCH_RATE_LIMIT_WINDOW_MINUTES,
+      maxUsage: DOCS_SEARCH_RATE_LIMIT_MAX,
+      usageToAdd: 1,
+    });
+    if (limit.allowed) return;
+    reply.header("Retry-After", String(limit.retryAfterSeconds));
+    return reply.status(429).send({
+      error: "Too many docs search requests. Please retry shortly.",
+    });
+  } catch (error) {
+    console.error("[docs-search] rate limit failed", error);
+    return reply.status(503).send({
+      error: "Docs search rate limiting is temporarily unavailable. Please retry.",
+    });
+  }
+}
+
 function getRawSearchEntries(payload: unknown): Record<string, unknown>[] {
   if (!isRecord(payload)) return [];
 
@@ -123,7 +159,7 @@ function extractDocsSearchResults(payload: unknown): DocsSearchResult[] {
 }
 
 export async function handleDocsSearchRequest(
-  request: FastifyRequest<{ Body: DocsSearchBody }>,
+  request: FastifyRequest,
   reply: FastifyReply,
 ) {
   const vectorStoreId = process.env.DOCS_VECTOR_STORE_ID?.trim();
@@ -136,25 +172,33 @@ export async function handleDocsSearchRequest(
     return reply.status(503).send({ error: "Docs search is not configured (missing OPENAI_API_KEY)." });
   }
 
-  const query = request.body.query.trim();
+  const body = request.body as DocsSearchBody;
+  const query = body.query.trim();
   if (!query) {
     return reply.status(400).send({ error: "Query must not be empty." });
   }
 
-  const limit = request.body.limit ?? DEFAULT_LIMIT;
+  const limit = body.limit ?? DEFAULT_LIMIT;
 
   try {
-    const response = await fetch(`${OPENAI_VECTOR_STORES_URL}/${encodeURIComponent(vectorStoreId)}/search`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        query,
-        max_num_results: limit,
-      }),
+    const openAiFetch = createTimeoutFetch({
+      timeoutMs: getOpenAiTimeoutMs(),
+      name: "OpenAI",
     });
+    const response = await openAiFetch(
+      `${OPENAI_VECTOR_STORES_URL}/${encodeURIComponent(vectorStoreId)}/search`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          query,
+          max_num_results: limit,
+        }),
+      },
+    );
 
     const responseText = await response.text();
     if (!response.ok) {

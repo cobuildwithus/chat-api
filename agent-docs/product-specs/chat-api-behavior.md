@@ -58,11 +58,15 @@ Request body:
 - optional: `limit` (number, `1..20`)
 
 Behavior:
+- requires internal service header `x-chat-internal-key`
+- enforces route-local docs-search rate limit (`429` + `Retry-After`)
 - executes OpenAI vector store search against `DOCS_VECTOR_STORE_ID`
 - returns `{ query, count, results[] }` with snippet + metadata per hit
-- does not require chat-user auth headers; endpoint is additive and read-only
 
 Error behavior:
+- `401` when internal service header is missing/invalid
+- `429` when docs-search route limit is exceeded
+- `503` when internal auth configuration is missing (`BUILD_BOT_TOOLS_INTERNAL_KEY`)
 - `400` for empty/whitespace query
 - `503` when docs search configuration is missing
 - `502` for upstream OpenAI failure or invalid upstream payload
@@ -83,6 +87,7 @@ Behavior:
 - Chat grant format and semantics must remain backward compatible unless explicitly versioned.
 - Grant refresh behavior is part of client continuation contract.
 - Ownership checks are mandatory fallback even when grant is present.
+- Self-hosted mode in production requires shared-secret protection.
 
 ## Known Schema/Runtime Caveats
 

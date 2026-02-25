@@ -14,7 +14,9 @@ Routes and schemas are bound in `src/api/server.ts`:
 - `POST /api/buildbot/tools/cast-preview` -> `buildBotToolsCastPreviewSchema` + `handleBuildBotToolsCastPreviewRequest`
 - `POST /api/buildbot/tools/cobuild-ai-context` -> `buildBotToolsCobuildAiContextSchema` + `handleBuildBotToolsCobuildAiContextRequest`
 
-Chat routes run `validateChatUser` as `preHandler`. `POST /api/docs/search` is read-only and does not run chat auth prehandlers.
+Chat routes run `validateChatUser` as `preHandler`.
+`POST /api/docs/search` runs prehandlers in this exact order:
+`enforceBuildBotToolsInternalServiceAuth` -> `enforceDocsSearchRateLimit`.
 Buildbot tools routes run prehandlers in this exact order: `enforceBuildBotToolsInternalServiceAuth` -> `enforceBuildBotToolsRateLimit`.
 
 ## Request Schema Summary
@@ -44,6 +46,7 @@ Source: `src/api/chat/schema.ts`.
 
 - Requires body: `query`
 - Optional body: `limit` (`1..20`)
+- Requires header: `x-chat-internal-key`
 - Upstream dependency: OpenAI vector store search API (`/v1/vector_stores/{id}/search`)
 
 ### `POST /api/buildbot/tools/get-user`
@@ -88,6 +91,9 @@ Source: `src/api/chat/schema.ts`.
 - Buildbot tools internal auth returns `401` for missing/invalid `x-chat-internal-key`.
 - Buildbot tools internal auth returns `503` when `BUILD_BOT_TOOLS_INTERNAL_KEY` config is missing.
 - Buildbot tools routes apply route-local Redis-backed throttling and return `429` with `Retry-After` when exceeded.
+- Docs-search internal auth returns `401` for missing/invalid `x-chat-internal-key`.
+- Docs-search internal auth returns `503` when `BUILD_BOT_TOOLS_INTERNAL_KEY` config is missing.
+- Docs-search applies route-local Redis-backed throttling and returns `429` with `Retry-After` when exceeded.
 
 ## Schema/Runtime Mismatches (Current)
 

@@ -12,11 +12,12 @@
 ## Request Reliability Model
 
 - Transport-level controls:
-- Fastify rate limiting (optional, env-gated)
+- Fastify rate limiting (enabled by default in production; env-configurable)
 - Request timeout/keepalive settings at server bootstrap
 - Workload-level controls:
 - Token-usage rate limiter per address over Redis sorted-set window
 - Async usage recording after successful stream finish
+- Route-local docs-search limiter and buildbot-tools limiter (Redis-backed)
 
 ## Timeout Matrix
 
@@ -37,6 +38,7 @@
 - Stream failure: pending assistant record is marked failed.
 - Optional external dependency failure:
 - docs tool disabled when vector store id is absent
+- docs-search route uses timeout-bounded OpenAI fetch to avoid hung upstream calls
 - get-cast returns structured error/null rather than throwing to user path
 - cobuild context tool returns bounded error payload
 

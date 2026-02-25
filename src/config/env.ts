@@ -95,6 +95,11 @@ const buildBotToolsInternalKeySchema = envSchema.pick({
 export function validateEnvVariables() {
   const env = envSchema.parse(process.env);
   const selfHosted = isTruthy(env.SELF_HOSTED_MODE?.toLowerCase());
+  if (selfHosted && env.NODE_ENV === "production" && !env.SELF_HOSTED_SHARED_SECRET) {
+    throw new Error(
+      "Missing required env in production self-hosted mode: SELF_HOSTED_SHARED_SECRET",
+    );
+  }
   if (!selfHosted && !env.PRIVY_APP_ID) {
     throw new Error("Missing required env: PRIVY_APP_ID");
   }
@@ -160,8 +165,13 @@ export function getRateLimitConfig(): {
   windowMs: number;
 } {
   const env = parseRateLimitEnv();
+  const isProduction = process.env.NODE_ENV === "production";
+  const enabled =
+    env.RATE_LIMIT_ENABLED === undefined
+      ? isProduction
+      : isTruthy(env.RATE_LIMIT_ENABLED);
   return {
-    enabled: isTruthy(env.RATE_LIMIT_ENABLED),
+    enabled,
     max: env.RATE_LIMIT_MAX ?? DEFAULT_RATE_LIMIT_MAX,
     windowMs: env.RATE_LIMIT_WINDOW_MS ?? DEFAULT_RATE_LIMIT_WINDOW_MS,
   };

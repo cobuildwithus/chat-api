@@ -100,6 +100,24 @@ describe("env helpers", () => {
     });
   });
 
+  it("enables global rate limiting by default in production", () => {
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      NODE_ENV: "production",
+      PRIVY_VERIFICATION_KEY: "verification-key",
+    };
+    delete process.env.RATE_LIMIT_ENABLED;
+    delete process.env.RATE_LIMIT_MAX;
+    delete process.env.RATE_LIMIT_WINDOW_MS;
+
+    expect(getRateLimitConfig()).toEqual({
+      enabled: true,
+      max: 30,
+      windowMs: 60_000,
+    });
+  });
+
   it("parses pool stats interval when configured", () => {
     process.env = { ...process.env, ...baseEnv, POSTGRES_POOL_STATS_INTERVAL_MS: "15000" };
 
@@ -161,6 +179,23 @@ describe("env helpers", () => {
     delete process.env.PRIVY_APP_ID;
     delete process.env.PRIVY_VERIFICATION_KEY;
     expect(() => validateEnvVariables()).not.toThrow();
+  });
+
+  it("requires self-hosted shared secret in production self-hosted mode", () => {
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      NODE_ENV: "production",
+      SELF_HOSTED_MODE: "true",
+      BUILD_BOT_TOOLS_INTERNAL_KEY: "internal-secret",
+    };
+    delete process.env.PRIVY_APP_ID;
+    delete process.env.PRIVY_VERIFICATION_KEY;
+    delete process.env.SELF_HOSTED_SHARED_SECRET;
+
+    expect(() => validateEnvVariables()).toThrow(
+      "Missing required env in production self-hosted mode: SELF_HOSTED_SHARED_SECRET",
+    );
   });
 
   it("throws from getPrivyAppId when missing", () => {

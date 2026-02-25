@@ -34,19 +34,7 @@ export async function generateChatTitle(message: string): Promise<string | null>
       totalUsage: result.totalUsage,
       providerMetadata: result.providerMetadata,
       responseMessages: result.response?.messages?.length ?? null,
-      responseBody: summarizeResponseBody(result.response?.body),
     });
   }
   return title || null;
-}
-
-function summarizeResponseBody(body: unknown, maxLength = 2000): string | null {
-  if (!body) return null;
-  try {
-    const serialized = JSON.stringify(body);
-    if (serialized.length <= maxLength) return serialized;
-    return `${serialized.slice(0, maxLength)}... (truncated ${serialized.length})`;
-  } catch {
-    return "[unserializable response body]";
-  }
 }

@@ -1,7 +1,18 @@
 import type { FastifyRequest } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { handleDocsSearchRequest } from "../../../src/api/docs/search";
+import {
+  enforceDocsSearchRateLimit,
+  handleDocsSearchRequest,
+} from "../../../src/api/docs/search";
 import { createReply } from "../../utils/fastify";
+
+const mocks = vi.hoisted(() => ({
+  checkAndRecordUsage: vi.fn(),
+}));
+
+vi.mock("../../../src/infra/rate-limit", () => ({
+  checkAndRecordUsage: mocks.checkAndRecordUsage,
+}));
 
 type DocsSearchBody = {
   query: string;
@@ -65,7 +76,9 @@ describe("handleDocsSearchRequest", () => {
         authorization: "Bearer sk-test",
         "content-type": "application/json",
       },
+      redirect: "error",
     });
+    expect(init?.signal).toBeDefined();
     expect(JSON.parse(String(init?.body))).toEqual({
       query: "chat api",
       max_num_results: 5,
@@ -366,5 +379,91 @@ describe("handleDocsSearchRequest", () => {
     expect(payload.error.startsWith("Docs search request failed:")).toBe(true);
     expect(payload.error.endsWith("...")).toBe(true);
     expect(payload.error.length).toBeLessThan(180);
+  });
+});
+
+describe("enforceDocsSearchRateLimit", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("allows requests below the limit and keys by ip", async () => {
+    mocks.checkAndRecordUsage.mockResolvedValueOnce({
+      allowed: true,
+      usage: 1,
+      retryAfterSeconds: 0,
+    });
+    const request = {
+      ip: "127.0.0.1",
+      headers: {},
+    } as unknown as FastifyRequest;
+    const reply = createReply();
+
+    await enforceDocsSearchRateLimit(request, reply);
+
+    expect(mocks.checkAndRecordUsage).toHaveBeenCalledWith("docs-search:ip:127.0.0.1", {
+      windowMinutes: 1,
+      maxUsage: 200,
+      usageToAdd: 1,
+    });
+    expect(reply.status).not.toHaveBeenCalled();
+  });
+
+  it("applies retry headers on limit exceed", async () => {
+    mocks.checkAndRecordUsage.mockResolvedValueOnce({
+      allowed: false,
+      usage: 200,
+      retryAfterSeconds: 11,
+    });
+    const request = {
+      ip: "127.0.0.1",
+      headers: {},
+    } as unknown as FastifyRequest;
+    const reply = createReply();
+
+    await enforceDocsSearchRateLimit(request, reply);
+
+    expect(reply.header).toHaveBeenCalledWith("Retry-After", "11");
+    expect(reply.status).toHaveBeenCalledWith(429);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: "Too many docs search requests. Please retry shortly.",
+    });
+  });
+
+  it("returns 503 when rate limiting backend fails", async () => {
+    mocks.checkAndRecordUsage.mockRejectedValueOnce(new Error("redis unavailable"));
+    const request = {
+      ip: "127.0.0.1",
+      headers: {},
+    } as unknown as FastifyRequest;
+    const reply = createReply();
+
+    await enforceDocsSearchRateLimit(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(503);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: "Docs search rate limiting is temporarily unavailable. Please retry.",
+    });
+  });
+
+  it("falls back to unknown key when request ip is missing", async () => {
+    mocks.checkAndRecordUsage.mockResolvedValueOnce({
+      allowed: true,
+      usage: 1,
+      retryAfterSeconds: 0,
+    });
+    const request = {
+      ip: " ",
+      headers: {},
+    } as unknown as FastifyRequest;
+    const reply = createReply();
+
+    await enforceDocsSearchRateLimit(request, reply);
+
+    expect(mocks.checkAndRecordUsage).toHaveBeenCalledWith("docs-search:ip:unknown", {
+      windowMinutes: 1,
+      maxUsage: 200,
+      usageToAdd: 1,
+    });
   });
 });

@@ -4,7 +4,7 @@ import { storeChatMessages } from "../../src/chat/message-store";
 import { chat, chatMessage } from "../../src/infra/db/schema";
 import { cobuildDb } from "../../src/infra/db/cobuildDb";
 import { generateChatTitle } from "../../src/chat/generate-title";
-import { queueCobuildDbResponse, resetAllMocks, setCobuildDbResponse } from "../utils/mocks/db";
+import { resetAllMocks, setCobuildDbResponse } from "../utils/mocks/db";
 
 vi.mock("../../src/chat/generate-title", () => ({
   generateChatTitle: vi.fn(),
@@ -12,6 +12,11 @@ vi.mock("../../src/chat/generate-title", () => ({
 
 vi.mock("node:crypto", () => ({
   randomUUID: vi.fn(() => "uuid"),
+  createHash: vi.fn(() => ({
+    update: vi.fn(() => ({
+      digest: vi.fn(() => "deadbeefcafebabe0123456789"),
+    })),
+  })),
 }));
 
 const generateChatTitleMock = vi.mocked(generateChatTitle);
@@ -134,6 +139,42 @@ describe("storeChatMessages", () => {
     expect(generateChatTitleMock).not.toHaveBeenCalled();
   });
 
+  it("ignores client-provided ids for new non-user messages", async () => {
+    setCobuildDbResponse(chatMessage, []);
+    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
+
+    let insertedRows: Array<{ id: string; role: string }> = [];
+    const originalInsert = cobuildDb.insert.bind(cobuildDb);
+    type InsertTable = Parameters<typeof originalInsert>[0];
+    const insertSpy = vi.spyOn(cobuildDb, "insert").mockImplementation((table: InsertTable) => {
+      const chain = originalInsert(table);
+      if (table !== chatMessage) return chain;
+      return {
+        values: (vals: typeof insertedRows) => {
+          insertedRows = vals;
+          return chain.values(vals);
+        },
+      } as typeof chain;
+    });
+
+    await storeChatMessages({
+      chatId: "chat-foreign",
+      messages: [{ id: "foreign-assistant-id", role: "assistant", parts: [] }],
+      type: "chat-default",
+      data: {},
+      user: baseUser,
+    });
+
+    expect(insertedRows).toHaveLength(1);
+    expect(insertedRows[0]).toEqual(
+      expect.objectContaining({
+        id: "uuid",
+        role: "assistant",
+      }),
+    );
+    insertSpy.mockRestore();
+  });
+
   it("reuses existing ids when only a client id matches", async () => {
     const createdAt = new Date("2024-01-01T00:00:00Z");
     setCobuildDbResponse(chatMessage, [
@@ -225,5 +266,30 @@ describe("storeChatMessages", () => {
 
     expect(errorSpy).toHaveBeenCalledWith("Failed to store chat title", expect.any(Error));
     errorSpy.mockRestore();
+  });
+
+  it("does not log raw generated title text", async () => {
+    setCobuildDbResponse(chatMessage, []);
+    setCobuildDbResponse(chat, [{ title: null }]);
+    generateChatTitleMock.mockResolvedValueOnce("secret password 123");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    await storeChatMessages({
+      chatId: "chat-7",
+      messages: [{ id: "m-user", role: "user", parts: [{ type: "text", text: "hello" }] }],
+      type: "chat-default",
+      data: {},
+      user: baseUser,
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      "Stored title for chat-7.",
+      expect.objectContaining({
+        titleLength: 19,
+        titleHash: expect.any(String),
+      }),
+    );
+    expect(JSON.stringify(infoSpy.mock.calls)).not.toContain("secret password 123");
+    infoSpy.mockRestore();
   });
 });

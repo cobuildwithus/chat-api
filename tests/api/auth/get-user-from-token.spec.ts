@@ -43,11 +43,12 @@ describe("getUserAddressFromToken", () => {
   });
 
   it("returns undefined when verification fails", async () => {
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
     jwtVerifyMock.mockRejectedValue(new Error("bad token"));
 
     const result = await getUserAddressFromToken("token");
     expect(result).toBeUndefined();
+    expect(consoleSpy).toHaveBeenCalledWith("Privy token verification failed.");
     consoleSpy.mockRestore();
   });
 

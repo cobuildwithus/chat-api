@@ -21,7 +21,7 @@ const GET_CAST_CACHE_TTL_SECONDS = 60 * 2;
 
 const BUILD_BOT_TOOLS_RATE_LIMIT_WINDOW_SECONDS = 60;
 const BUILD_BOT_TOOLS_RATE_LIMIT_WINDOW_MINUTES = BUILD_BOT_TOOLS_RATE_LIMIT_WINDOW_SECONDS / 60;
-const BUILD_BOT_TOOLS_RATE_LIMIT_MAX = process.env.NODE_ENV === "production" ? 120 : 600;
+const BUILD_BOT_TOOLS_RATE_LIMIT_MAX = process.env.NODE_ENV === "production" ? 60 : 300;
 
 type GetUserBody = {
   fname: string;

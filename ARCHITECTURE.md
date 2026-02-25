@@ -84,10 +84,12 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 
 ### POST `/api/docs/search`
 
-1. Parse request body (`query`, optional `limit`).
-2. Verify docs-search configuration (`DOCS_VECTOR_STORE_ID`, `OPENAI_API_KEY`).
-3. Execute OpenAI vector store search request against `DOCS_VECTOR_STORE_ID`.
-4. Return normalized docs hits (`query`, `count`, `results`).
+1. Verify internal service authorization via `x-chat-internal-key`.
+2. Enforce route-local docs-search rate limit (Redis-backed window counter).
+3. Parse request body (`query`, optional `limit`).
+4. Verify docs-search configuration (`DOCS_VECTOR_STORE_ID`, `OPENAI_API_KEY`).
+5. Execute OpenAI vector store search request against `DOCS_VECTOR_STORE_ID` with timeout-bounded fetch.
+6. Return normalized docs hits (`query`, `count`, `results`).
 
 ### POST `/api/buildbot/tools/get-user`
 
@@ -154,12 +156,15 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 - Auth identity is wallet-address based.
 - Privy mode validates JWT claims and linked wallet addresses.
 - Self-hosted mode can trust shared secret + explicit address header.
+- Production self-hosted mode requires `SELF_HOSTED_SHARED_SECRET`; misconfigured mode fails fast.
 - Chat access is ownership-checked and grant-scoped.
 - Unauthorized/missing chat access returns `404` to reduce enumeration.
 
 ## Cross-Cutting Reliability Mechanisms
 
 - Request-level limiter (optional, Fastify).
+- Production defaults keep request-level limiter enabled unless explicitly disabled.
+- Docs-search route-local limiter (Redis window counter with `Retry-After`).
 - Buildbot-tools route-local limiter (always-on Redis window counter with `Retry-After`).
 - Usage-level limiter (Redis sorted-set windows).
 - Pending-message reconciliation on stream success/failure.

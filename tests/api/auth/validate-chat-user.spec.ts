@@ -161,6 +161,25 @@ describe("validateChatUser", () => {
     expect(getUserAddressFromTokenMock).not.toHaveBeenCalled();
   });
 
+  it("returns 503 in production when self-hosted mode has no shared secret", async () => {
+    process.env.NODE_ENV = "production";
+    process.env.SELF_HOSTED_MODE = "true";
+    delete process.env.SELF_HOSTED_SHARED_SECRET;
+    const reply = createReply();
+
+    await validateChatUser(
+      {
+        headers: {
+          "x-chat-user": "0xAbC0000000000000000000000000000000000000",
+        },
+      } as unknown as FastifyRequest,
+      reply,
+    );
+
+    expect(reply.code).toHaveBeenCalledWith(503);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Self-hosted auth is misconfigured." });
+  });
+
   it("requires chat auth when a self-hosted shared secret is set", async () => {
     process.env.SELF_HOSTED_MODE = "true";
     process.env.SELF_HOSTED_SHARED_SECRET = "secret";

@@ -87,6 +87,17 @@ describe("setupServer", () => {
     expect(registerRequestLoggingMock).toHaveBeenCalledWith(serverMock);
     expect(serverMock.post).toHaveBeenCalledTimes(7);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/docs/search")).toBe(true);
+    const docsSearchCall = serverMock.post.mock.calls.find((call) => call[0] === "/api/docs/search");
+    const docsSearchOptions = docsSearchCall?.[1] as {
+      preHandler?: Array<{ name?: string }>;
+      schema?: object;
+    };
+    expect(docsSearchOptions?.schema).toBeTruthy();
+    expect(Array.isArray(docsSearchOptions?.preHandler)).toBe(true);
+    expect(docsSearchOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+      "enforceBuildBotToolsInternalServiceAuth",
+      "enforceDocsSearchRateLimit",
+    ]);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/get-user")).toBe(
       true,
     );

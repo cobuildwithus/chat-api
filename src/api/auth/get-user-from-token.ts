@@ -31,8 +31,10 @@ export async function getUserAddressFromToken(token: string) {
     if (!walletAccount) return undefined;
 
     return walletAccount.address.toLowerCase();
-  } catch (error) {
-    console.error(error);
+  } catch {
+    if (process.env.NODE_ENV !== "production") {
+      console.debug("Privy token verification failed.");
+    }
     return undefined;
   }
 }

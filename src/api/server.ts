@@ -7,7 +7,7 @@ import { handleChatCreateRequest } from "./chat/create";
 import { handleChatGetRequest } from "./chat/get";
 import { handleChatListRequest } from "./chat/list";
 import { handleChatPostRequest } from "./chat/route";
-import { handleDocsSearchRequest } from "./docs/search";
+import { enforceDocsSearchRateLimit, handleDocsSearchRequest } from "./docs/search";
 import {
   enforceBuildBotToolsInternalServiceAuth,
   enforceBuildBotToolsRateLimit,
@@ -132,7 +132,14 @@ export const setupServer = async () => {
     handleChatPostRequest,
   );
 
-  server.post("/api/docs/search", { schema: docsSearchSchema }, handleDocsSearchRequest);
+  server.post(
+    "/api/docs/search",
+    {
+      preHandler: [enforceBuildBotToolsInternalServiceAuth, enforceDocsSearchRateLimit],
+      schema: docsSearchSchema,
+    },
+    handleDocsSearchRequest,
+  );
 
   server.post(
     "/api/buildbot/tools/get-user",

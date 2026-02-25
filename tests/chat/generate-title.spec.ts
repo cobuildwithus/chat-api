@@ -22,28 +22,10 @@ describe("generateChatTitle", () => {
 
   it("logs details when the model returns an empty title", async () => {
     const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-    const longBody = { blob: "x".repeat(2100) };
     generateTextMock.mockResolvedValue({
       text: "   ",
-      response: { body: longBody, messages: [] },
-    } as unknown as GenerateTextResponse);
-
-    const result = await generateChatTitle("message");
-    expect(result).toBeNull();
-    expect(logSpy).toHaveBeenCalledWith(
-      "Chat title generation returned empty text.",
-      expect.objectContaining({
-        responseBody: expect.stringContaining("truncated"),
-      }),
-    );
-    logSpy.mockRestore();
-  });
-
-  it("logs short response bodies when title is empty", async () => {
-    const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-    generateTextMock.mockResolvedValue({
-      text: "",
       response: { body: { foo: "bar" }, messages: [] },
+      finishReason: "stop",
     } as unknown as GenerateTextResponse);
 
     const result = await generateChatTitle("message");
@@ -51,7 +33,9 @@ describe("generateChatTitle", () => {
     expect(logSpy).toHaveBeenCalledWith(
       "Chat title generation returned empty text.",
       expect.objectContaining({
-        responseBody: "{\"foo\":\"bar\"}",
+        finishReason: "stop",
+        messageLength: 7,
+        responseMessages: 0,
       }),
     );
     logSpy.mockRestore();
@@ -69,27 +53,7 @@ describe("generateChatTitle", () => {
     expect(logSpy).toHaveBeenCalledWith(
       "Chat title generation returned empty text.",
       expect.objectContaining({
-        responseBody: null,
-      }),
-    );
-    logSpy.mockRestore();
-  });
-
-  it("handles unserializable response bodies", async () => {
-    const logSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-    const circular: { value: string; self?: unknown } = { value: "x" };
-    circular.self = circular;
-    generateTextMock.mockResolvedValue({
-      text: "",
-      response: { body: circular, messages: [] },
-    } as unknown as GenerateTextResponse);
-
-    const result = await generateChatTitle("message");
-    expect(result).toBeNull();
-    expect(logSpy).toHaveBeenCalledWith(
-      "Chat title generation returned empty text.",
-      expect.objectContaining({
-        responseBody: "[unserializable response body]",
+        responseMessages: null,
       }),
     );
     logSpy.mockRestore();
