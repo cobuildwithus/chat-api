@@ -85,7 +85,8 @@ describe("setupServer", () => {
     const corsCall = serverMock.register.mock.calls.find((call) => call[0] === corsMock);
     expect(corsCall?.[1]?.origin).toEqual(["https://a.com", "https://b.com"]);
     expect(registerRequestLoggingMock).toHaveBeenCalledWith(serverMock);
-    expect(serverMock.post).toHaveBeenCalledTimes(2);
+    expect(serverMock.post).toHaveBeenCalledTimes(3);
+    expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/docs/search")).toBe(true);
     expect(serverMock.get).toHaveBeenCalledTimes(3);
     expect(serverMock.setErrorHandler).toHaveBeenCalledTimes(1);
   });

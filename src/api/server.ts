@@ -7,6 +7,7 @@ import { handleChatCreateRequest } from "./chat/create";
 import { handleChatGetRequest } from "./chat/get";
 import { handleChatListRequest } from "./chat/list";
 import { handleChatPostRequest } from "./chat/route";
+import { handleDocsSearchRequest } from "./docs/search";
 import { validateChatUser } from "./auth/validate-chat-user";
 import {
   chatCreateSchema,
@@ -14,6 +15,7 @@ import {
   chatListSchema,
   chatSchema,
 } from "./chat/schema";
+import { docsSearchSchema } from "./docs/schema";
 import { getRateLimitConfig } from "../config/env";
 import { handleError } from "./server-helpers";
 import { registerRequestLogging } from "./request-logger";
@@ -115,6 +117,8 @@ export const setupServer = async () => {
     { preHandler: [validateChatUser], schema: chatSchema },
     handleChatPostRequest,
   );
+
+  server.post("/api/docs/search", { schema: docsSearchSchema }, handleDocsSearchRequest);
 
   server.get("/source", async (_request, reply) => {
     const sourceUrl = getSourceUrl();
