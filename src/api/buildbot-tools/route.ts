@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { getNeynarTimeoutMs } from "../../config/env";
+import { getBuildBotToolsInternalKey, getNeynarTimeoutMs } from "../../config/env";
 import { getOrSetCachedResultWithLock } from "../../infra/cache/cacheResult";
 import { farcasterProfiles } from "../../infra/db/schema";
 import { cobuildDb } from "../../infra/db/cobuildDb";
@@ -65,6 +65,23 @@ export async function enforceBuildBotToolsRateLimit(
     return reply.status(503).send({
       error: "Build Bot tool rate limiting is temporarily unavailable. Please retry.",
     });
+  }
+}
+
+export async function enforceBuildBotToolsInternalServiceAuth(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const configuredKey = getBuildBotToolsInternalKey();
+  if (!configuredKey) {
+    return reply.status(503).send({
+      error: "Build Bot tools internal auth is temporarily unavailable. Please retry.",
+    });
+  }
+
+  const requestKey = request.headers["x-chat-internal-key"];
+  if (typeof requestKey !== "string" || requestKey !== configuredKey) {
+    return reply.status(401).send({ error: "Unauthorized." });
   }
 }
 

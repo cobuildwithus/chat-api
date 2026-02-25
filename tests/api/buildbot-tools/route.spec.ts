@@ -1,6 +1,7 @@
 import type { FastifyRequest } from "fastify";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  enforceBuildBotToolsInternalServiceAuth,
   enforceBuildBotToolsRateLimit,
   handleBuildBotToolsCastPreviewRequest,
   handleBuildBotToolsCobuildAiContextRequest,
@@ -59,10 +60,77 @@ function buildRequest<TBody>(body: TBody): FastifyRequest<{ Body: TBody }> {
 }
 
 describe("buildbot tools api route handlers", () => {
+  const originalEnv = process.env;
+
   beforeEach(() => {
+    process.env = { ...originalEnv };
     vi.clearAllMocks();
     mocks.getOrSetCachedResultWithLock.mockImplementation(async (_key, _prefix, fetchFn) => {
       return await fetchFn();
+    });
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  describe("enforceBuildBotToolsInternalServiceAuth", () => {
+    it("returns 503 when internal auth key is not configured", async () => {
+      delete process.env.BUILD_BOT_TOOLS_INTERNAL_KEY;
+      const request = {
+        ip: "127.0.0.1",
+        headers: {},
+      } as unknown as FastifyRequest;
+      const reply = createReply();
+
+      await enforceBuildBotToolsInternalServiceAuth(request, reply);
+
+      expect(reply.status).toHaveBeenCalledWith(503);
+      expect(reply.send).toHaveBeenCalledWith({
+        error: "Build Bot tools internal auth is temporarily unavailable. Please retry.",
+      });
+    });
+
+    it("returns 401 when header is missing", async () => {
+      process.env.BUILD_BOT_TOOLS_INTERNAL_KEY = "internal-secret";
+      const request = {
+        ip: "127.0.0.1",
+        headers: {},
+      } as unknown as FastifyRequest;
+      const reply = createReply();
+
+      await enforceBuildBotToolsInternalServiceAuth(request, reply);
+
+      expect(reply.status).toHaveBeenCalledWith(401);
+      expect(reply.send).toHaveBeenCalledWith({ error: "Unauthorized." });
+    });
+
+    it("returns 401 when header value is invalid", async () => {
+      process.env.BUILD_BOT_TOOLS_INTERNAL_KEY = "internal-secret";
+      const request = {
+        ip: "127.0.0.1",
+        headers: { "x-chat-internal-key": "wrong-secret" },
+      } as unknown as FastifyRequest;
+      const reply = createReply();
+
+      await enforceBuildBotToolsInternalServiceAuth(request, reply);
+
+      expect(reply.status).toHaveBeenCalledWith(401);
+      expect(reply.send).toHaveBeenCalledWith({ error: "Unauthorized." });
+    });
+
+    it("passes when header value matches configured key", async () => {
+      process.env.BUILD_BOT_TOOLS_INTERNAL_KEY = "internal-secret";
+      const request = {
+        ip: "127.0.0.1",
+        headers: { "x-chat-internal-key": "internal-secret" },
+      } as unknown as FastifyRequest;
+      const reply = createReply();
+
+      await enforceBuildBotToolsInternalServiceAuth(request, reply);
+
+      expect(reply.status).not.toHaveBeenCalled();
+      expect(reply.send).not.toHaveBeenCalled();
     });
   });
 

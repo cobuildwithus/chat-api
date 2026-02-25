@@ -41,6 +41,7 @@ This index is the table of contents for durable, repository-local context that a
 - Keep AGENTS files short and route-oriented.
 - Update this index whenever docs are added, removed, or moved.
 - Update this index when `agent-docs/references/api-contracts.md` route wiring changes.
+- Buildbot tools auth/rate-limit prehandler ordering changes require updates to Architecture + Security + API Contracts docs in the same change.
 - For multi-file/high-risk work, add a plan in `agent-docs/exec-plans/active/`.
 - Keep `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` current during active coding work.
 - Current active plan example: `agent-docs/exec-plans/active/2026-02-25-buildbot-tools-rate-limit-hardening.md`.

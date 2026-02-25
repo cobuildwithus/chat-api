@@ -12,13 +12,16 @@
 1. Client -> API boundary (`src/api/**`)
 - Request schema validation
 - Header auth handling
-2. API -> Auth boundary (`src/api/auth/**`)
+2. Interface backend -> buildbot tools boundary (`/api/buildbot/tools/*`)
+- Shared service header gate via `x-chat-internal-key`
+- Fail-closed semantics when internal key config is missing (`503`)
+3. API -> Auth boundary (`src/api/auth/**`)
 - Privy JWT verification mode
 - Self-hosted header/shared-secret mode
-3. API -> Data boundary (`src/infra/db/**`, `src/infra/redis.ts`)
+4. API -> Data boundary (`src/infra/db/**`, `src/infra/redis.ts`)
 - Ownership checks
 - grant validation + issuance
-4. API -> External services (`OpenAI`, `Neynar`, `co.build`)
+5. API -> External services (`OpenAI`, `Neynar`, `co.build`)
 - timeout-bounded requests
 - constrained tool surfaces
 
@@ -53,6 +56,7 @@
 2. Are new headers/log fields introduced? If yes, verify redaction requirements.
 3. Are new external calls added? If yes, set explicit timeout and bounded error behavior.
 4. Are ownership checks preserved on all chat read/write paths?
+5. If internal service headers are introduced/changed, are they validated and redacted?
 
 ## Escalation
 

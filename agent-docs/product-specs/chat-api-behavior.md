@@ -67,6 +67,17 @@ Error behavior:
 - `503` when docs search configuration is missing
 - `502` for upstream OpenAI failure or invalid upstream payload
 
+### POST `/api/buildbot/tools/get-user`
+### POST `/api/buildbot/tools/get-cast`
+### POST `/api/buildbot/tools/cast-preview`
+### POST `/api/buildbot/tools/cobuild-ai-context`
+
+Behavior:
+- require internal service header `x-chat-internal-key`
+- if internal key config is missing, return `503`
+- if header is missing or invalid, return `401`
+- when internal auth passes, preserve existing route-local behavior and payload semantics
+
 ## Auth + Grant Compatibility
 
 - Chat grant format and semantics must remain backward compatible unless explicitly versioned.

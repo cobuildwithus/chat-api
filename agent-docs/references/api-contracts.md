@@ -15,6 +15,7 @@ Routes and schemas are bound in `src/api/server.ts`:
 - `POST /api/buildbot/tools/cobuild-ai-context` -> `buildBotToolsCobuildAiContextSchema` + `handleBuildBotToolsCobuildAiContextRequest`
 
 Chat routes run `validateChatUser` as `preHandler`. `POST /api/docs/search` is read-only and does not run chat auth prehandlers.
+Buildbot tools routes run prehandlers in this exact order: `enforceBuildBotToolsInternalServiceAuth` -> `enforceBuildBotToolsRateLimit`.
 
 ## Request Schema Summary
 
@@ -62,6 +63,11 @@ Source: `src/api/chat/schema.ts`.
 
 - Body: empty object
 
+### Buildbot tools service header
+
+- All `/api/buildbot/tools/*` routes require `x-chat-internal-key`.
+- The header value must match server-side `BUILD_BOT_TOOLS_INTERNAL_KEY`.
+
 ## Runtime Response Summary
 
 - `POST /api/chat/new`: `{ chatId, chatGrant }`
@@ -79,6 +85,8 @@ Source: `src/api/chat/schema.ts`.
 - Missing or unauthorized chat access returns `404` on read/write chat-id paths.
 - Auth pre-handler returns `401` for invalid/missing auth.
 - Usage limiter returns `429` for token-budget overage.
+- Buildbot tools internal auth returns `401` for missing/invalid `x-chat-internal-key`.
+- Buildbot tools internal auth returns `503` when `BUILD_BOT_TOOLS_INTERNAL_KEY` config is missing.
 - Buildbot tools routes apply route-local Redis-backed throttling and return `429` with `Retry-After` when exceeded.
 
 ## Schema/Runtime Mismatches (Current)

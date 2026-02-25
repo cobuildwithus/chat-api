@@ -9,6 +9,7 @@ import { handleChatListRequest } from "./chat/list";
 import { handleChatPostRequest } from "./chat/route";
 import { handleDocsSearchRequest } from "./docs/search";
 import {
+  enforceBuildBotToolsInternalServiceAuth,
   enforceBuildBotToolsRateLimit,
   handleBuildBotToolsCastPreviewRequest,
   handleBuildBotToolsCobuildAiContextRequest,
@@ -136,7 +137,7 @@ export const setupServer = async () => {
   server.post(
     "/api/buildbot/tools/get-user",
     {
-      preHandler: [enforceBuildBotToolsRateLimit],
+      preHandler: [enforceBuildBotToolsInternalServiceAuth, enforceBuildBotToolsRateLimit],
       schema: buildBotToolsGetUserSchema,
     },
     handleBuildBotToolsGetUserRequest,
@@ -145,7 +146,7 @@ export const setupServer = async () => {
   server.post(
     "/api/buildbot/tools/get-cast",
     {
-      preHandler: [enforceBuildBotToolsRateLimit],
+      preHandler: [enforceBuildBotToolsInternalServiceAuth, enforceBuildBotToolsRateLimit],
       schema: buildBotToolsGetCastSchema,
     },
     handleBuildBotToolsGetCastRequest,
@@ -154,7 +155,7 @@ export const setupServer = async () => {
   server.post(
     "/api/buildbot/tools/cast-preview",
     {
-      preHandler: [enforceBuildBotToolsRateLimit],
+      preHandler: [enforceBuildBotToolsInternalServiceAuth, enforceBuildBotToolsRateLimit],
       schema: buildBotToolsCastPreviewSchema,
     },
     handleBuildBotToolsCastPreviewRequest,
@@ -163,7 +164,7 @@ export const setupServer = async () => {
   server.post(
     "/api/buildbot/tools/cobuild-ai-context",
     {
-      preHandler: [enforceBuildBotToolsRateLimit],
+      preHandler: [enforceBuildBotToolsInternalServiceAuth, enforceBuildBotToolsRateLimit],
       schema: buildBotToolsCobuildAiContextSchema,
     },
     handleBuildBotToolsCobuildAiContextRequest,

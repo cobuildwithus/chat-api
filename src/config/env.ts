@@ -60,6 +60,7 @@ const envSchema = z.object({
   SELF_HOSTED_MODE: z.string().min(1).optional(),
   SELF_HOSTED_DEFAULT_ADDRESS: z.string().min(1).optional(),
   SELF_HOSTED_SHARED_SECRET: z.string().min(1).optional(),
+  BUILD_BOT_TOOLS_INTERNAL_KEY: z.string().min(1).optional(),
 });
 
 const chatGrantSecretSchema = envSchema.pick({ CHAT_GRANT_SECRET: true });
@@ -87,6 +88,9 @@ const selfHostedSchema = envSchema.pick({
   SELF_HOSTED_DEFAULT_ADDRESS: true,
   SELF_HOSTED_SHARED_SECRET: true,
 });
+const buildBotToolsInternalKeySchema = envSchema.pick({
+  BUILD_BOT_TOOLS_INTERNAL_KEY: true,
+});
 
 export function validateEnvVariables() {
   const env = envSchema.parse(process.env);
@@ -96,6 +100,9 @@ export function validateEnvVariables() {
   }
   if (!selfHosted && env.NODE_ENV === "production" && !env.PRIVY_VERIFICATION_KEY) {
     throw new Error("Missing required env in production: PRIVY_VERIFICATION_KEY");
+  }
+  if (env.NODE_ENV === "production" && !env.BUILD_BOT_TOOLS_INTERNAL_KEY) {
+    throw new Error("Missing required env in production: BUILD_BOT_TOOLS_INTERNAL_KEY");
   }
   return env;
 }
@@ -211,6 +218,10 @@ export function getSelfHostedDefaultAddress(): string | null {
 
 export function getSelfHostedSharedSecret(): string | null {
   return selfHostedSchema.parse(process.env).SELF_HOSTED_SHARED_SECRET ?? null;
+}
+
+export function getBuildBotToolsInternalKey(): string | null {
+  return buildBotToolsInternalKeySchema.parse(process.env).BUILD_BOT_TOOLS_INTERNAL_KEY ?? null;
 }
 
 function isTruthy(value?: string | null): boolean {

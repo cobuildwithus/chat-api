@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-02-18
+Last updated: 2026-02-25
 
 See `README.md` for setup/deployment and `docs/TOOLS.md` for tool contribution steps. The canonical docs map is `agent-docs/index.md`.
 
@@ -28,7 +28,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 - optional request rate limiting
 - CORS
 - chat routes + docs search route + `/healthz`
-- buildbot tools routes (`/api/buildbot/tools/*`)
+- buildbot tools routes (`/api/buildbot/tools/*`) guarded by internal service header auth
 - global error handler
 4. Process handlers (`SIGTERM`, `SIGINT`, `uncaughtException`, `unhandledRejection`) close server, DB, and Redis in controlled order.
 
@@ -91,29 +91,33 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 
 ### POST `/api/buildbot/tools/get-user`
 
-1. Enforce route-local buildbot tools rate limit (Redis-backed window counter).
-2. Parse username (`fname`) input.
-3. Resolve Farcaster profile data with Redis lock-backed cache.
-4. Return exact profile match or fuzzy candidates.
+1. Verify internal service authorization via `x-chat-internal-key`.
+2. Enforce route-local buildbot tools rate limit (Redis-backed window counter).
+3. Parse username (`fname`) input.
+4. Resolve Farcaster profile data with Redis lock-backed cache.
+5. Return exact profile match or fuzzy candidates.
 
 ### POST `/api/buildbot/tools/get-cast`
 
-1. Enforce route-local buildbot tools rate limit.
-2. Parse cast identifier input (`hash` or `url`).
-3. Read from short Redis cache; on miss call Neynar lookup with timeout guard.
-4. Return cast payload or not-found/config/upstream error.
+1. Verify internal service authorization via `x-chat-internal-key`.
+2. Enforce route-local buildbot tools rate limit.
+3. Parse cast identifier input (`hash` or `url`).
+4. Read from short Redis cache; on miss call Neynar lookup with timeout guard.
+5. Return cast payload or not-found/config/upstream error.
 
 ### POST `/api/buildbot/tools/cast-preview`
 
-1. Enforce route-local buildbot tools rate limit.
-2. Validate cast preview payload (`text`, optional `embeds`, optional `parent`).
-3. Return normalized preview payload (`no-store` response).
+1. Verify internal service authorization via `x-chat-internal-key`.
+2. Enforce route-local buildbot tools rate limit.
+3. Validate cast preview payload (`text`, optional `embeds`, optional `parent`).
+4. Return normalized preview payload (`no-store` response).
 
 ### POST `/api/buildbot/tools/cobuild-ai-context`
 
-1. Enforce route-local buildbot tools rate limit.
-2. Return cached Cobuild AI context snapshot from Redis-backed cache.
-3. Surface upstream snapshot fetch failures as `502`.
+1. Verify internal service authorization via `x-chat-internal-key`.
+2. Enforce route-local buildbot tools rate limit.
+3. Return cached Cobuild AI context snapshot from Redis-backed cache.
+4. Surface upstream snapshot fetch failures as `502`.
 
 ## AI Layer
 

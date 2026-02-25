@@ -110,7 +110,10 @@ describe("setupServer", () => {
       const routeOptions = routeCall?.[1] as { preHandler?: Array<{ name?: string }>; schema?: object };
       expect(routeOptions?.schema).toBeTruthy();
       expect(Array.isArray(routeOptions?.preHandler)).toBe(true);
-      expect(routeOptions?.preHandler?.[0]?.name).toBe("enforceBuildBotToolsRateLimit");
+      expect(routeOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+        "enforceBuildBotToolsInternalServiceAuth",
+        "enforceBuildBotToolsRateLimit",
+      ]);
     }
     expect(serverMock.get).toHaveBeenCalledTimes(3);
     expect(serverMock.setErrorHandler).toHaveBeenCalledTimes(1);

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  getBuildBotToolsInternalKey,
   getChatGrantSecret,
   getCobuildAiContextTimeoutMs,
   getNeynarTimeoutMs,
@@ -22,6 +23,7 @@ const baseEnv = {
   PRIVY_APP_ID: "privy",
   CHAT_GRANT_SECRET: "secret",
   NEYNAR_API_KEY: "neynar",
+  BUILD_BOT_TOOLS_INTERNAL_KEY: "internal-secret",
 };
 
 describe("env helpers", () => {
@@ -40,6 +42,7 @@ describe("env helpers", () => {
     expect(validateEnvVariables().PRIVY_APP_ID).toBe("privy");
     expect(getChatGrantSecret()).toBe("secret");
     expect(getPrivyAppId()).toBe("privy");
+    expect(getBuildBotToolsInternalKey()).toBe("internal-secret");
   });
 
   it("parses replica urls and debug flag", () => {
@@ -133,6 +136,20 @@ describe("env helpers", () => {
     );
   });
 
+  it("requires buildbot tools internal key in production", () => {
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      NODE_ENV: "production",
+      PRIVY_VERIFICATION_KEY: "verification-key",
+    };
+    delete process.env.BUILD_BOT_TOOLS_INTERNAL_KEY;
+
+    expect(() => validateEnvVariables()).toThrow(
+      "Missing required env in production: BUILD_BOT_TOOLS_INTERNAL_KEY",
+    );
+  });
+
   it("requires privy app id when not self-hosted", () => {
     process.env = { ...process.env, ...baseEnv };
     delete process.env.PRIVY_APP_ID;
@@ -150,5 +167,12 @@ describe("env helpers", () => {
     process.env = { ...process.env, ...baseEnv };
     delete process.env.PRIVY_APP_ID;
     expect(() => getPrivyAppId()).toThrow("Missing PRIVY_APP_ID");
+  });
+
+  it("returns null from getBuildBotToolsInternalKey when missing", () => {
+    process.env = { ...process.env, ...baseEnv };
+    delete process.env.BUILD_BOT_TOOLS_INTERNAL_KEY;
+
+    expect(getBuildBotToolsInternalKey()).toBeNull();
   });
 });
