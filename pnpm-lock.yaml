@@ -48,6 +48,9 @@ importers:
         specifier: ^4.1.8
         version: 4.3.5
     devDependencies:
+      '@cobuild/review-gpt':
+        specifier: file:../review-gpt-cli
+        version: file:../review-gpt-cli
       '@tsconfig/recommended':
         specifier: ^1.0.1
         version: 1.0.13
@@ -126,6 +129,10 @@ packages:
 
   '@borewit/text-codec@0.2.1':
     resolution: {integrity: sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw==}
+
+  '@cobuild/review-gpt@file:../review-gpt-cli':
+    resolution: {directory: ../review-gpt-cli, type: directory}
+    hasBin: true
 
   '@esbuild/aix-ppc64@0.21.5':
     resolution: {integrity: sha512-1SDgH6ZSPTlggy1yI6+Dbkiz8xzpHJEVAlF/AM1tHPLsf5STom9rwtjE4hKAF20FfXXNTFqEYXyJNWh1GiZedQ==}
@@ -2217,6 +2224,8 @@ snapshots:
   '@bcoe/v8-coverage@0.2.3': {}
 
   '@borewit/text-codec@0.2.1': {}
+
+  '@cobuild/review-gpt@file:../review-gpt-cli': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
