@@ -8,6 +8,13 @@ import { handleChatGetRequest } from "./chat/get";
 import { handleChatListRequest } from "./chat/list";
 import { handleChatPostRequest } from "./chat/route";
 import { handleDocsSearchRequest } from "./docs/search";
+import {
+  enforceBuildBotToolsRateLimit,
+  handleBuildBotToolsCastPreviewRequest,
+  handleBuildBotToolsCobuildAiContextRequest,
+  handleBuildBotToolsGetCastRequest,
+  handleBuildBotToolsGetUserRequest,
+} from "./buildbot-tools/route";
 import { validateChatUser } from "./auth/validate-chat-user";
 import {
   chatCreateSchema,
@@ -16,6 +23,12 @@ import {
   chatSchema,
 } from "./chat/schema";
 import { docsSearchSchema } from "./docs/schema";
+import {
+  buildBotToolsCastPreviewSchema,
+  buildBotToolsCobuildAiContextSchema,
+  buildBotToolsGetCastSchema,
+  buildBotToolsGetUserSchema,
+} from "./buildbot-tools/schema";
 import { getRateLimitConfig } from "../config/env";
 import { handleError } from "./server-helpers";
 import { registerRequestLogging } from "./request-logger";
@@ -119,6 +132,42 @@ export const setupServer = async () => {
   );
 
   server.post("/api/docs/search", { schema: docsSearchSchema }, handleDocsSearchRequest);
+
+  server.post(
+    "/api/buildbot/tools/get-user",
+    {
+      preHandler: [enforceBuildBotToolsRateLimit],
+      schema: buildBotToolsGetUserSchema,
+    },
+    handleBuildBotToolsGetUserRequest,
+  );
+
+  server.post(
+    "/api/buildbot/tools/get-cast",
+    {
+      preHandler: [enforceBuildBotToolsRateLimit],
+      schema: buildBotToolsGetCastSchema,
+    },
+    handleBuildBotToolsGetCastRequest,
+  );
+
+  server.post(
+    "/api/buildbot/tools/cast-preview",
+    {
+      preHandler: [enforceBuildBotToolsRateLimit],
+      schema: buildBotToolsCastPreviewSchema,
+    },
+    handleBuildBotToolsCastPreviewRequest,
+  );
+
+  server.post(
+    "/api/buildbot/tools/cobuild-ai-context",
+    {
+      preHandler: [enforceBuildBotToolsRateLimit],
+      schema: buildBotToolsCobuildAiContextSchema,
+    },
+    handleBuildBotToolsCobuildAiContextRequest,
+  );
 
   server.get("/source", async (_request, reply) => {
     const sourceUrl = getSourceUrl();

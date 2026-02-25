@@ -9,6 +9,10 @@ Routes and schemas are bound in `src/api/server.ts`:
 - `GET /api/chats` -> `listChatsSchema` + `handleChatListRequest`
 - `GET /api/chat/:chatId` -> `chatDetailSchema` + `handleGetChatRequest`
 - `POST /api/docs/search` -> `docsSearchSchema` + `handleDocsSearchRequest`
+- `POST /api/buildbot/tools/get-user` -> `buildBotToolsGetUserSchema` + `handleBuildBotToolsGetUserRequest`
+- `POST /api/buildbot/tools/get-cast` -> `buildBotToolsGetCastSchema` + `handleBuildBotToolsGetCastRequest`
+- `POST /api/buildbot/tools/cast-preview` -> `buildBotToolsCastPreviewSchema` + `handleBuildBotToolsCastPreviewRequest`
+- `POST /api/buildbot/tools/cobuild-ai-context` -> `buildBotToolsCobuildAiContextSchema` + `handleBuildBotToolsCobuildAiContextRequest`
 
 Chat routes run `validateChatUser` as `preHandler`. `POST /api/docs/search` is read-only and does not run chat auth prehandlers.
 
@@ -40,6 +44,23 @@ Source: `src/api/chat/schema.ts`.
 - Requires body: `query`
 - Optional body: `limit` (`1..20`)
 
+### `POST /api/buildbot/tools/get-user`
+
+- Requires body: `fname`
+
+### `POST /api/buildbot/tools/get-cast`
+
+- Requires body: `identifier`, `type` (`hash|url`)
+
+### `POST /api/buildbot/tools/cast-preview`
+
+- Requires body: `text`
+- Optional body: `embeds` (max 2), `parent`
+
+### `POST /api/buildbot/tools/cobuild-ai-context`
+
+- Body: empty object
+
 ## Runtime Response Summary
 
 - `POST /api/chat/new`: `{ chatId, chatGrant }`
@@ -47,12 +68,17 @@ Source: `src/api/chat/schema.ts`.
 - `GET /api/chat/:chatId`: `{ chatId, type, data, messages }` + `x-chat-grant`
 - `POST /api/chat`: streaming SSE response, may include refreshed `x-chat-grant`
 - `POST /api/docs/search`: `{ query, count, results }`
+- `POST /api/buildbot/tools/get-user`: `{ ok, result }`
+- `POST /api/buildbot/tools/get-cast`: `{ ok, cast }`
+- `POST /api/buildbot/tools/cast-preview`: `{ ok, cast }`
+- `POST /api/buildbot/tools/cobuild-ai-context`: `{ ok, data }`
 
 ## Intentional Status-Code Semantics
 
 - Missing or unauthorized chat access returns `404` on read/write chat-id paths.
 - Auth pre-handler returns `401` for invalid/missing auth.
 - Usage limiter returns `429` for token-budget overage.
+- Buildbot tools routes apply route-local Redis-backed throttling and return `429` with `Retry-After` when exceeded.
 
 ## Schema/Runtime Mismatches (Current)
 
