@@ -24,8 +24,9 @@ If instructions still conflict after applying this order, ask the user before ac
 6. `agent-docs/references/api-contracts.md`
 7. `agent-docs/references/tool-catalog.md`
 8. `agent-docs/references/testing-ci-map.md`
-9. `agent-docs/operations/completion-workflow.md`
-10. `docs/TOOLS.md` (when touching tools)
+9. `agent-docs/operations/verification-and-runtime.md`
+10. `agent-docs/operations/completion-workflow.md`
+11. `docs/TOOLS.md` (when touching tools)
 
 ## Hard Rules (Non-Negotiable)
 
