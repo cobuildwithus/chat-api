@@ -28,7 +28,94 @@ describe("handleDocsSearchRequest", () => {
     vi.unstubAllGlobals();
   });
 
-  it("returns search results from OpenAI file search output", async () => {
+  it("returns search results from OpenAI vector store search output", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          data: [
+            null,
+            {
+              ignored: true,
+            },
+            {
+              file_id: "file_123",
+              filename: "self-hosted/chat-api.mdx",
+              score: 0.91,
+              text: "This page explains Chat API deployment.",
+              attributes: {
+                path: "self-hosted/chat-api.mdx",
+                slug: "/self-hosted/chat-api",
+              },
+            },
+          ],
+        }),
+    });
+
+    const reply = createReply();
+    await handleDocsSearchRequest(buildRequest({ query: "chat api", limit: 5 }), reply);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [input, init] = fetchMock.mock.calls[0];
+    expect(String(input)).toBe("https://api.openai.com/v1/vector_stores/vs_test/search");
+    expect(init).toMatchObject({
+      method: "POST",
+      headers: {
+        authorization: "Bearer sk-test",
+        "content-type": "application/json",
+      },
+    });
+    expect(JSON.parse(String(init?.body))).toEqual({
+      query: "chat api",
+      max_num_results: 5,
+    });
+
+    expect(reply.send).toHaveBeenCalledWith({
+      query: "chat api",
+      count: 2,
+      results: [
+        {
+          fileId: null,
+          filename: null,
+          score: null,
+          snippet: null,
+          path: null,
+          slug: null,
+          url: null,
+        },
+        {
+          fileId: "file_123",
+          filename: "self-hosted/chat-api.mdx",
+          score: 0.91,
+          snippet: "This page explains Chat API deployment.",
+          path: "self-hosted/chat-api.mdx",
+          slug: "/self-hosted/chat-api",
+          url: "https://docs.co.build/self-hosted/chat-api",
+        },
+      ],
+    });
+  });
+
+  it("URL-encodes the vector store id in the upstream request path", async () => {
+    process.env.DOCS_VECTOR_STORE_ID = "vs_test/with space";
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          data: [],
+        }),
+    });
+
+    const reply = createReply();
+    await handleDocsSearchRequest(buildRequest({ query: "setup" }), reply);
+
+    const [input] = fetchMock.mock.calls[0];
+    expect(String(input)).toBe("https://api.openai.com/v1/vector_stores/vs_test%2Fwith%20space/search");
+  });
+
+  it("accepts legacy Responses file search payload shape", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -55,30 +142,7 @@ describe("handleDocsSearchRequest", () => {
     });
 
     const reply = createReply();
-    await handleDocsSearchRequest(buildRequest({ query: "chat api", limit: 5 }), reply);
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [input, init] = fetchMock.mock.calls[0];
-    expect(String(input)).toBe("https://api.openai.com/v1/responses");
-    expect(init).toMatchObject({
-      method: "POST",
-      headers: {
-        authorization: "Bearer sk-test",
-        "content-type": "application/json",
-      },
-    });
-    expect(JSON.parse(String(init?.body))).toEqual({
-      model: "gpt-5-mini-2025-08-07",
-      input: "chat api",
-      tools: [
-        {
-          type: "file_search",
-          vector_store_ids: ["vs_test"],
-          max_num_results: 5,
-        },
-      ],
-      include: ["file_search_call.results"],
-    });
+    await handleDocsSearchRequest(buildRequest({ query: "chat api" }), reply);
 
     expect(reply.send).toHaveBeenCalledWith({
       query: "chat api",
@@ -146,7 +210,7 @@ describe("handleDocsSearchRequest", () => {
 
     expect(reply.status).toHaveBeenCalledWith(502);
     expect(reply.send).toHaveBeenCalledWith({
-      error: "Docs search request failed: OpenAI docs search request failed with status 502",
+      error: "Docs search request failed: OpenAI vector store search request failed with status 502",
     });
   });
 
@@ -162,7 +226,7 @@ describe("handleDocsSearchRequest", () => {
 
     expect(reply.status).toHaveBeenCalledWith(502);
     expect(reply.send).toHaveBeenCalledWith({
-      error: "Docs search request failed: OpenAI docs search returned invalid JSON.",
+      error: "Docs search request failed: OpenAI vector store search returned invalid JSON.",
     });
   });
 
@@ -172,14 +236,68 @@ describe("handleDocsSearchRequest", () => {
       status: 200,
       text: async () =>
         JSON.stringify({
-          output: [
+          data: [
             null,
-            { type: "other_call", results: [] },
-            { type: "file_search_call", results: "bad-shape" },
+            "bad-shape",
+            {
+              file_id: "   ",
+              filename: "  ",
+              score: "n/a",
+              content: [{ nope: true }, { text: "   " }, { text: "x".repeat(500) }],
+              attributes: {
+                path: "docs/setup",
+                slug: "self-hosted/chat-api",
+              },
+            },
+            {
+              file_id: "file_2",
+              filename: "index.mdx",
+              score: 0.88,
+              attributes: {},
+            },
+          ],
+        }),
+    });
+
+    const reply = createReply();
+    await handleDocsSearchRequest(buildRequest({ query: "setup" }), reply);
+
+    expect(reply.send).toHaveBeenCalledWith({
+      query: "setup",
+      count: 2,
+      results: [
+        {
+          fileId: null,
+          filename: null,
+          score: null,
+          snippet: `${"x".repeat(420)}...`,
+          path: "docs/setup",
+          slug: "self-hosted/chat-api",
+          url: "https://docs.co.build/self-hosted/chat-api",
+        },
+        {
+          fileId: "file_2",
+          filename: "index.mdx",
+          score: 0.88,
+          snippet: null,
+          path: null,
+          slug: null,
+          url: null,
+        },
+      ],
+    });
+  });
+
+  it("extracts snippets from legacy content arrays and normalizes slug/url", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          output: [
             {
               type: "file_search_call",
               results: [
-                null,
                 {
                   file_id: "   ",
                   filename: "  ",

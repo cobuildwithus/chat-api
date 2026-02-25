@@ -43,6 +43,7 @@ Source: `src/api/chat/schema.ts`.
 
 - Requires body: `query`
 - Optional body: `limit` (`1..20`)
+- Upstream dependency: OpenAI vector store search API (`/v1/vector_stores/{id}/search`)
 
 ### `POST /api/buildbot/tools/get-user`
 

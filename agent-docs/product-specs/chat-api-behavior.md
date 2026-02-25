@@ -58,7 +58,7 @@ Request body:
 - optional: `limit` (number, `1..20`)
 
 Behavior:
-- executes OpenAI Responses API file search against `DOCS_VECTOR_STORE_ID`
+- executes OpenAI vector store search against `DOCS_VECTOR_STORE_ID`
 - returns `{ query, count, results[] }` with snippet + metadata per hit
 - does not require chat-user auth headers; endpoint is additive and read-only
 

@@ -15,8 +15,7 @@ type DocsSearchResult = {
   url: string | null;
 };
 
-const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
-const OPENAI_MODEL = "gpt-5-mini-2025-08-07";
+const OPENAI_VECTOR_STORES_URL = "https://api.openai.com/v1/vector_stores";
 const DEFAULT_LIMIT = 8;
 const ERROR_MAX_LENGTH = 140;
 const SNIPPET_MAX_LENGTH = 420;
@@ -77,31 +76,47 @@ function buildDocsUrl(slug: string | null): string | null {
   return `${DOCS_BASE_URL}${normalized}`;
 }
 
-function extractDocsSearchResults(payload: unknown): DocsSearchResult[] {
+function getRawSearchEntries(payload: unknown): Record<string, unknown>[] {
   if (!isRecord(payload)) return [];
+
+  const data = payload.data;
+  if (Array.isArray(data)) {
+    return data.filter((entry): entry is Record<string, unknown> => isRecord(entry));
+  }
+
+  // Backward compatibility for Responses API file_search payloads.
   const output = payload.output;
   if (!Array.isArray(output)) return [];
 
-  const results: DocsSearchResult[] = [];
+  const entries: Record<string, unknown>[] = [];
   for (const item of output) {
     if (!isRecord(item) || item.type !== "file_search_call") continue;
     const callResults = item.results;
     if (!Array.isArray(callResults)) continue;
-
     for (const rawEntry of callResults) {
       if (!isRecord(rawEntry)) continue;
-      const attributes = isRecord(rawEntry.attributes) ? rawEntry.attributes : {};
-      const slug = asString(attributes.slug);
-      results.push({
-        fileId: asString(rawEntry.file_id),
-        filename: asString(rawEntry.filename),
-        score: asNumber(rawEntry.score),
-        snippet: getTextSnippet(rawEntry),
-        path: asString(attributes.path),
-        slug,
-        url: buildDocsUrl(slug),
-      });
+      entries.push(rawEntry);
     }
+  }
+
+  return entries;
+}
+
+function extractDocsSearchResults(payload: unknown): DocsSearchResult[] {
+  const entries = getRawSearchEntries(payload);
+  const results: DocsSearchResult[] = [];
+  for (const rawEntry of entries) {
+    const attributes = isRecord(rawEntry.attributes) ? rawEntry.attributes : {};
+    const slug = asString(attributes.slug);
+    results.push({
+      fileId: asString(rawEntry.file_id),
+      filename: asString(rawEntry.filename),
+      score: asNumber(rawEntry.score),
+      snippet: getTextSnippet(rawEntry),
+      path: asString(attributes.path),
+      slug,
+      url: buildDocsUrl(slug),
+    });
   }
 
   return results;
@@ -129,36 +144,28 @@ export async function handleDocsSearchRequest(
   const limit = request.body.limit ?? DEFAULT_LIMIT;
 
   try {
-    const response = await fetch(OPENAI_RESPONSES_URL, {
+    const response = await fetch(`${OPENAI_VECTOR_STORES_URL}/${encodeURIComponent(vectorStoreId)}/search`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: OPENAI_MODEL,
-        input: query,
-        tools: [
-          {
-            type: "file_search",
-            vector_store_ids: [vectorStoreId],
-            max_num_results: limit,
-          },
-        ],
-        include: ["file_search_call.results"],
+        query,
+        max_num_results: limit,
       }),
     });
 
     const responseText = await response.text();
     if (!response.ok) {
-      throw new Error(`OpenAI docs search request failed with status ${response.status}`);
+      throw new Error(`OpenAI vector store search request failed with status ${response.status}`);
     }
 
     let payload: unknown = null;
     try {
       payload = responseText ? JSON.parse(responseText) : null;
     } catch {
-      throw new Error("OpenAI docs search returned invalid JSON.");
+      throw new Error("OpenAI vector store search returned invalid JSON.");
     }
 
     const results = extractDocsSearchResults(payload);
@@ -173,4 +180,3 @@ export async function handleDocsSearchRequest(
     });
   }
 }
-

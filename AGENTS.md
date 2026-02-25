@@ -43,6 +43,8 @@ If instructions still conflict after applying this order, ask the user before ac
 
 - Before implementation, do a quick assumptions check; ask only for high-impact clarifications.
 - Continue working in the current tree even when unrelated external dirty changes appear.
+- Do not pause for approval on unrelated concurrent edits; continue and commit your scoped files.
+- Escalate only when the same file/symbol ownership conflicts, when changes would overwrite another agent's logic, or when risk is materially high.
 - Never revert, delete, or rewrite existing edits you did not make unless the user explicitly asks.
 - If unrelated breakage appears in files you did not touch, continue your scoped work unless your changes caused it.
 - If architecture-significant behavior changes, update matching docs in `agent-docs/`.

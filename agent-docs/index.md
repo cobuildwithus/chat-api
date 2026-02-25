@@ -14,9 +14,9 @@ This index is the table of contents for durable, repository-local context that a
 | `agent-docs/design-docs/index.md` | Index for durable design/principles docs. | `agent-docs/design-docs/**` | Chat API Maintainer | Monthly | Medium | 2026-02-25 |
 | `agent-docs/design-docs/core-beliefs.md` | Core beliefs for agent-first repository operations. | Team process + architecture decisions | Chat API Maintainer | Quarterly | Medium | 2026-02-25 |
 | `agent-docs/product-specs/index.md` | Index for product/API behavior constraints. | `agent-docs/product-specs/**` | Chat API Maintainer | Monthly | High | 2026-02-25 |
-| `agent-docs/product-specs/chat-api-behavior.md` | Contract-level API behavior and compatibility constraints. | `src/api/**`, `src/chat/**`, tests | Chat API Maintainer | Per behavior-change PR | High | 2026-02-25 |
+| `agent-docs/product-specs/chat-api-behavior.md` | Contract-level API behavior and compatibility constraints. | `src/api/**`, `src/chat/**`, tests, route handlers | Chat API Maintainer | Per behavior-change PR | High | 2026-02-25 |
 | `agent-docs/references/README.md` | Overview of internal and external reference packs. | `agent-docs/references/**` | Chat API Maintainer | Monthly | Medium | 2026-02-25 |
-| `agent-docs/references/api-contracts.md` | Route schemas, runtime responses, and schema/runtime gaps. | `src/api/chat/schema.ts`, handlers | Chat API Maintainer | Per route/schema change | High | 2026-02-25 |
+| `agent-docs/references/api-contracts.md` | Route schemas, runtime responses, and schema/runtime gaps. | `src/api/**/schema.ts`, handlers | Chat API Maintainer | Per route/schema change | High | 2026-02-25 |
 | `agent-docs/references/runtime-ai-flow.md` | End-to-end request -> agent -> stream execution flow. | `src/api/chat/**`, `src/ai/**` | Chat API Maintainer | Per runtime flow change | High | 2026-02-25 |
 | `agent-docs/references/tool-catalog.md` | Tool-by-tool contract, dependencies, and failure behavior. | `src/ai/tools/**`, `src/infra/**` | Chat API Maintainer | Per tool behavior change | High | 2026-02-25 |
 | `agent-docs/references/data-infra-map.md` | Postgres/Redis/cache/timeout architecture and invariants. | `src/infra/**`, `src/config/env.ts` | Chat API Maintainer | Per infra/config change | High | 2026-02-25 |

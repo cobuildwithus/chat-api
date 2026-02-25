@@ -86,7 +86,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 
 1. Parse request body (`query`, optional `limit`).
 2. Verify docs-search configuration (`DOCS_VECTOR_STORE_ID`, `OPENAI_API_KEY`).
-3. Execute OpenAI Responses API request with `file_search`.
+3. Execute OpenAI vector store search request against `DOCS_VECTOR_STORE_ID`.
 4. Return normalized docs hits (`query`, `count`, `results`).
 
 ### POST `/api/buildbot/tools/get-user`
