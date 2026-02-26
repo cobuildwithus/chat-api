@@ -49,8 +49,8 @@ importers:
         version: 4.3.5
     devDependencies:
       '@cobuild/review-gpt':
-        specifier: ^0.2.2
-        version: 0.2.2
+        specifier: ^0.2.3
+        version: 0.2.3
       '@tsconfig/recommended':
         specifier: ^1.0.1
         version: 1.0.13
@@ -130,8 +130,8 @@ packages:
   '@borewit/text-codec@0.2.1':
     resolution: {integrity: sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw==}
 
-  '@cobuild/review-gpt@0.2.2':
-    resolution: {integrity: sha512-v26hVQgosb5MZXT/mBRf9ZaGlduq2576XPukkuBADvlOPwWqdVYT2Ob4/g+aa3n+ZmibTDnnG3OOeZHkz68+UA==}
+  '@cobuild/review-gpt@0.2.3':
+    resolution: {integrity: sha512-eCJvZ3hAQ7toqE+GupxAqO0q7NHchXYk86Q/Fw/LsS5HWhu/A+oeTc1mMa8uD3r6tyJgVSFmgZau7OBaB6GBnw==}
     hasBin: true
 
   '@esbuild/aix-ppc64@0.21.5':
@@ -2225,7 +2225,7 @@ snapshots:
 
   '@borewit/text-codec@0.2.1': {}
 
-  '@cobuild/review-gpt@0.2.2': {}
+  '@cobuild/review-gpt@0.2.3': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true

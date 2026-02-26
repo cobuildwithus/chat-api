@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-02-25 (security hardening + trusted-id + internal-key rename)
+Last verified: 2026-02-26 (review-gpt 0.2.3 rollout + active plan refresh)
 
 ## Purpose
 
@@ -44,4 +44,4 @@ This index is the table of contents for durable, repository-local context that a
 - Buildbot tools auth/rate-limit prehandler ordering changes require updates to Architecture + Security + API Contracts docs in the same change.
 - For multi-file/high-risk work, add a plan in `agent-docs/exec-plans/active/`.
 - Keep `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` current during active coding work.
-- Current active plan example: `agent-docs/exec-plans/active/2026-02-25-buildbot-tools-rate-limit-hardening.md`.
+- Current active plan example: `agent-docs/exec-plans/active/2026-02-26-review-gpt-cli-0-2-3-rollout.md`.
