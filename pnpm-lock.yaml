@@ -49,8 +49,8 @@ importers:
         version: 4.3.5
     devDependencies:
       '@cobuild/review-gpt':
-        specifier: ^0.2.6
-        version: 0.2.6
+        specifier: ^0.2.7
+        version: 0.2.7
       '@tsconfig/recommended':
         specifier: ^1.0.1
         version: 1.0.13
@@ -133,8 +133,8 @@ packages:
   '@borewit/text-codec@0.2.1':
     resolution: {integrity: sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw==}
 
-  '@cobuild/review-gpt@0.2.6':
-    resolution: {integrity: sha512-esvAPY7J9/I6rVEtt7Vj5hYbCI219WMdn5R2pzXYmTp2aLHivHbmTYXSw1RkDLRbemKJVaj0LF72NkGqvpSyEw==}
+  '@cobuild/review-gpt@0.2.7':
+    resolution: {integrity: sha512-KtkyovdaRci2zXwjiSXFEOJa5F5KOdpleIBC+4nL5UapzOlN8AktSKUG8yQ2wdF7mcP3XpezFpba/eMXNTdRcQ==}
     hasBin: true
 
   '@esbuild/aix-ppc64@0.21.5':
@@ -907,6 +907,7 @@ packages:
   basic-ftp@5.1.0:
     resolution: {integrity: sha512-RkaJzeJKDbaDWTIPiJwubyljaEPwpVWkm9Rt5h9Nd6h7tEXTJ3VB4qxdZBioV7JO5yLUaOKwz7vDOzlncUsegw==}
     engines: {node: '>=10.0.0'}
+    deprecated: Security vulnerability fixed in 5.2.0, please upgrade
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
@@ -2233,7 +2234,7 @@ snapshots:
 
   '@borewit/text-codec@0.2.1': {}
 
-  '@cobuild/review-gpt@0.2.6': {}
+  '@cobuild/review-gpt@0.2.7': {}
 
   '@esbuild/aix-ppc64@0.21.5':
     optional: true
