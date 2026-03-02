@@ -1,18 +1,19 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ModelMessage } from "ai";
 import { getUser } from "../../../src/ai/tools/get-user/get-user";
-import { farcasterProfiles } from "../../../src/infra/db/schema";
-import { queueCobuildDbResponse, resetAllMocks, setCobuildDbResponse } from "../../utils/mocks/db";
+import { executeTool } from "../../../src/api/tools/registry";
+
+vi.mock("../../../src/api/tools/registry", () => ({
+  executeTool: vi.fn(),
+}));
 
 describe("getUser tool", () => {
-  beforeEach(() => {
-    resetAllMocks();
-  });
-
-  it("returns exact match user details", async () => {
-    setCobuildDbResponse(farcasterProfiles, [
-      { fid: 1, fname: "alice", verifiedAddresses: ["0xabc"] },
-    ]);
+  it("returns canonical tool output", async () => {
+    vi.mocked(executeTool).mockResolvedValue({
+      ok: true,
+      name: "get-user",
+      output: { fid: 1, fname: "alice", addresses: ["0xabc"] },
+    });
 
     const context: { toolCallId: string; messages: ModelMessage[] } = {
       toolCallId: "tool",
@@ -20,22 +21,22 @@ describe("getUser tool", () => {
     };
     const result = await getUser.execute!({ fname: "alice" }, context);
     expect(result).toEqual({ fid: 1, fname: "alice", addresses: ["0xabc"] });
+    expect(executeTool).toHaveBeenCalledWith("get-user", { fname: "alice" });
   });
 
-  it("returns fuzzy matches when exact match is missing", async () => {
-    queueCobuildDbResponse(farcasterProfiles, []);
-    queueCobuildDbResponse(farcasterProfiles, [
-      { fid: 2, fname: "alice2", verifiedAddresses: [] },
-    ]);
+  it("returns canonical tool errors as structured output", async () => {
+    vi.mocked(executeTool).mockResolvedValue({
+      ok: false,
+      name: "get-user",
+      statusCode: 400,
+      error: "fname must not be empty.",
+    });
 
     const context: { toolCallId: string; messages: ModelMessage[] } = {
       toolCallId: "tool",
       messages: [],
     };
-    const result = await getUser.execute!({ fname: "ali" }, context);
-    expect(result).toEqual({
-      usedLikeQuery: true,
-      users: [{ fid: 2, fname: "alice2", verifiedAddresses: [] }],
-    });
+    const result = await getUser.execute!({ fname: "" }, context);
+    expect(result).toEqual({ error: "fname must not be empty." });
   });
 });

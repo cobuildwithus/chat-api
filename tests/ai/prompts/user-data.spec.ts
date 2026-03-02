@@ -34,6 +34,8 @@ describe("getUserDataPrompt", () => {
       bio: "bio",
       verifiedAddresses: ["0xabc"],
       manualVerifiedAddresses: [],
+      neynarUserScore: null,
+      hiddenAt: null,
       updatedAt: new Date(),
     } as FarcasterProfile);
 

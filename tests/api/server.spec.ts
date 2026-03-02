@@ -85,58 +85,30 @@ describe("setupServer", () => {
     const corsCall = serverMock.register.mock.calls.find((call) => call[0] === corsMock);
     expect(corsCall?.[1]?.origin).toEqual(["https://a.com", "https://b.com"]);
     expect(registerRequestLoggingMock).toHaveBeenCalledWith(serverMock);
-    expect(serverMock.post).toHaveBeenCalledTimes(8);
-    expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/docs/search")).toBe(true);
-    const docsSearchCall = serverMock.post.mock.calls.find((call) => call[0] === "/api/docs/search");
-    const docsSearchOptions = docsSearchCall?.[1] as {
-      preHandler?: Array<{ name?: string }>;
-      schema?: object;
-    };
-    expect(docsSearchOptions?.schema).toBeTruthy();
-    expect(Array.isArray(docsSearchOptions?.preHandler)).toBe(true);
-    expect(docsSearchOptions?.preHandler?.map((handler) => handler.name)).toEqual([
-      "enforceBuildBotToolsInternalServiceAuth",
-      "enforceDocsSearchRateLimit",
-    ]);
+    expect(serverMock.post).toHaveBeenCalledTimes(3);
+    expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/docs/search")).toBe(false);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/get-user")).toBe(
-      true,
+      false,
     );
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/get-cast")).toBe(
-      true,
+      false,
     );
     expect(
-      serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/cast-preview"),
-    ).toBe(true);
-    expect(
       serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/cobuild-ai-context"),
-    ).toBe(true);
+    ).toBe(false);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/v1/tool-executions")).toBe(true);
-    const buildbotPaths = [
-      "/api/buildbot/tools/get-user",
-      "/api/buildbot/tools/get-cast",
-      "/api/buildbot/tools/cast-preview",
-      "/api/buildbot/tools/cobuild-ai-context",
-    ];
-    for (const path of buildbotPaths) {
-      const routeCall = serverMock.post.mock.calls.find((call) => call[0] === path);
-      const routeOptions = routeCall?.[1] as { preHandler?: Array<{ name?: string }>; schema?: object };
-      expect(routeOptions?.schema).toBeTruthy();
-      expect(Array.isArray(routeOptions?.preHandler)).toBe(true);
-      expect(routeOptions?.preHandler?.map((handler) => handler.name)).toEqual([
-        "enforceBuildBotToolsInternalServiceAuth",
-        "enforceBuildBotToolsRateLimit",
-      ]);
-    }
     const toolExecutionsCall = serverMock.post.mock.calls.find((call) => call[0] === "/v1/tool-executions");
     const toolExecutionsOptions = toolExecutionsCall?.[1] as {
       preHandler?: Array<{ name?: string }>;
       schema?: object;
+      bodyLimit?: number;
     };
     expect(toolExecutionsOptions?.schema).toBeTruthy();
     expect(Array.isArray(toolExecutionsOptions?.preHandler)).toBe(true);
     expect(toolExecutionsOptions?.preHandler?.map((handler) => handler.name)).toEqual([
-      "enforceBuildBotToolsInternalServiceAuth",
+      "enforceToolsBearerAuth",
     ]);
+    expect(toolExecutionsOptions?.bodyLimit).toBe(64 * 1024);
 
     expect(serverMock.get.mock.calls.some((call) => call[0] === "/v1/tools")).toBe(true);
     const toolsCall = serverMock.get.mock.calls.find((call) => call[0] === "/v1/tools");
@@ -147,10 +119,23 @@ describe("setupServer", () => {
     expect(toolsOptions?.schema).toBeTruthy();
     expect(Array.isArray(toolsOptions?.preHandler)).toBe(true);
     expect(toolsOptions?.preHandler?.map((handler) => handler.name)).toEqual([
-      "enforceBuildBotToolsInternalServiceAuth",
+      "enforceToolsBearerAuth",
     ]);
 
-    expect(serverMock.get).toHaveBeenCalledTimes(4);
+    expect(serverMock.get.mock.calls.some((call) => call[0] === "/v1/tools/:name")).toBe(true);
+    const toolByNameCall = serverMock.get.mock.calls.find((call) => call[0] === "/v1/tools/:name");
+    const toolByNameOptions = toolByNameCall?.[1] as {
+      preHandler?: Array<{ name?: string }>;
+      schema?: object;
+    };
+    expect(toolByNameOptions?.schema).toBeTruthy();
+    expect(Array.isArray(toolByNameOptions?.preHandler)).toBe(true);
+    expect(toolByNameOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+      "enforceToolsBearerAuth",
+    ]);
+
+    expect(serverMock.get.mock.calls.some((call) => call[0] === "/api/cobuild/ai-context")).toBe(true);
+    expect(serverMock.get).toHaveBeenCalledTimes(6);
     expect(serverMock.setErrorHandler).toHaveBeenCalledTimes(1);
   });
 

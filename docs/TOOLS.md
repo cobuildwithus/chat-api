@@ -1,7 +1,8 @@
 # Tools
 
-Tools are registered statically in `src/ai/tools/index.ts`.
-Each tool lives in its own folder with a `tool.ts` (and optionally a `prompt.ts`).
+Canonical REST tools are registered in `src/api/tools/registry.ts`.
+Model-invokable AI wrappers are registered statically in `src/ai/tools/index.ts`.
+Each AI wrapper lives in its own folder with a `tool.ts` (and optionally a `prompt.ts`).
 See [README.md](../README.md) for setup and [ARCHITECTURE.md](../ARCHITECTURE.md) for the module map.
 
 ## When to add a tool
@@ -36,7 +37,7 @@ export const myTool = {
 
 ## Registering a tool
 
-Add your tool to `src/ai/tools/index.ts` in the `defaultTools` array.
+Register the canonical tool in `src/api/tools/registry.ts`, then add an AI wrapper in `src/ai/tools/index.ts` if the model should invoke it directly.
 Keep the order stable unless behavior explicitly needs to change.
 
 ## Prompt guidance

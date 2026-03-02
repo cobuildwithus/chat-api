@@ -1,21 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ModelMessage } from "ai";
 import { getCastTool } from "../../../src/ai/tools/get-cast/get-cast";
-import { getNeynarClient } from "../../../src/infra/neynar/client";
+import { executeTool } from "../../../src/api/tools/registry";
 
-vi.mock("../../../src/infra/neynar/client", () => ({
-  getNeynarClient: vi.fn(),
+vi.mock("../../../src/api/tools/registry", () => ({
+  executeTool: vi.fn(),
 }));
 
 describe("getCastTool", () => {
-  it("returns cast data on success", async () => {
-    const lookupCastByHashOrUrl = vi.fn().mockResolvedValue({
-      cast: { hash: "0xabc" },
+  it("returns canonical tool output", async () => {
+    vi.mocked(executeTool).mockResolvedValue({
+      ok: true,
+      name: "get-cast",
+      output: { hash: "0xabc" },
     });
-    const neynarClient = { lookupCastByHashOrUrl } as unknown as NonNullable<
-      ReturnType<typeof getNeynarClient>
-    >;
-    vi.mocked(getNeynarClient).mockReturnValue(neynarClient);
 
     const input = { identifier: "0xabc", type: "hash" } as const;
     const context: { toolCallId: string; messages: ModelMessage[] } = {
@@ -24,36 +22,24 @@ describe("getCastTool", () => {
     };
     const result = await getCastTool.tool.execute!(input, context);
     expect(result).toEqual({ hash: "0xabc" });
+    expect(executeTool).toHaveBeenCalledWith("get-cast", input);
   });
 
-  it("returns null on error", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const lookupCastByHashOrUrl = vi.fn().mockRejectedValue(new Error("fail"));
-    const neynarClient = { lookupCastByHashOrUrl } as unknown as NonNullable<
-      ReturnType<typeof getNeynarClient>
-    >;
-    vi.mocked(getNeynarClient).mockReturnValue(neynarClient);
+  it("returns canonical tool errors as structured output", async () => {
+    vi.mocked(executeTool).mockResolvedValue({
+      ok: false,
+      name: "get-cast",
+      statusCode: 404,
+      error: "Cast not found.",
+    });
 
-    const input = { identifier: "0xabc", type: "hash" } as const;
+    const input = { identifier: "0xmissing", type: "hash" } as const;
     const context: { toolCallId: string; messages: ModelMessage[] } = {
       toolCallId: "tool",
       messages: [],
     };
     const result = await getCastTool.tool.execute!(input, context);
-    expect(result).toBeNull();
-    errorSpy.mockRestore();
-  });
-
-  it("returns an error when api key is missing", async () => {
-    vi.mocked(getNeynarClient).mockReturnValue(null);
-
-    const input = { identifier: "0xabc", type: "hash" } as const;
-    const context: { toolCallId: string; messages: ModelMessage[] } = {
-      toolCallId: "tool",
-      messages: [],
-    };
-    const result = await getCastTool.tool.execute!(input, context);
-    expect(result).toEqual({ error: "Neynar API key is not configured." });
+    expect(result).toEqual({ error: "Cast not found." });
   });
 
   it("returns the tool prompt", async () => {

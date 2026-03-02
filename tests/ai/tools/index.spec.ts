@@ -27,6 +27,10 @@ describe("tools index", () => {
     expect(module.defaultTools.some((tool) => tool.name === "file_search")).toBe(true);
     expect(fileSearch).toHaveBeenCalledWith({ vectorStoreIds: ["vector-store"], maxNumResults: 8 });
     expect(module.toolsByName.getUser).toBeDefined();
+    expect(module.toolsByName.listDiscussions).toBeDefined();
+    expect(module.toolsByName.getDiscussionThread).toBeDefined();
+    expect(module.toolsByName.semanticSearchCasts).toBeDefined();
+    expect(module.toolsByName.replyToCast).toBeDefined();
   });
 
   it("omits docs tool when vector store id is missing", async () => {

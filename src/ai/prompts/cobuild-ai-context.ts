@@ -1,19 +1,17 @@
-import { COBUILD_AI_CONTEXT_URL, getCobuildAiContextSnapshot } from "../../infra/cobuild-ai-context";
+import { getCobuildAiContextSnapshot } from "../../infra/cobuild-ai-context";
 
 export async function cobuildAiContextPrompt(): Promise<string> {
   const { data, error } = await getCobuildAiContextSnapshot();
   if (!data) {
-    return `Cobuild live stats unavailable: ${error ?? "unknown error"}.`;
+    return `Treasury stats unavailable: ${error ?? "unknown error"}.`;
   }
-
   const promptText =
     typeof data.prompt === "string" && data.prompt.trim().length > 0
       ? data.prompt
       : "Unavailable.";
 
   return [
-    "# Cobuild live stats (snapshot)",
-    `Source: ${COBUILD_AI_CONTEXT_URL}`,
+    "# Treasury stats (snapshot)",
     "",
     "## API prompt (verbatim)",
     promptText,
@@ -23,6 +21,6 @@ export async function cobuildAiContextPrompt(): Promise<string> {
     JSON.stringify(data, null, 2),
     "```",
     "",
-    "Use the getCobuildAiContext tool to refresh when you need the most recent data.",
+    "Use the get-treasury-stats tool to refresh when you need the most recent data.",
   ].join("\n");
 }

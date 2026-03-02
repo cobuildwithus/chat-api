@@ -38,7 +38,7 @@ export async function handleChatPostRequest(
   try {
     const body = request.body as ChatBody;
     const { messages, type, context, data = {}, clientMessageId } = body;
-    const includeCobuildAiContextPrompt = context === undefined;
+    const includeCobuildAiContextPrompt = false;
     const user = getChatUserOrThrow();
     const chatId = body.id;
     const grantHeader = request.headers?.["x-chat-grant"];

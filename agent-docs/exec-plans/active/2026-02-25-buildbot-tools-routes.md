@@ -6,8 +6,7 @@ Expose buildbot tools 1-4 via chat-api routes with schema validation, route-leve
 ## Scope
 - Add `/api/buildbot/tools/get-user`
 - Add `/api/buildbot/tools/get-cast`
-- Add `/api/buildbot/tools/cast-preview`
-- Add `/api/buildbot/tools/cobuild-ai-context`
+- Add `/api/buildbot/tools/get-treasury-stats`
 - Wire routes in server setup and add validation schemas
 - Add and update tests for route behavior and registration
 - Update architecture and API contract docs

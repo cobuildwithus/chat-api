@@ -108,10 +108,6 @@ export function validateEnvVariables() {
   if (!selfHosted && env.NODE_ENV === "production" && !env.PRIVY_VERIFICATION_KEY) {
     throw new Error("Missing required env in production: PRIVY_VERIFICATION_KEY");
   }
-  const internalServiceKey = env.CHAT_INTERNAL_SERVICE_KEY ?? env.BUILD_BOT_TOOLS_INTERNAL_KEY;
-  if (env.NODE_ENV === "production" && !internalServiceKey) {
-    throw new Error("Missing required env in production: CHAT_INTERNAL_SERVICE_KEY");
-  }
   return env;
 }
 

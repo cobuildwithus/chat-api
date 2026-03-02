@@ -37,6 +37,7 @@ Primary path: `POST /api/chat` in `src/api/chat/route.ts`.
 ## Tool Integration Notes
 
 - Tools are registered once in `defaultTools`.
+- Discussion tools now include list/thread/semantic search and guarded reply publishing wrappers.
 - Docs vector-store tool is conditionally included by env.
 - Web search and file-search tool outputs are surfaced in the streamed response metadata.
 

@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-02-25
+Last updated: 2026-03-02
 
 See `README.md` for setup/deployment and `docs/TOOLS.md` for tool contribution steps. The canonical docs map is `agent-docs/index.md`.
 
@@ -27,8 +27,8 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 - optional debug request logging
 - optional request rate limiting
 - CORS
-- chat routes + docs search route + `/healthz`
-- buildbot tools routes (`/api/buildbot/tools/*`) guarded by internal service header auth
+- chat routes
+- canonical tools routes (`/v1/tools`, `/v1/tools/:name`, `/v1/tool-executions`) guarded by bearer PAT auth
 - global error handler
 4. Process handlers (`SIGTERM`, `SIGINT`, `uncaughtException`, `unhandledRejection`) close server, DB, and Redis in controlled order.
 
@@ -83,44 +83,23 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 4. Issue refreshed `x-chat-grant`.
 5. Return chat payload and messages.
 
-### POST `/api/docs/search`
+### GET `/v1/tools`
 
-1. Verify internal service authorization via `x-chat-internal-key`.
-2. Enforce route-local docs-search rate limit (Redis-backed window counter).
-3. Parse request body (`query`, optional `limit`).
-4. Verify docs-search configuration (`DOCS_VECTOR_STORE_ID`, `OPENAI_API_KEY`).
-5. Execute OpenAI vector store search request against `DOCS_VECTOR_STORE_ID` with timeout-bounded fetch.
-6. Return normalized docs hits (`query`, `count`, `results`).
+1. Verify bearer token authorization (`Authorization: Bearer <bbt_...>`).
+2. Return canonical tool metadata catalog from shared registry.
 
-### POST `/api/buildbot/tools/get-user`
+### GET `/v1/tools/:name`
 
-1. Verify internal service authorization via `x-chat-internal-key`.
-2. Enforce route-local buildbot tools rate limit (Redis-backed window counter).
-3. Parse username (`fname`) input.
-4. Resolve Farcaster profile data with Redis lock-backed cache.
-5. Return exact profile match or fuzzy candidates.
+1. Verify bearer token authorization (`Authorization: Bearer <bbt_...>`).
+2. Resolve tool metadata by canonical name or alias.
+3. Return `404` if tool is unknown.
 
-### POST `/api/buildbot/tools/get-cast`
+### POST `/v1/tool-executions`
 
-1. Verify internal service authorization via `x-chat-internal-key`.
-2. Enforce route-local buildbot tools rate limit.
-3. Parse cast identifier input (`hash` or `url`).
-4. Read from short Redis cache; on miss call Neynar lookup with timeout guard.
-5. Return cast payload or not-found/config/upstream error.
-
-### POST `/api/buildbot/tools/cast-preview`
-
-1. Verify internal service authorization via `x-chat-internal-key`.
-2. Enforce route-local buildbot tools rate limit.
-3. Validate cast preview payload (`text`, optional `embeds`, optional `parent`).
-4. Return normalized preview payload (`no-store` response).
-
-### POST `/api/buildbot/tools/cobuild-ai-context`
-
-1. Verify internal service authorization via `x-chat-internal-key`.
-2. Enforce route-local buildbot tools rate limit.
-3. Return cached Cobuild AI context snapshot from Redis-backed cache.
-4. Surface upstream snapshot fetch failures as `502`.
+1. Verify bearer token authorization (`Authorization: Bearer <bbt_...>`).
+2. Parse execution request (`name`, optional `input`).
+3. Resolve tool from canonical registry and execute shared tool executor.
+4. Return normalized success (`{ ok, name, output }`) or structured error.
 
 ## AI Layer
 
@@ -129,6 +108,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 - Prompt assembly: `src/ai/utils/agent-prompts.ts`.
 - Stream preparation: `src/api/chat/chat-helpers.ts`.
 - Tool registry: `src/ai/tools/index.ts` and `src/ai/tools/tool.ts`.
+- Canonical REST tool execution: `src/api/tools/registry.ts` (includes Farcaster discussion list/thread/semantic search and guarded reply publishing).
 
 ## Data + Infra Layer
 
@@ -165,8 +145,6 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 
 - Request-level limiter (optional, Fastify).
 - Production defaults keep request-level limiter enabled unless explicitly disabled.
-- Docs-search route-local limiter (Redis window counter with `Retry-After`).
-- Buildbot-tools route-local limiter (always-on Redis window counter with `Retry-After`).
 - Usage-level limiter (Redis sorted-set windows).
 - Pending-message reconciliation on stream success/failure.
 - Primary-safe reads for read-after-write in title generation path.

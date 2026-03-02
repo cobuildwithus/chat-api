@@ -136,8 +136,10 @@ psql "$POSTGRES_URL" -f migrations/0001_minimal_chat.sql
 ```
 
 Notes:
-- The `farcaster.profiles` table is required for the `getUser` tool and user data prompt.
-- If you do not plan to use Farcaster tools, you can still create it empty.
+- The `farcaster.profiles` table is required for `getUser` and discussion author metadata.
+- The `farcaster.casts` table is required for `list-discussions`, `get-discussion-thread`, and `semantic-search-casts`.
+- `farcaster.casts.text_embedding` must be `vector(256)` for semantic search.
+- If you do not plan to use Farcaster tools, these tables can remain empty.
 Migration file: [migrations/0001_minimal_chat.sql](https://github.com/cobuildwithus/chat-api/blob/main/migrations/0001_minimal_chat.sql)
 
 ## Tests

@@ -7,16 +7,13 @@ import { handleChatCreateRequest } from "./chat/create";
 import { handleChatGetRequest } from "./chat/get";
 import { handleChatListRequest } from "./chat/list";
 import { handleChatPostRequest } from "./chat/route";
-import { enforceDocsSearchRateLimit, handleDocsSearchRequest } from "./docs/search";
+import { handleCobuildAiContextRequest } from "./cobuild-ai-context/route";
+import { enforceToolsBearerAuth } from "./tools/internal-auth";
 import {
-  enforceBuildBotToolsInternalServiceAuth,
-  enforceBuildBotToolsRateLimit,
-  handleBuildBotToolsCastPreviewRequest,
-  handleBuildBotToolsCobuildAiContextRequest,
-  handleBuildBotToolsGetCastRequest,
-  handleBuildBotToolsGetUserRequest,
-} from "./buildbot-tools/route";
-import { handleToolExecutionRequest, handleToolsListRequest } from "./tools/route";
+  handleToolExecutionRequest,
+  handleToolMetadataRequest,
+  handleToolsListRequest,
+} from "./tools/route";
 import { validateChatUser } from "./auth/validate-chat-user";
 import {
   chatCreateSchema,
@@ -24,14 +21,7 @@ import {
   chatListSchema,
   chatSchema,
 } from "./chat/schema";
-import { docsSearchSchema } from "./docs/schema";
-import {
-  buildBotToolsCastPreviewSchema,
-  buildBotToolsCobuildAiContextSchema,
-  buildBotToolsGetCastSchema,
-  buildBotToolsGetUserSchema,
-} from "./buildbot-tools/schema";
-import { toolExecutionSchema, toolsListSchema } from "./tools/schema";
+import { toolExecutionSchema, toolMetadataSchema, toolsListSchema } from "./tools/schema";
 import { getRateLimitConfig } from "../config/env";
 import { handleError } from "./server-helpers";
 import { registerRequestLogging } from "./request-logger";
@@ -55,6 +45,7 @@ const applyServerTimeouts = (server: FastifyInstance["server"]) => {
 };
 
 const IP_RATE_LIMIT_MULTIPLIER = 3;
+const TOOL_EXECUTIONS_BODY_LIMIT_BYTES = 64 * 1024;
 
 const getAllowedOrigins = () => {
   const raw = process.env.CHAT_ALLOWED_ORIGINS;
@@ -115,6 +106,7 @@ export const setupServer = async () => {
     origin: getAllowedOrigins(),
     credentials: true,
     allowedHeaders: [
+      "authorization",
       "content-type",
       "privy-id-token",
       "x-chat-grant",
@@ -134,67 +126,34 @@ export const setupServer = async () => {
     handleChatPostRequest,
   );
 
-  server.post(
-    "/api/docs/search",
-    {
-      preHandler: [enforceBuildBotToolsInternalServiceAuth, enforceDocsSearchRateLimit],
-      schema: docsSearchSchema,
-    },
-    handleDocsSearchRequest,
-  );
+  server.get("/api/cobuild/ai-context", handleCobuildAiContextRequest);
 
   server.post(
-    "/api/buildbot/tools/get-user",
+    "/v1/tool-executions",
     {
-      preHandler: [enforceBuildBotToolsInternalServiceAuth, enforceBuildBotToolsRateLimit],
-      schema: buildBotToolsGetUserSchema,
+      preHandler: [enforceToolsBearerAuth],
+      schema: toolExecutionSchema,
+      bodyLimit: TOOL_EXECUTIONS_BODY_LIMIT_BYTES,
     },
-    handleBuildBotToolsGetUserRequest,
-  );
-
-  server.post(
-    "/api/buildbot/tools/get-cast",
-    {
-      preHandler: [enforceBuildBotToolsInternalServiceAuth, enforceBuildBotToolsRateLimit],
-      schema: buildBotToolsGetCastSchema,
-    },
-    handleBuildBotToolsGetCastRequest,
-  );
-
-  server.post(
-    "/api/buildbot/tools/cast-preview",
-    {
-      preHandler: [enforceBuildBotToolsInternalServiceAuth, enforceBuildBotToolsRateLimit],
-      schema: buildBotToolsCastPreviewSchema,
-    },
-    handleBuildBotToolsCastPreviewRequest,
-  );
-
-  server.post(
-    "/api/buildbot/tools/cobuild-ai-context",
-    {
-      preHandler: [enforceBuildBotToolsInternalServiceAuth, enforceBuildBotToolsRateLimit],
-      schema: buildBotToolsCobuildAiContextSchema,
-    },
-    handleBuildBotToolsCobuildAiContextRequest,
+    handleToolExecutionRequest,
   );
 
   server.get(
     "/v1/tools",
     {
-      preHandler: [enforceBuildBotToolsInternalServiceAuth],
+      preHandler: [enforceToolsBearerAuth],
       schema: toolsListSchema,
     },
     handleToolsListRequest,
   );
 
-  server.post(
-    "/v1/tool-executions",
+  server.get(
+    "/v1/tools/:name",
     {
-      preHandler: [enforceBuildBotToolsInternalServiceAuth],
-      schema: toolExecutionSchema,
+      preHandler: [enforceToolsBearerAuth],
+      schema: toolMetadataSchema,
     },
-    handleToolExecutionRequest,
+    handleToolMetadataRequest,
   );
 
   server.get("/source", async (_request, reply) => {

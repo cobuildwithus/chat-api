@@ -154,7 +154,7 @@ describe("env helpers", () => {
     );
   });
 
-  it("requires chat internal service key in production", () => {
+  it("does not require chat internal service key in production", () => {
     process.env = {
       ...process.env,
       ...baseEnv,
@@ -162,10 +162,8 @@ describe("env helpers", () => {
       PRIVY_VERIFICATION_KEY: "verification-key",
     };
     delete process.env.CHAT_INTERNAL_SERVICE_KEY;
-
-    expect(() => validateEnvVariables()).toThrow(
-      "Missing required env in production: CHAT_INTERNAL_SERVICE_KEY",
-    );
+    delete process.env.BUILD_BOT_TOOLS_INTERNAL_KEY;
+    expect(() => validateEnvVariables()).not.toThrow();
   });
 
   it("requires privy app id when not self-hosted", () => {

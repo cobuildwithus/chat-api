@@ -12,20 +12,16 @@
 1. Client -> API boundary (`src/api/**`)
 - Request schema validation
 - Header auth handling
-2. Interface backend -> buildbot tools boundary (`/api/buildbot/tools/*`)
-- Shared service header gate via `x-chat-internal-key`
-- Fail-closed semantics when internal key config is missing (`503`)
- - Config source: `CHAT_INTERNAL_SERVICE_KEY` (legacy fallback: `BUILD_BOT_TOOLS_INTERNAL_KEY`)
-3. Interface backend -> docs-search boundary (`/api/docs/search`)
-- Shared service header gate via `x-chat-internal-key`
-- Route-local Redis-backed throttling to cap OpenAI spend/DoS surface
-4. API -> Auth boundary (`src/api/auth/**`)
+2. Interface backend -> canonical tools boundary (`/v1/tools`, `/v1/tools/:name`, `/v1/tool-executions`)
+- Bearer PAT gate via `Authorization: Bearer <bbt_...>`
+- Invalid or missing bearer token returns `401`
+3. API -> Auth boundary (`src/api/auth/**`)
 - Privy JWT verification mode
 - Self-hosted header/shared-secret mode
-5. API -> Data boundary (`src/infra/db/**`, `src/infra/redis.ts`)
+4. API -> Data boundary (`src/infra/db/**`, `src/infra/redis.ts`)
 - Ownership checks
 - grant validation + issuance
-6. API -> External services (`OpenAI`, `Neynar`, `co.build`)
+5. API -> External services (`OpenAI`, `Neynar`, `co.build`)
 - timeout-bounded requests
 - constrained tool surfaces
 
@@ -59,7 +55,7 @@
 2. Are new headers/log fields introduced? If yes, verify redaction requirements.
 3. Are new external calls added? If yes, set explicit timeout and bounded error behavior.
 4. Are ownership checks preserved on all chat read/write paths?
-5. If internal service headers are introduced/changed, are they validated and redacted?
+5. If tool auth handling changes, are bearer tokens validated and redacted?
 
 ## Escalation
 

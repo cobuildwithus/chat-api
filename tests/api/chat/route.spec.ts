@@ -254,7 +254,7 @@ describe("handleChatPostRequest", () => {
       expect.objectContaining({ address: "0xabc0000000000000000000000000000000000000" }),
       {},
       undefined,
-      { includeCobuildAiContextPrompt: true },
+      { includeCobuildAiContextPrompt: false },
     );
 
     const options = streamTextMock.mock.calls[0]?.[0];

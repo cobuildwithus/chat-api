@@ -51,36 +51,41 @@ Behavior:
 - always emits refreshed `x-chat-grant`
 - returns `404` when inaccessible
 
-### POST `/api/docs/search`
-
-Request body:
-- required: `query` (string)
-- optional: `limit` (number, `1..20`)
+### GET `/v1/tools`
 
 Behavior:
-- requires internal service header `x-chat-internal-key`
-- enforces route-local docs-search rate limit (`429` + `Retry-After`)
-- executes OpenAI vector store search against `DOCS_VECTOR_STORE_ID`
-- returns `{ query, count, results[] }` with snippet + metadata per hit
+- requires bearer token `Authorization: Bearer <bbt_...>`
+- returns canonical registry metadata for all tools as `{ tools: [...] }`
 
 Error behavior:
-- `401` when internal service header is missing/invalid
-- `429` when docs-search route limit is exceeded
-- `503` when internal auth configuration is missing (`CHAT_INTERNAL_SERVICE_KEY`)
-- `400` for empty/whitespace query
-- `503` when docs search configuration is missing
-- `502` for upstream OpenAI failure or invalid upstream payload
+- `401` when bearer token is missing/invalid
 
-### POST `/api/buildbot/tools/get-user`
-### POST `/api/buildbot/tools/get-cast`
-### POST `/api/buildbot/tools/cast-preview`
-### POST `/api/buildbot/tools/cobuild-ai-context`
+### GET `/v1/tools/:name`
+
+Params:
+- required: `name` (canonical name or alias)
 
 Behavior:
-- require internal service header `x-chat-internal-key`
-- if internal key config is missing, return `503`
+- require bearer token `Authorization: Bearer <bbt_...>`
 - if header is missing or invalid, return `401`
-- when internal auth passes, preserve existing route-local behavior and payload semantics
+- returns canonical metadata as `{ tool: ... }` for registered tool names/aliases
+
+Error behavior:
+- `404` with `{ error: "Unknown tool \"...\"." }` when tool name/alias does not exist
+
+### POST `/v1/tool-executions`
+
+Request body:
+- required: `name` (canonical name or alias)
+- optional: `input` (object)
+
+Behavior:
+- require bearer token `Authorization: Bearer <bbt_...>`
+- if header is missing or invalid, return `401`
+- executes canonical tool registry entry and returns `{ ok, name, output }`
+
+Error behavior:
+- propagates tool execution errors as `{ error }` with tool-defined HTTP status codes
 
 ## Auth + Grant Compatibility
 

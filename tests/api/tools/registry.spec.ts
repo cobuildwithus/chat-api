@@ -4,7 +4,7 @@ import { executeTool, listToolMetadata, resolveToolMetadata } from "../../../src
 describe("tool registry", () => {
   it("lists canonical metadata with required fields", () => {
     const tools = listToolMetadata();
-    expect(tools.length).toBeGreaterThanOrEqual(5);
+    expect(tools.length).toBeGreaterThanOrEqual(4);
 
     for (const tool of tools) {
       expect(typeof tool.name).toBe("string");
@@ -21,16 +21,16 @@ describe("tool registry", () => {
   it("resolves metadata for aliases", () => {
     expect(resolveToolMetadata("getUser")?.name).toBe("get-user");
     expect(resolveToolMetadata("docs.search")?.name).toBe("docs-search");
+    expect(resolveToolMetadata("listDiscussions")?.name).toBe("list-discussions");
+    expect(resolveToolMetadata("getDiscussionThread")?.name).toBe("get-discussion-thread");
+    expect(resolveToolMetadata("semanticSearchCasts")?.name).toBe("semantic-search-casts");
+    expect(resolveToolMetadata("replyToCast")?.name).toBe("reply-to-cast");
   });
 
-  it("executes aliases through the canonical tool", async () => {
-    const result = await executeTool("castPreview", { text: "hello" });
-    expect(result).toEqual({
-      ok: true,
-      name: "cast-preview",
-      output: { text: "hello" },
-      cacheControl: "no-store",
-    });
+  it("does not resolve removed treasury compatibility aliases", () => {
+    expect(resolveToolMetadata("gettreasurystats")).toBeNull();
+    expect(resolveToolMetadata("getTreasuryStats")).toBeNull();
+    expect(resolveToolMetadata("buildbot.get-treasury-stats")).toBeNull();
   });
 
   it("returns a 404 for unknown tools", async () => {
@@ -40,6 +40,41 @@ describe("tool registry", () => {
       name: "nope",
       statusCode: 404,
       error: 'Unknown tool "nope".',
+    });
+  });
+
+  it("validates list-discussions bounds before DB execution", async () => {
+    const result = await executeTool("list-discussions", { limit: 0 });
+    expect(result).toEqual({
+      ok: false,
+      name: "list-discussions",
+      statusCode: 400,
+      error: "limit must be between 1 and 50.",
+    });
+  });
+
+  it("validates get-discussion-thread root hash format", async () => {
+    const result = await executeTool("get-discussion-thread", { rootHash: "bad" });
+    expect(result).toEqual({
+      ok: false,
+      name: "get-discussion-thread",
+      statusCode: 400,
+      error: "rootHash must be a full cast hash (0x + 40 hex chars).",
+    });
+  });
+
+  it("requires explicit confirmation for reply-to-cast", async () => {
+    const result = await executeTool("reply-to-cast", {
+      confirm: false,
+      signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
+      text: "hi",
+      parentHash: `0x${"a".repeat(40)}`,
+    });
+    expect(result).toEqual({
+      ok: false,
+      name: "reply-to-cast",
+      statusCode: 400,
+      error: "confirm must be true to publish a reply.",
     });
   });
 });

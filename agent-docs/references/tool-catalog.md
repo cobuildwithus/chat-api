@@ -1,55 +1,77 @@
 # Tool Catalog Reference
 
-Source registry: `src/ai/tools/index.ts`.
+Source registries:
+- Canonical REST tools: `src/api/tools/registry.ts`
+- AI wrappers: `src/ai/tools/index.ts`
 
 ## `getUser`
 
-- Path: `src/ai/tools/get-user/tool.ts`
-- Input: `fname`
-- Purpose: fetch exact/fuzzy Farcaster user profile summary from DB.
+- Canonical name: `get-user`
+- AI wrapper: `getUser`
+- Purpose: fetch exact/fuzzy Farcaster profile summary from DB.
 - Dependencies: Postgres + Redis cache/lock path.
-- Failure behavior: DB/infra errors may propagate; cache lock timeout falls back to direct fetch.
 
 ## `getCast`
 
-- Path: `src/ai/tools/get-cast/get-cast.ts`
-- Input: cast `identifier` + `type` (`hash`/`url`)
-- Purpose: fetch cast details via Neynar.
+- Canonical name: `get-cast`
+- AI wrapper: `getCast`
+- Purpose: fetch cast details via Neynar by hash or URL.
 - Dependencies: `NEYNAR_API_KEY`, Neynar service.
 - Timeout: `NEYNAR_REQUEST_TIMEOUT_MS`.
-- Failure behavior: missing API key returns structured error; runtime exceptions return `null`.
+
+## `listDiscussions`
+
+- Canonical name: `list-discussions`
+- AI wrapper: `listDiscussions`
+- Purpose: list top-level Cobuild discussion posts with sorting/pagination.
+- Dependencies: `farcaster.casts`, `farcaster.profiles`.
+
+## `getDiscussionThread`
+
+- Canonical name: `get-discussion-thread`
+- AI wrapper: `getDiscussionThread`
+- Purpose: load one discussion thread with pagination and optional focus hash.
+- Dependencies: `farcaster.casts`, `farcaster.profiles`.
+
+## `semanticSearchCasts`
+
+- Canonical name: `semantic-search-casts`
+- AI wrapper: `semanticSearchCasts`
+- Purpose: semantic retrieval over Cobuild casts using pgvector embeddings.
+- Dependencies: OpenAI embeddings API + `farcaster.casts.text_embedding` (`vector(256)`).
+- Timeout: `OPENAI_REQUEST_TIMEOUT_MS`.
+
+## `replyToCast`
+
+- Canonical name: `reply-to-cast`
+- AI wrapper: `replyToCast`
+- Purpose: publish a Farcaster reply to a parent cast hash via Neynar.
+- Guardrails: requires `confirm=true`; strict hash/UUID/input validation.
+- Dependencies: `NEYNAR_API_KEY`, Neynar service.
+- Timeout: `NEYNAR_REQUEST_TIMEOUT_MS`.
 
 ## `castPreview`
 
-- Path: `src/ai/tools/cast-preview/cast-preview.ts`
-- Input: draft cast content (`text`, `embeds`, `parent`).
-- Purpose: echo/validate draft cast payload shape.
-- Dependencies: none external.
-- Failure behavior: schema-level validation failures only.
+- Canonical name: `cast-preview`
+- AI wrapper available in code (`castPreviewTool`) for draft payload normalization.
+- Purpose: echo/validate cast draft payload shape for approval flows.
 
-## `getCobuildAiContext`
+## `get-treasury-stats`
 
-- Path: `src/ai/tools/cobuild-ai-context/tool.ts`
-- Input: none
-- Purpose: fetch latest AI context from co.build endpoint.
-- Dependencies: external `https://co.build/api/cobuild/ai-context`.
-- Timeout: `COBUILD_AI_CONTEXT_TIMEOUT_MS`.
-- Failure behavior: returns `{ error }` payload rather than throwing.
+- AI wrapper: `get-treasury-stats`
+- Purpose: fetch the latest treasury stats snapshot.
+- Dependencies: treasury stats snapshot service.
 
 ## `file_search` (conditional)
 
-- Path: `src/ai/tools/docs/docs.ts`
-- Purpose: search documentation vector store.
+- Canonical alias: `docs.search` / `file_search`
+- AI wrapper: provider-native `file_search`
 - Enabled only when `DOCS_VECTOR_STORE_ID` exists.
-- Dependencies: OpenAI Responses/file-search.
-- Timeout: `OPENAI_REQUEST_TIMEOUT_MS` via model client fetch wrapper.
 
 ## `web_search`
 
-- Path: `src/ai/tools/web-search/web-search.ts`
-- Purpose: retrieve web search context for current/recent facts.
-- Dependencies: OpenAI web search tool.
-- Timeout: `OPENAI_REQUEST_TIMEOUT_MS` via model client fetch wrapper.
+- AI wrapper: provider-native `web_search`
+- Purpose: retrieve web context for recent facts.
 
 ## Update Rule
 

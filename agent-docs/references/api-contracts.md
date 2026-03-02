@@ -8,16 +8,12 @@ Routes and schemas are bound in `src/api/server.ts`:
 - `POST /api/chat/new` -> `newChatSchema` + `handleChatCreateRequest`
 - `GET /api/chats` -> `listChatsSchema` + `handleChatListRequest`
 - `GET /api/chat/:chatId` -> `chatDetailSchema` + `handleGetChatRequest`
-- `POST /api/docs/search` -> `docsSearchSchema` + `handleDocsSearchRequest`
-- `POST /api/buildbot/tools/get-user` -> `buildBotToolsGetUserSchema` + `handleBuildBotToolsGetUserRequest`
-- `POST /api/buildbot/tools/get-cast` -> `buildBotToolsGetCastSchema` + `handleBuildBotToolsGetCastRequest`
-- `POST /api/buildbot/tools/cast-preview` -> `buildBotToolsCastPreviewSchema` + `handleBuildBotToolsCastPreviewRequest`
-- `POST /api/buildbot/tools/cobuild-ai-context` -> `buildBotToolsCobuildAiContextSchema` + `handleBuildBotToolsCobuildAiContextRequest`
+- `GET /v1/tools` -> `toolsListSchema` + `handleToolsListRequest`
+- `GET /v1/tools/:name` -> `toolMetadataSchema` + `handleToolMetadataRequest`
+- `POST /v1/tool-executions` -> `toolExecutionSchema` + `handleToolExecutionRequest`
 
 Chat routes run `validateChatUser` as `preHandler`.
-`POST /api/docs/search` runs prehandlers in this exact order:
-`enforceBuildBotToolsInternalServiceAuth` -> `enforceDocsSearchRateLimit`.
-Buildbot tools routes run prehandlers in this exact order: `enforceBuildBotToolsInternalServiceAuth` -> `enforceBuildBotToolsRateLimit`.
+Canonical tool routes run `enforceToolsBearerAuth` as `preHandler`.
 
 ## Request Schema Summary
 
@@ -42,34 +38,24 @@ Source: `src/api/chat/schema.ts`.
 
 - Requires param: `chatId`
 
-### `POST /api/docs/search`
+### `GET /v1/tools`
 
-- Requires body: `query`
-- Optional body: `limit` (`1..20`)
-- Requires header: `x-chat-internal-key`
-- Upstream dependency: OpenAI vector store search API (`/v1/vector_stores/{id}/search`)
+- Requires header: `Authorization: Bearer <bbt_...>`
 
-### `POST /api/buildbot/tools/get-user`
+### `GET /v1/tools/:name`
 
-- Requires body: `fname`
+- Requires param: `name` (`1..128` chars, supports canonical name or alias)
+- Requires header: `Authorization: Bearer <bbt_...>`
 
-### `POST /api/buildbot/tools/get-cast`
+### `POST /v1/tool-executions`
 
-- Requires body: `identifier`, `type` (`hash|url`)
+- Requires body: `name`
+- Optional body: `input` (object)
+- Requires header: `Authorization: Bearer <bbt_...>`
 
-### `POST /api/buildbot/tools/cast-preview`
+### Canonical tools auth
 
-- Requires body: `text`
-- Optional body: `embeds` (max 2), `parent`
-
-### `POST /api/buildbot/tools/cobuild-ai-context`
-
-- Body: empty object
-
-### Buildbot tools service header
-
-- All `/api/buildbot/tools/*` routes require `x-chat-internal-key`.
-- The header value must match server-side `CHAT_INTERNAL_SERVICE_KEY` (legacy fallback: `BUILD_BOT_TOOLS_INTERNAL_KEY`).
+- `/v1/tools`, `/v1/tools/:name`, and `/v1/tool-executions` require a valid build-bot PAT bearer token.
 
 ## Runtime Response Summary
 
@@ -77,23 +63,17 @@ Source: `src/api/chat/schema.ts`.
 - `GET /api/chats`: `{ chats: [...] }`
 - `GET /api/chat/:chatId`: `{ chatId, type, data, messages }` + `x-chat-grant`
 - `POST /api/chat`: streaming SSE response, may include refreshed `x-chat-grant`
-- `POST /api/docs/search`: `{ query, count, results }`
-- `POST /api/buildbot/tools/get-user`: `{ ok, result }`
-- `POST /api/buildbot/tools/get-cast`: `{ ok, cast }`
-- `POST /api/buildbot/tools/cast-preview`: `{ ok, cast }`
-- `POST /api/buildbot/tools/cobuild-ai-context`: `{ ok, data }`
+- `GET /v1/tools`: `{ tools: ToolMetadata[] }`
+- `GET /v1/tools/:name`: `{ tool: ToolMetadata }` or `404` with `{ error }`
+- `POST /v1/tool-executions`: `{ ok, name, output }` or error payload `{ error }`
 
 ## Intentional Status-Code Semantics
 
 - Missing or unauthorized chat access returns `404` on read/write chat-id paths.
 - Auth pre-handler returns `401` for invalid/missing auth.
 - Usage limiter returns `429` for token-budget overage.
-- Buildbot tools internal auth returns `401` for missing/invalid `x-chat-internal-key`.
-- Buildbot tools internal auth returns `503` when internal key config is missing (`CHAT_INTERNAL_SERVICE_KEY` or legacy fallback).
-- Buildbot tools routes apply route-local Redis-backed throttling and return `429` with `Retry-After` when exceeded.
-- Docs-search internal auth returns `401` for missing/invalid `x-chat-internal-key`.
-- Docs-search internal auth returns `503` when internal key config is missing (`CHAT_INTERNAL_SERVICE_KEY` or legacy fallback).
-- Docs-search applies route-local Redis-backed throttling and returns `429` with `Retry-After` when exceeded.
+- Canonical tools auth returns `401` for missing/invalid bearer token.
+- `GET /v1/tools/:name` returns `404` with `{ error: "Unknown tool \"...\"." }` when name/alias is not registered.
 
 ## Schema/Runtime Mismatches (Current)
 

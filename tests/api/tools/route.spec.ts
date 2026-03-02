@@ -1,15 +1,21 @@
 import type { FastifyRequest } from "fastify";
 import { describe, expect, it, vi } from "vitest";
-import { handleToolExecutionRequest, handleToolsListRequest } from "../../../src/api/tools/route";
+import {
+  handleToolExecutionRequest,
+  handleToolMetadataRequest,
+  handleToolsListRequest,
+} from "../../../src/api/tools/route";
 import { createReply } from "../../utils/fastify";
 
 const mocks = vi.hoisted(() => ({
   listToolMetadata: vi.fn(),
+  resolveToolMetadata: vi.fn(),
   executeTool: vi.fn(),
 }));
 
 vi.mock("../../../src/api/tools/registry", () => ({
   listToolMetadata: mocks.listToolMetadata,
+  resolveToolMetadata: mocks.resolveToolMetadata,
   executeTool: mocks.executeTool,
 }));
 
@@ -42,6 +48,58 @@ describe("tools v1 handlers", () => {
           deprecated: false,
         },
       ],
+    });
+  });
+
+  it("returns tool metadata for canonical names and aliases", async () => {
+    mocks.resolveToolMetadata.mockReturnValueOnce({
+      name: "docs-search",
+      description: "desc",
+      inputSchema: { type: "object" },
+      scopes: ["docs"],
+      sideEffects: "network-read",
+      version: "1.0.0",
+      deprecated: false,
+      aliases: ["docs.search"],
+    });
+    const request = {
+      params: {
+        name: "docs.search",
+      },
+    } as FastifyRequest;
+    const reply = createReply();
+
+    await handleToolMetadataRequest(request, reply);
+
+    expect(mocks.resolveToolMetadata).toHaveBeenCalledWith("docs.search");
+    expect(reply.send).toHaveBeenCalledWith({
+      tool: {
+        name: "docs-search",
+        description: "desc",
+        inputSchema: { type: "object" },
+        scopes: ["docs"],
+        sideEffects: "network-read",
+        version: "1.0.0",
+        deprecated: false,
+        aliases: ["docs.search"],
+      },
+    });
+  });
+
+  it("returns 404 when tool metadata is not found", async () => {
+    mocks.resolveToolMetadata.mockReturnValueOnce(null);
+    const request = {
+      params: {
+        name: "unknown-tool",
+      },
+    } as FastifyRequest;
+    const reply = createReply();
+
+    await handleToolMetadataRequest(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(404);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: 'Unknown tool "unknown-tool".',
     });
   });
 
@@ -99,23 +157,23 @@ describe("tools v1 handlers", () => {
   it("defaults missing input to an empty object", async () => {
     mocks.executeTool.mockResolvedValueOnce({
       ok: true,
-      name: "cobuild-ai-context",
+      name: "get-treasury-stats",
       output: { asOf: "2026-03-01T00:00:00.000Z" },
     });
     const request = {
       body: {
-        name: "cobuild-ai-context",
+        name: "get-treasury-stats",
       },
     } as FastifyRequest;
     const reply = createReply();
 
     await handleToolExecutionRequest(request, reply);
 
-    expect(mocks.executeTool).toHaveBeenCalledWith("cobuild-ai-context", {});
+    expect(mocks.executeTool).toHaveBeenCalledWith("get-treasury-stats", {});
     expect(reply.header).not.toHaveBeenCalled();
     expect(reply.send).toHaveBeenCalledWith({
       ok: true,
-      name: "cobuild-ai-context",
+      name: "get-treasury-stats",
       output: { asOf: "2026-03-01T00:00:00.000Z" },
     });
   });

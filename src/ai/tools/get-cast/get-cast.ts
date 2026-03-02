@@ -1,8 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { getNeynarTimeoutMs } from "../../../config/env";
-import { withTimeout } from "../../../infra/http/timeout";
-import { getNeynarClient } from "../../../infra/neynar/client";
+import { executeTool } from "../../../api/tools/registry";
 import type { Tool } from "../tool";
 
 export const getCastTool = {
@@ -21,22 +19,11 @@ export const getCastTool = {
     }),
     description: "Get cast details by hash or URL",
     execute: async ({ identifier, type }) => {
-      console.debug(`Getting cast ${identifier} with type ${type}`);
-      const neynarClient = getNeynarClient();
-      if (!neynarClient) {
-        return { error: "Neynar API key is not configured." };
+      const result = await executeTool("get-cast", { identifier, type });
+      if (result.ok) {
+        return result.output;
       }
-      try {
-        const response = await withTimeout(
-          neynarClient.lookupCastByHashOrUrl({ identifier, type }),
-          getNeynarTimeoutMs(),
-          "Neynar getCast",
-        );
-        return response.cast;
-      } catch (error) {
-        console.error("Error getting cast", error);
-        return null;
-      }
+      return { error: result.error };
     },
   }),
 } satisfies Tool;

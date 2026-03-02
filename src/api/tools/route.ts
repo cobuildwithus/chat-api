@@ -1,9 +1,13 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { executeTool, listToolMetadata } from "./registry";
+import { executeTool, listToolMetadata, resolveToolMetadata } from "./registry";
 
 type ToolExecutionBody = {
   name: string;
   input?: Record<string, unknown>;
+};
+
+type ToolMetadataParams = {
+  name: string;
 };
 
 export async function handleToolsListRequest(
@@ -12,6 +16,24 @@ export async function handleToolsListRequest(
 ) {
   return reply.send({
     tools: listToolMetadata(),
+  });
+}
+
+export async function handleToolMetadataRequest(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const params = request.params as ToolMetadataParams;
+  const name = params.name.trim();
+  const metadata = resolveToolMetadata(name);
+  if (!metadata) {
+    return reply.status(404).send({
+      error: `Unknown tool "${name}".`,
+    });
+  }
+
+  return reply.send({
+    tool: metadata,
   });
 }
 
