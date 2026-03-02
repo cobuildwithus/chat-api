@@ -337,6 +337,7 @@ describe("tool registry execution", () => {
           {
             hash: `0x${"1".repeat(40)}`,
             title: "hello world from top-level post",
+            authorUsername: "alice",
             replyCount: 2,
             viewCount: 11,
             author: {
@@ -409,6 +410,7 @@ describe("tool registry execution", () => {
         root: {
           hash: rootHash,
           text: "root post",
+          authorUsername: "rooter",
         },
         page: 2,
         pageSize: 2,
@@ -421,6 +423,7 @@ describe("tool registry execution", () => {
             hash: focusHash,
             parentHash: rootHash,
             text: "focused reply",
+            authorUsername: "dave",
           },
         ],
       },
@@ -473,6 +476,7 @@ describe("tool registry execution", () => {
             hash: `0x${"b".repeat(40)}`,
             parentHash: rootHash,
             rootHash,
+            authorUsername: "eve",
             similarity: 0.8,
           },
         ],
@@ -934,12 +938,13 @@ describe("tool registry execution", () => {
             parentHash: null,
             rootHash: `0x${"f".repeat(40)}`,
             text: "",
+            authorUsername: "unknown",
             createdAt: null,
             distance: 1,
             similarity: 0,
             author: {
               fid: null,
-              username: null,
+              username: "unknown",
               display_name: null,
               pfp_url: null,
               neynar_score: null,
@@ -951,6 +956,49 @@ describe("tool registry execution", () => {
     if (result.ok) {
       expect(result.output).not.toHaveProperty("rootHash");
     }
+  });
+
+  it("uses fid fallback for author usernames when fname/display are missing", async () => {
+    process.env.OPENAI_API_KEY = "key";
+    mocks.createTimeoutFetch.mockReturnValueOnce(
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(embeddingPayload()), { status: 200 })),
+    );
+    mocks.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          hashHex: "9".repeat(40),
+          parentHashHex: null,
+          rootHashHex: "9".repeat(40),
+          text: "fallback user",
+          castTimestamp: "2026-03-02T00:00:00.000Z",
+          distance: 0.1,
+          authorFid: 88,
+          authorFname: null,
+          authorDisplayName: null,
+          authorAvatarUrl: null,
+          authorNeynarScore: 0.6,
+        },
+      ],
+    });
+
+    const result = await executeTool("semantic-search-casts", { query: "fid fallback" });
+    expect(result).toMatchObject({
+      ok: true,
+      output: {
+        items: [
+          {
+            hash: `0x${"9".repeat(40)}`,
+            authorUsername: "fid:88",
+            author: {
+              fid: 88,
+              username: "fid:88",
+            },
+          },
+        ],
+      },
+    });
   });
 
   it("covers reply-to-cast validation and upstream error branches", async () => {

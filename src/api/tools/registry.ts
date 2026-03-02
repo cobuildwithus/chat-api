@@ -371,9 +371,11 @@ function toAuthor(row: {
   authorAvatarUrl: string | null;
   authorNeynarScore: unknown;
 }) {
+  const username = asString(row.authorFname) ?? asString(row.authorDisplayName);
+  const authorFid = asNumber(row.authorFid);
   return {
-    fid: asNumber(row.authorFid),
-    username: row.authorFname,
+    fid: authorFid,
+    username: username ?? (authorFid !== null ? `fid:${authorFid}` : "unknown"),
     display_name: row.authorDisplayName,
     pfp_url: row.authorAvatarUrl,
     neynar_score: asNumber(row.authorNeynarScore),
@@ -710,12 +712,14 @@ async function executeListDiscussions(input: unknown): Promise<ToolExecutionResu
     const items = pageRows.map((row) => {
       const hash = fromHexToCastHash(row.hashHex);
       const text = asString(row.text) ?? "";
+      const author = toAuthor(row);
       return {
         hash,
         title: toTitle(text),
         excerpt: toExcerpt(text),
         text,
-        author: toAuthor(row),
+        authorUsername: author.username,
+        author,
         createdAt: toIsoString(row.castTimestamp),
         replyCount: asNumber(row.replyCount) ?? 0,
         viewCount: asNumber(row.viewCount) ?? 0,
@@ -891,23 +895,29 @@ async function executeGetDiscussionThread(input: unknown): Promise<ToolExecution
       OFFSET ${offset}
     `)) as { rows?: ThreadCastRow[] };
 
+    const rootAuthor = toAuthor(rootRow);
     const rootOutput = {
       hash: fromHexToCastHash(rootRow.hashHex),
       parentHash: fromHexToCastHash(rootRow.parentHashHex),
       text: asString(rootRow.text) ?? "",
+      authorUsername: rootAuthor.username,
       createdAt: toIsoString(rootRow.castTimestamp),
       viewCount: asNumber(rootRow.viewCount) ?? 0,
-      author: toAuthor(rootRow),
+      author: rootAuthor,
     };
 
-    const replies = (repliesResult.rows ?? []).map((row) => ({
-      hash: fromHexToCastHash(row.hashHex),
-      parentHash: fromHexToCastHash(row.parentHashHex),
-      text: asString(row.text) ?? "",
-      createdAt: toIsoString(row.castTimestamp),
-      viewCount: asNumber(row.viewCount) ?? 0,
-      author: toAuthor(row),
-    }));
+    const replies = (repliesResult.rows ?? []).map((row) => {
+      const author = toAuthor(row);
+      return {
+        hash: fromHexToCastHash(row.hashHex),
+        parentHash: fromHexToCastHash(row.parentHashHex),
+        text: asString(row.text) ?? "",
+        authorUsername: author.username,
+        createdAt: toIsoString(row.castTimestamp),
+        viewCount: asNumber(row.viewCount) ?? 0,
+        author,
+      };
+    });
 
     return success(name, {
       root: rootOutput,
@@ -1053,15 +1063,17 @@ async function executeSemanticSearchCasts(input: unknown): Promise<ToolExecution
     const items = (result.rows ?? []).map((row) => {
       const distance = asNumber(row.distance) ?? 1;
       const similarity = Math.max(0, Math.min(1, 1 - distance));
+      const author = toAuthor(row);
       return {
         hash: fromHexToCastHash(row.hashHex),
         parentHash: fromHexToCastHash(row.parentHashHex),
         rootHash: fromHexToCastHash(row.rootHashHex),
         text: asString(row.text) ?? "",
+        authorUsername: author.username,
         createdAt: toIsoString(row.castTimestamp),
         distance,
         similarity,
-        author: toAuthor(row),
+        author,
       };
     });
 
