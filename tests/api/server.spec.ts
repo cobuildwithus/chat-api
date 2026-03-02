@@ -5,6 +5,7 @@ type ServerMock = FastifyInstance & {
   register: ReturnType<typeof vi.fn>;
   post: ReturnType<typeof vi.fn>;
   get: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
   setErrorHandler: ReturnType<typeof vi.fn>;
   server: {
     headersTimeout: number;
@@ -63,6 +64,7 @@ describe("setupServer", () => {
       register: vi.fn(),
       post: vi.fn(),
       get: vi.fn(),
+      delete: vi.fn(),
       setErrorHandler: vi.fn(),
       server: {
         headersTimeout: 0,
@@ -85,7 +87,7 @@ describe("setupServer", () => {
     const corsCall = serverMock.register.mock.calls.find((call) => call[0] === corsMock);
     expect(corsCall?.[1]?.origin).toEqual(["https://a.com", "https://b.com"]);
     expect(registerRequestLoggingMock).toHaveBeenCalledWith(serverMock);
-    expect(serverMock.post).toHaveBeenCalledTimes(3);
+    expect(serverMock.post).toHaveBeenCalledTimes(4);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/docs/search")).toBe(false);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/get-user")).toBe(
       false,
@@ -135,7 +137,40 @@ describe("setupServer", () => {
     ]);
 
     expect(serverMock.get.mock.calls.some((call) => call[0] === "/api/cobuild/ai-context")).toBe(true);
-    expect(serverMock.get).toHaveBeenCalledTimes(6);
+    expect(serverMock.get.mock.calls.some((call) => call[0] === "/v1/tokens")).toBe(true);
+    const tokensListCall = serverMock.get.mock.calls.find((call) => call[0] === "/v1/tokens");
+    const tokensListOptions = tokensListCall?.[1] as {
+      preHandler?: Array<{ name?: string }>;
+      schema?: object;
+    };
+    expect(tokensListOptions?.schema).toBeTruthy();
+    expect(Array.isArray(tokensListOptions?.preHandler)).toBe(true);
+    expect(tokensListOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+      "validateChatUser",
+    ]);
+    const tokensCreateCall = serverMock.post.mock.calls.find((call) => call[0] === "/v1/tokens");
+    const tokensCreateOptions = tokensCreateCall?.[1] as {
+      preHandler?: Array<{ name?: string }>;
+      schema?: object;
+    };
+    expect(tokensCreateOptions?.schema).toBeTruthy();
+    expect(Array.isArray(tokensCreateOptions?.preHandler)).toBe(true);
+    expect(tokensCreateOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+      "validateChatUser",
+    ]);
+    expect(serverMock.delete.mock.calls.some((call) => call[0] === "/v1/tokens")).toBe(true);
+    const tokensDeleteCall = serverMock.delete.mock.calls.find((call) => call[0] === "/v1/tokens");
+    const tokensDeleteOptions = tokensDeleteCall?.[1] as {
+      preHandler?: Array<{ name?: string }>;
+      schema?: object;
+    };
+    expect(tokensDeleteOptions?.schema).toBeTruthy();
+    expect(Array.isArray(tokensDeleteOptions?.preHandler)).toBe(true);
+    expect(tokensDeleteOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+      "validateChatUser",
+    ]);
+    expect(serverMock.get).toHaveBeenCalledTimes(7);
+    expect(serverMock.delete).toHaveBeenCalledTimes(1);
     expect(serverMock.setErrorHandler).toHaveBeenCalledTimes(1);
   });
 
@@ -205,19 +240,54 @@ describe("setupServer", () => {
     } as { headers: Record<string, string>; ip: string });
     expect(ipKey).toBe("127.0.0.1");
 
-    requestContextGetMock.mockReturnValue({ address: "0xabc" });
+    requestContextGetMock.mockImplementation((key: string) => {
+      if (key === "toolsPrincipal") return undefined;
+      if (key === "user") return { address: "0xabc" };
+      return undefined;
+    });
     const userKey = userLimitCall?.[1]?.keyGenerator?.({
       headers: { "x-chat-user": "0xspoof" },
       ip: "127.0.0.1",
     } as { headers: Record<string, string>; ip: string });
     expect(userKey).toBe("user:0xabc");
 
-    requestContextGetMock.mockReturnValue(undefined);
+    requestContextGetMock.mockImplementation(() => undefined);
     const fallbackKey = userLimitCall?.[1]?.keyGenerator?.({
       headers: {},
       ip: "127.0.0.1",
     } as { headers: Record<string, string>; ip: string });
     expect(fallbackKey).toBe("127.0.0.1");
+
+    requestContextGetMock.mockImplementation((key: string) => {
+      if (key === "toolsPrincipal") {
+        return {
+          ownerAddress: "0x0000000000000000000000000000000000000001",
+          agentKey: "default",
+          tokenId: "42",
+          canWrite: false,
+        };
+      }
+      return undefined;
+    });
+    const toolsPrincipalKey = userLimitCall?.[1]?.keyGenerator?.({
+      headers: {},
+      ip: "127.0.0.1",
+      routerPath: "/v1/tools",
+      url: "/v1/tools",
+    } as { headers: Record<string, string>; ip: string; routerPath: string; url: string });
+    expect(toolsPrincipalKey).toBe(
+      "tools:0x0000000000000000000000000000000000000001:default:42",
+    );
+
+    requestContextGetMock.mockImplementation(() => undefined);
+    const tokenFallbackKey = userLimitCall?.[1]?.keyGenerator?.({
+      headers: { authorization: "Bearer bbt_example" },
+      ip: "127.0.0.1",
+      routerPath: "/v1/tool-executions",
+      url: "/v1/tool-executions",
+    } as { headers: Record<string, string>; ip: string; routerPath: string; url: string });
+    expect(typeof tokenFallbackKey).toBe("string");
+    expect(String(tokenFallbackKey).startsWith("tools-token:")).toBe(true);
   });
 
   it("exposes source info with default url", async () => {

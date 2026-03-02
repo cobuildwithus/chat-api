@@ -30,7 +30,6 @@ describe("tools index", () => {
     expect(module.toolsByName.listDiscussions).toBeDefined();
     expect(module.toolsByName.getDiscussionThread).toBeDefined();
     expect(module.toolsByName.semanticSearchCasts).toBeDefined();
-    expect(module.toolsByName.replyToCast).toBeDefined();
   });
 
   it("omits docs tool when vector store id is missing", async () => {

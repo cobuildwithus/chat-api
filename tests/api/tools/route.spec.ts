@@ -1,5 +1,5 @@
 import type { FastifyRequest } from "fastify";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   handleToolExecutionRequest,
   handleToolMetadataRequest,
@@ -11,15 +11,28 @@ const mocks = vi.hoisted(() => ({
   listToolMetadata: vi.fn(),
   resolveToolMetadata: vi.fn(),
   executeTool: vi.fn(),
+  requiresWriteScopeForTool: vi.fn(),
+  requestContextGet: vi.fn(),
 }));
 
-vi.mock("../../../src/api/tools/registry", () => ({
+vi.mock("../../../src/tools/registry", () => ({
   listToolMetadata: mocks.listToolMetadata,
   resolveToolMetadata: mocks.resolveToolMetadata,
   executeTool: mocks.executeTool,
+  requiresWriteScopeForTool: mocks.requiresWriteScopeForTool,
+}));
+
+vi.mock("@fastify/request-context", () => ({
+  requestContext: {
+    get: (...args: unknown[]) => mocks.requestContextGet(...args),
+  },
 }));
 
 describe("tools v1 handlers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("returns registered tool metadata", async () => {
     mocks.listToolMetadata.mockReturnValueOnce([
       {
@@ -104,6 +117,8 @@ describe("tools v1 handlers", () => {
   });
 
   it("returns execution output and applies cache control", async () => {
+    mocks.requiresWriteScopeForTool.mockReturnValueOnce(false);
+    mocks.requestContextGet.mockReturnValueOnce(undefined);
     mocks.executeTool.mockResolvedValueOnce({
       ok: true,
       name: "get-user",
@@ -132,6 +147,8 @@ describe("tools v1 handlers", () => {
   });
 
   it("returns execution errors with propagated status code", async () => {
+    mocks.requiresWriteScopeForTool.mockReturnValueOnce(false);
+    mocks.requestContextGet.mockReturnValueOnce(undefined);
     mocks.executeTool.mockResolvedValueOnce({
       ok: false,
       name: "unknown-tool",
@@ -150,11 +167,16 @@ describe("tools v1 handlers", () => {
 
     expect(reply.status).toHaveBeenCalledWith(404);
     expect(reply.send).toHaveBeenCalledWith({
+      ok: false,
+      name: "unknown-tool",
+      statusCode: 404,
       error: 'Unknown tool "unknown-tool".',
     });
   });
 
   it("defaults missing input to an empty object", async () => {
+    mocks.requiresWriteScopeForTool.mockReturnValueOnce(false);
+    mocks.requestContextGet.mockReturnValueOnce(undefined);
     mocks.executeTool.mockResolvedValueOnce({
       ok: true,
       name: "get-treasury-stats",
@@ -175,6 +197,34 @@ describe("tools v1 handlers", () => {
       ok: true,
       name: "get-treasury-stats",
       output: { asOf: "2026-03-01T00:00:00.000Z" },
+    });
+  });
+
+  it("rejects write tools when principal lacks write scope", async () => {
+    mocks.requiresWriteScopeForTool.mockReturnValueOnce(true);
+    mocks.requestContextGet.mockReturnValueOnce({
+      tokenId: "42",
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+      canWrite: false,
+    });
+    const request = {
+      body: {
+        name: "network-write-tool",
+        input: {},
+      },
+    } as FastifyRequest;
+    const reply = createReply();
+
+    await handleToolExecutionRequest(request, reply);
+
+    expect(mocks.executeTool).not.toHaveBeenCalled();
+    expect(reply.status).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith({
+      ok: false,
+      name: "network-write-tool",
+      statusCode: 403,
+      error: "This token does not have write scope for the requested tool.",
     });
   });
 });

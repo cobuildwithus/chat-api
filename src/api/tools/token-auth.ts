@@ -11,8 +11,10 @@ const AUTH_CACHE_PREFIX = "buildbot:tools-auth:";
 const LAST_USED_THROTTLE_PREFIX = "buildbot:tools-last-used:";
 
 type CachedToolsPrincipal = {
+  tokenId: string;
   ownerAddress: string;
   agentKey: string;
+  canWrite: boolean;
 };
 
 function hashBuildBotToken(rawToken: string): string {
@@ -20,8 +22,10 @@ function hashBuildBotToken(rawToken: string): string {
 }
 
 export async function authenticateToolsBearerToken(rawToken: string): Promise<{
+  tokenId: string;
   ownerAddress: `0x${string}`;
   agentKey: string;
+  canWrite: boolean;
 } | null> {
   const tokenHash = hashBuildBotToken(rawToken);
   const cacheKey = `${AUTH_CACHE_PREFIX}${tokenHash}`;
@@ -38,21 +42,36 @@ export async function authenticateToolsBearerToken(rawToken: string): Promise<{
   }
 
   if (cached) {
+    if (
+      typeof cached.tokenId !== "string"
+      || typeof cached.ownerAddress !== "string"
+      || typeof cached.agentKey !== "string"
+      || typeof cached.canWrite !== "boolean"
+    ) {
+      cached = null;
+    }
+  }
+
+  if (cached) {
     const ownerAddress = normalizeAddress(cached.ownerAddress);
     if (!ownerAddress) return null;
 
     void touchLastUsedAtThrottled(tokenHash);
     return {
+      tokenId: cached.tokenId,
       ownerAddress: ownerAddress as `0x${string}`,
       agentKey: cached.agentKey,
+      canWrite: cached.canWrite,
     };
   }
 
   const primaryDb = cobuildDb.$primary ?? cobuildDb;
   const [row] = await primaryDb
     .select({
+      id: buildBotCliTokens.id,
       ownerAddress: buildBotCliTokens.ownerAddress,
       agentKey: buildBotCliTokens.agentKey,
+      canWrite: buildBotCliTokens.canWrite,
     })
     .from(buildBotCliTokens)
     .where(
@@ -66,15 +85,26 @@ export async function authenticateToolsBearerToken(rawToken: string): Promise<{
 
   try {
     const redis = await getRedisClient();
-    await redis.set(cacheKey, JSON.stringify(row), { EX: AUTH_CACHE_TTL_SECONDS });
+    await redis.set(
+      cacheKey,
+      JSON.stringify({
+        tokenId: row.id.toString(),
+        ownerAddress: row.ownerAddress,
+        agentKey: row.agentKey,
+        canWrite: row.canWrite,
+      }),
+      { EX: AUTH_CACHE_TTL_SECONDS },
+    );
   } catch {
     // Best-effort cache write; auth correctness remains DB-backed.
   }
 
   void touchLastUsedAtThrottled(tokenHash);
   return {
+    tokenId: row.id.toString(),
     ownerAddress: ownerAddress as `0x${string}`,
     agentKey: row.agentKey,
+    canWrite: row.canWrite,
   };
 }
 

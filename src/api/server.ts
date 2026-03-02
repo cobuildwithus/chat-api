@@ -3,12 +3,18 @@ import { fastifyRequestContext, requestContext } from "@fastify/request-context"
 import rateLimit from "@fastify/rate-limit";
 import fastify from "fastify";
 import type { FastifyInstance } from "fastify";
+import { createHash } from "node:crypto";
 import { handleChatCreateRequest } from "./chat/create";
 import { handleChatGetRequest } from "./chat/get";
 import { handleChatListRequest } from "./chat/list";
 import { handleChatPostRequest } from "./chat/route";
 import { handleCobuildAiContextRequest } from "./cobuild-ai-context/route";
 import { enforceToolsBearerAuth } from "./tools/internal-auth";
+import {
+  handleBuildBotTokenCreateRequest,
+  handleBuildBotTokenRevokeRequest,
+  handleBuildBotTokensListRequest,
+} from "./tokens/route";
 import {
   handleToolExecutionRequest,
   handleToolMetadataRequest,
@@ -21,6 +27,11 @@ import {
   chatListSchema,
   chatSchema,
 } from "./chat/schema";
+import {
+  buildBotTokenCreateSchema,
+  buildBotTokenRevokeSchema,
+  buildBotTokensListSchema,
+} from "./tokens/schema";
 import { toolExecutionSchema, toolMetadataSchema, toolsListSchema } from "./tools/schema";
 import { getRateLimitConfig } from "../config/env";
 import { handleError } from "./server-helpers";
@@ -46,6 +57,24 @@ const applyServerTimeouts = (server: FastifyInstance["server"]) => {
 
 const IP_RATE_LIMIT_MULTIPLIER = 3;
 const TOOL_EXECUTIONS_BODY_LIMIT_BYTES = 64 * 1024;
+const TOOLS_RATE_LIMIT_PATH_PREFIXES = ["/v1/tool-executions", "/v1/tools"];
+
+function parseBearerToken(value: string | undefined): string | null {
+  if (!value) return null;
+  const match = value.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const token = match[1]?.trim();
+  return token && token.length > 0 ? token : null;
+}
+
+function hashRateLimitToken(rawToken: string): string {
+  return createHash("sha256").update(rawToken).digest("hex");
+}
+
+function isToolsRateLimitPath(path: string): boolean {
+  const normalizedPath = path.split("?", 1)[0] ?? path;
+  return TOOLS_RATE_LIMIT_PATH_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
+}
 
 const getAllowedOrigins = () => {
   const raw = process.env.CHAT_ALLOWED_ORIGINS;
@@ -93,6 +122,21 @@ export const setupServer = async () => {
       timeWindow: rateLimitConfig.windowMs,
       hook: "preHandler",
       keyGenerator: (request) => {
+        const toolsPrincipal = requestContext.get("toolsPrincipal");
+        if (toolsPrincipal) {
+          return `tools:${toolsPrincipal.ownerAddress}:${toolsPrincipal.agentKey}:${toolsPrincipal.tokenId}`;
+        }
+        const routerPath = (request as { routerPath?: string }).routerPath;
+        const requestPath = routerPath ?? request.url ?? "";
+        if (isToolsRateLimitPath(requestPath)) {
+          const bearerToken = parseBearerToken(
+            typeof request.headers.authorization === "string" ? request.headers.authorization : undefined,
+          );
+          if (bearerToken) {
+            return `tools-token:${hashRateLimitToken(bearerToken)}`;
+          }
+        }
+
         const user = requestContext.get("user");
         if (user?.address) {
           return `user:${user.address}`;
@@ -154,6 +198,33 @@ export const setupServer = async () => {
       schema: toolMetadataSchema,
     },
     handleToolMetadataRequest,
+  );
+
+  server.get(
+    "/v1/tokens",
+    {
+      preHandler: [validateChatUser],
+      schema: buildBotTokensListSchema,
+    },
+    handleBuildBotTokensListRequest,
+  );
+
+  server.post(
+    "/v1/tokens",
+    {
+      preHandler: [validateChatUser],
+      schema: buildBotTokenCreateSchema,
+    },
+    handleBuildBotTokenCreateRequest,
+  );
+
+  server.delete(
+    "/v1/tokens",
+    {
+      preHandler: [validateChatUser],
+      schema: buildBotTokenRevokeSchema,
+    },
+    handleBuildBotTokenRevokeRequest,
   );
 
   server.get("/source", async (_request, reply) => {

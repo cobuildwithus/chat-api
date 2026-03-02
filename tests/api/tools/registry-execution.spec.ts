@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { executeTool } from "../../../src/api/tools/registry";
+import { executeTool } from "../../../src/tools/registry";
 
 const mocks = vi.hoisted(() => ({
   getOrSetCachedResultWithLock: vi.fn(),
@@ -138,6 +138,48 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("returns empty get-user results without fuzzy fallback for very short misses", async () => {
+    queueSelectRows([]);
+
+    const result = await executeTool("get-user", { fname: "al" });
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: {
+        usedLikeQuery: false,
+        users: [],
+      },
+    });
+  });
+
+  it("normalizes get-user lookups to lowercase before exact matching", async () => {
+    queueSelectRows([
+      {
+        fid: 123,
+        fname: "alice",
+        verifiedAddresses: ["0xabc"],
+      },
+    ]);
+
+    const result = await executeTool("get-user", { fname: "ALICE" });
+
+    expect(mocks.getOrSetCachedResultWithLock).toHaveBeenCalledWith(
+      "alice",
+      expect.any(String),
+      expect.any(Function),
+      expect.any(Number),
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      name: "get-user",
+      output: {
+        fid: 123,
+        fname: "alice",
+        addresses: ["0xabc"],
+      },
+    });
+  });
+
   it("executes get-cast and normalizes alias names", async () => {
     const lookupCastByHashOrUrl = vi.fn();
     mocks.getNeynarClient.mockReturnValue({
@@ -216,6 +258,15 @@ describe("tool registry execution", () => {
                   path: "docs/data",
                 },
               },
+              {
+                file_id: "file_data_2",
+                filename: "empty-snippet.md",
+                score: 0.5,
+                content: [{}],
+                attributes: {
+                  path: "docs/empty",
+                },
+              },
             ],
           }),
           { status: 200 },
@@ -255,13 +306,19 @@ describe("tool registry execution", () => {
       name: "docs-search",
       output: {
         query: "bridge",
-        count: 1,
+        count: 2,
         results: [
           {
             fileId: "file_data_1",
             filename: "data.md",
             url: "https://docs.co.build/docs/data",
             snippet: "From data array",
+          },
+          {
+            fileId: "file_data_2",
+            filename: "empty-snippet.md",
+            url: null,
+            snippet: null,
           },
         ],
       },
@@ -350,6 +407,60 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("maps list-discussions rows without last reply metadata", async () => {
+    mocks.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          hashHex: "2".repeat(40),
+          text: "post without replies",
+          castTimestamp: "2026-03-01T00:00:00.000Z",
+          replyCount: "0",
+          viewCount: "5",
+          lastReplyTimestamp: null,
+          lastReplyAuthorFname: null,
+          authorFid: 123,
+          authorFname: "alice",
+          authorDisplayName: "Alice",
+          authorAvatarUrl: null,
+          authorNeynarScore: 0.91,
+        },
+      ],
+    });
+
+    const result = await executeTool("list-discussions", {});
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: {
+        items: [
+          {
+            hash: `0x${"2".repeat(40)}`,
+            lastReply: null,
+          },
+        ],
+      },
+    });
+  });
+
+  it("executes list-discussions with replies sort branch", async () => {
+    mocks.execute.mockResolvedValueOnce({
+      rows: [],
+    });
+
+    const result = await executeTool("list-discussions", {
+      sort: "replies",
+      direction: "desc",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: {
+        sort: "replies",
+        direction: "desc",
+      },
+    });
+  });
+
   it("executes get-discussion-thread with focus pagination", async () => {
     const rootHash = `0x${"3".repeat(40)}`;
     const focusHash = `0x${"8".repeat(40)}`;
@@ -375,10 +486,14 @@ describe("tool registry execution", () => {
       })
       .mockResolvedValueOnce({
         rows: [
-          { hashHex: "6".repeat(40) },
-          { hashHex: "7".repeat(40) },
-          { hashHex: "8".repeat(40) },
+          {
+            focusTimestamp: "2026-03-01T02:00:00.000Z",
+            focusHashHex: "8".repeat(40),
+          },
         ],
+      })
+      .mockResolvedValueOnce({
+        rows: [{ count: "2" }],
       })
       .mockResolvedValueOnce({
         rows: [
@@ -485,69 +600,6 @@ describe("tool registry execution", () => {
     });
   });
 
-  it("executes reply-to-cast publish flow with embed normalization", async () => {
-    process.env.NEYNAR_API_KEY = "test-neynar-key";
-    const parentHash = `0x${"c".repeat(40)}`;
-    const castHash = `0x${"d".repeat(40)}`;
-    const neynarReturnedHash = `0x${"d".repeat(40).toUpperCase()}`;
-    const timeoutFetch = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            success: true,
-            cast: {
-              hash: neynarReturnedHash,
-              text: "reply body",
-            },
-          }),
-          { status: 200 },
-        ),
-      );
-    mocks.createTimeoutFetch.mockReturnValue(timeoutFetch);
-
-    const result = await executeTool("reply-to-cast", {
-      confirm: true,
-      signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-      text: "reply body",
-      parentHash,
-      parentAuthorFid: 123,
-      idem: "reply-idem",
-      embeds: [{ url: "HTTPS://example.com/post" }],
-    });
-
-    expect(result).toMatchObject({
-      ok: true,
-      output: {
-        hash: castHash,
-        cast: {
-          hash: neynarReturnedHash,
-          text: "reply body",
-        },
-      },
-      cacheControl: "no-store",
-    });
-  });
-
-  it("returns a validation error for malformed reply embed URLs", async () => {
-    process.env.NEYNAR_API_KEY = "test-neynar-key";
-
-    const result = await executeTool("reply-to-cast", {
-      confirm: true,
-      signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-      text: "reply body",
-      parentHash: `0x${"e".repeat(40)}`,
-      embeds: [{ url: "javascript:alert(1)" }],
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "each embed url must be a valid http(s) URL.",
-    });
-  });
-
   it("returns a 400 when tool name is empty after trim", async () => {
     const result = await executeTool("   ", {});
     expect(result).toEqual({
@@ -586,6 +638,15 @@ describe("tool registry execution", () => {
   });
 
   it("covers get-cast validation and upstream failure branches", async () => {
+    process.env.ENABLE_BUILD_BOT_GET_CAST = "false";
+    expect(await executeTool("get-cast", { identifier: "x", type: "hash" })).toEqual({
+      ok: false,
+      name: "get-cast",
+      statusCode: 403,
+      error: "This tool is disabled.",
+    });
+    delete process.env.ENABLE_BUILD_BOT_GET_CAST;
+
     expect(await executeTool("get-cast", {})).toEqual({
       ok: false,
       name: "get-cast",
@@ -672,6 +733,15 @@ describe("tool registry execution", () => {
   });
 
   it("covers docs-search validation and upstream error branches", async () => {
+    process.env.ENABLE_BUILD_BOT_DOCS_SEARCH = "false";
+    expect(await executeTool("docs-search", { query: "x" })).toEqual({
+      ok: false,
+      name: "docs-search",
+      statusCode: 403,
+      error: "This tool is disabled.",
+    });
+    delete process.env.ENABLE_BUILD_BOT_DOCS_SEARCH;
+
     delete process.env.DOCS_VECTOR_STORE_ID;
     delete process.env.OPENAI_API_KEY;
 
@@ -707,7 +777,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "docs-search",
       statusCode: 400,
-      error: "Limit must be a number.",
+      error: "Limit must be an integer.",
     });
     expect(await executeTool("docs-search", { query: "x", limit: 25 })).toEqual({
       ok: false,
@@ -889,6 +959,16 @@ describe("tool registry execution", () => {
     });
 
     mocks.createTimeoutFetch.mockReturnValueOnce(
+      vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ data: [{}] }), { status: 200 })),
+    );
+    expect(await executeTool("semantic-search-casts", { query: "x" })).toEqual({
+      ok: false,
+      name: "semantic-search-casts",
+      statusCode: 502,
+      error: "semantic-search-casts request failed: OpenAI embeddings response is missing embedding values.",
+    });
+
+    mocks.createTimeoutFetch.mockReturnValueOnce(
       vi.fn().mockResolvedValueOnce(
         new Response(JSON.stringify({ data: [{ embedding: [] }] }), { status: 200 }),
       ),
@@ -998,212 +1078,6 @@ describe("tool registry execution", () => {
           },
         ],
       },
-    });
-  });
-
-  it("covers reply-to-cast validation and upstream error branches", async () => {
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "bad",
-        text: "x",
-        parentHash: `0x${"1".repeat(40)}`,
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "signerUuid must be a valid UUID.",
-    });
-
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "   ",
-        parentHash: `0x${"1".repeat(40)}`,
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "text must not be empty.",
-    });
-
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x".repeat(1025),
-        parentHash: `0x${"1".repeat(40)}`,
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "text is too long for a Farcaster cast.",
-    });
-
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x",
-        parentHash: "bad",
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "parentHash must be a full cast hash (0x + 40 hex chars).",
-    });
-
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x",
-        parentHash: `0x${"1".repeat(40)}`,
-        parentAuthorFid: 0,
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "parentAuthorFid must be a positive integer when provided.",
-    });
-
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x",
-        parentHash: `0x${"1".repeat(40)}`,
-        idem: "x".repeat(129),
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "idem must be 128 characters or fewer.",
-    });
-
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x",
-        parentHash: `0x${"1".repeat(40)}`,
-        embeds: "bad",
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "embeds must be an array.",
-    });
-
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x",
-        parentHash: `0x${"1".repeat(40)}`,
-        embeds: [{ url: "https://x/1" }, { url: "https://x/2" }, { url: "https://x/3" }],
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "embeds may include at most 2 URLs.",
-    });
-
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x",
-        parentHash: `0x${"1".repeat(40)}`,
-        embeds: ["bad"],
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "each embed must be an object with a valid url.",
-    });
-
-    delete process.env.NEYNAR_API_KEY;
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x",
-        parentHash: `0x${"1".repeat(40)}`,
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 503,
-      error: "Neynar API key is not configured.",
-    });
-
-    process.env.NEYNAR_API_KEY = "key";
-    mocks.createTimeoutFetch.mockReturnValueOnce(
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ message: "Bad request from neynar" }), { status: 400 }),
-        ),
-    );
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x",
-        parentHash: `0x${"1".repeat(40)}`,
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "Bad request from neynar",
-    });
-
-    mocks.createTimeoutFetch.mockReturnValueOnce(
-      vi.fn().mockResolvedValueOnce(new Response("{}", { status: 500 })),
-    );
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x",
-        parentHash: `0x${"1".repeat(40)}`,
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 502,
-      error: "Neynar publish failed with status 500.",
-    });
-
-    mocks.createTimeoutFetch.mockReturnValueOnce(
-      vi.fn().mockResolvedValueOnce(
-        new Response(JSON.stringify({ success: false, cast: {} }), { status: 200 }),
-      ),
-    );
-    expect(
-      await executeTool("reply-to-cast", {
-        confirm: true,
-        signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-        text: "x",
-        parentHash: `0x${"1".repeat(40)}`,
-      }),
-    ).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 502,
-      error: "Unexpected response from Neynar publish API.",
     });
   });
 

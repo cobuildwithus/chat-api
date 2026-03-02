@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { executeTool, listToolMetadata, resolveToolMetadata } from "../../../src/api/tools/registry";
+import {
+  executeTool,
+  listToolMetadata,
+  requiresWriteScopeForTool,
+  resolveToolMetadata,
+} from "../../../src/tools/registry";
 
 describe("tool registry", () => {
   it("lists canonical metadata with required fields", () => {
@@ -20,11 +25,11 @@ describe("tool registry", () => {
 
   it("resolves metadata for aliases", () => {
     expect(resolveToolMetadata("getUser")?.name).toBe("get-user");
+    expect(resolveToolMetadata("GETUSER")?.name).toBe("get-user");
     expect(resolveToolMetadata("docs.search")?.name).toBe("docs-search");
     expect(resolveToolMetadata("listDiscussions")?.name).toBe("list-discussions");
     expect(resolveToolMetadata("getDiscussionThread")?.name).toBe("get-discussion-thread");
     expect(resolveToolMetadata("semanticSearchCasts")?.name).toBe("semantic-search-casts");
-    expect(resolveToolMetadata("replyToCast")?.name).toBe("reply-to-cast");
   });
 
   it("does not resolve removed treasury compatibility aliases", () => {
@@ -41,6 +46,15 @@ describe("tool registry", () => {
       statusCode: 404,
       error: 'Unknown tool "nope".',
     });
+  });
+
+  it("falls back to zod issue messages for unmapped validation cases", async () => {
+    const result = await executeTool("get-user", { fname: "a".repeat(65) });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.statusCode).toBe(400);
+      expect(result.error.length).toBeGreaterThan(0);
+    }
   });
 
   it("validates list-discussions bounds before DB execution", async () => {
@@ -63,18 +77,9 @@ describe("tool registry", () => {
     });
   });
 
-  it("requires explicit confirmation for reply-to-cast", async () => {
-    const result = await executeTool("reply-to-cast", {
-      confirm: false,
-      signerUuid: "8d13fd9c-1dd6-4e33-8f07-4a3cdd6e9b3b",
-      text: "hi",
-      parentHash: `0x${"a".repeat(40)}`,
-    });
-    expect(result).toEqual({
-      ok: false,
-      name: "reply-to-cast",
-      statusCode: 400,
-      error: "confirm must be true to publish a reply.",
-    });
+  it("returns false for read-only and unknown tools", () => {
+    expect(requiresWriteScopeForTool("get-user")).toBe(false);
+    expect(requiresWriteScopeForTool("docs-search")).toBe(false);
+    expect(requiresWriteScopeForTool("missing-tool")).toBe(false);
   });
 });

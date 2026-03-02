@@ -5,10 +5,17 @@ import { createReply } from "../../utils/fastify";
 
 const mocks = vi.hoisted(() => ({
   authenticateToolsBearerToken: vi.fn(),
+  requestContextSet: vi.fn(),
 }));
 
 vi.mock("../../../src/api/tools/token-auth", () => ({
   authenticateToolsBearerToken: mocks.authenticateToolsBearerToken,
+}));
+
+vi.mock("@fastify/request-context", () => ({
+  requestContext: {
+    set: (...args: unknown[]) => mocks.requestContextSet(...args),
+  },
 }));
 
 describe("enforceToolsBearerAuth", () => {
@@ -32,6 +39,21 @@ describe("enforceToolsBearerAuth", () => {
     const request = {
       ip: "127.0.0.1",
       headers: { authorization: "Basic token" },
+    } as unknown as FastifyRequest;
+    const reply = createReply();
+
+    await enforceToolsBearerAuth(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(401);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Unauthorized." });
+    expect(mocks.authenticateToolsBearerToken).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 when bearer token is empty after trimming", async () => {
+    mocks.authenticateToolsBearerToken.mockReset();
+    const request = {
+      ip: "127.0.0.1",
+      headers: { authorization: "Bearer   " },
     } as unknown as FastifyRequest;
     const reply = createReply();
 
@@ -66,14 +88,60 @@ describe("enforceToolsBearerAuth", () => {
     } as unknown as FastifyRequest;
     const reply = createReply();
     mocks.authenticateToolsBearerToken.mockResolvedValueOnce({
+      tokenId: "42",
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
+      canWrite: true,
     });
 
     await enforceToolsBearerAuth(request, reply);
 
     expect(mocks.authenticateToolsBearerToken).toHaveBeenCalledWith("bbt_valid");
+    expect(mocks.requestContextSet).toHaveBeenCalledWith("user", {
+      address: "0x0000000000000000000000000000000000000001",
+      city: null,
+      country: null,
+      countryRegion: null,
+      userAgent: null,
+    });
+    expect(mocks.requestContextSet).toHaveBeenCalledWith("toolsPrincipal", {
+      tokenId: "42",
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+      canWrite: true,
+    });
     expect(reply.status).not.toHaveBeenCalled();
     expect(reply.send).not.toHaveBeenCalled();
+  });
+
+  it("stores geo/user-agent metadata when headers are present", async () => {
+    mocks.authenticateToolsBearerToken.mockReset();
+    const request = {
+      ip: "127.0.0.1",
+      headers: {
+        authorization: "Bearer bbt_valid",
+        city: "New York",
+        country: "US",
+        "country-region": "NY",
+        "user-agent": "test-agent",
+      },
+    } as unknown as FastifyRequest;
+    const reply = createReply();
+    mocks.authenticateToolsBearerToken.mockResolvedValueOnce({
+      tokenId: "43",
+      ownerAddress: "0x0000000000000000000000000000000000000002",
+      agentKey: "ops",
+      canWrite: false,
+    });
+
+    await enforceToolsBearerAuth(request, reply);
+
+    expect(mocks.requestContextSet).toHaveBeenCalledWith("user", {
+      address: "0x0000000000000000000000000000000000000002",
+      city: "New York",
+      country: "US",
+      countryRegion: "NY",
+      userAgent: "test-agent",
+    });
   });
 });

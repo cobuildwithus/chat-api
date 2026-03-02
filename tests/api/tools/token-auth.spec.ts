@@ -26,7 +26,7 @@ function flushTasks() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function mockDbTokenLookup(rows: Array<{ ownerAddress: string; agentKey: string }>) {
+function mockDbTokenLookup(rows: Array<{ id: bigint; ownerAddress: string; agentKey: string; canWrite: boolean }>) {
   const limit = vi.fn().mockResolvedValue(rows);
   const where = vi.fn().mockReturnValue({ limit });
   const from = vi.fn().mockReturnValue({ where });
@@ -49,8 +49,10 @@ describe("authenticateToolsBearerToken", () => {
     const redis = {
       get: vi.fn().mockResolvedValue(
         JSON.stringify({
+          tokenId: "11",
           ownerAddress: "0x0000000000000000000000000000000000000001",
           agentKey: "default",
+          canWrite: false,
         }),
       ),
       set: vi.fn().mockResolvedValue("OK"),
@@ -67,8 +69,10 @@ describe("authenticateToolsBearerToken", () => {
     await flushTasks();
 
     expect(principal).toEqual({
+      tokenId: "11",
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
+      canWrite: false,
     });
     expect(mocks.select).not.toHaveBeenCalled();
     expect(redis.get).toHaveBeenCalledTimes(1);
@@ -76,7 +80,7 @@ describe("authenticateToolsBearerToken", () => {
 
   it("returns null when cached principal contains an invalid owner address", async () => {
     const redis = {
-      get: vi.fn().mockResolvedValue(JSON.stringify({ ownerAddress: "bad", agentKey: "default" })),
+      get: vi.fn().mockResolvedValue(JSON.stringify({ tokenId: "bad", ownerAddress: "bad", agentKey: "default", canWrite: false })),
       set: vi.fn().mockResolvedValue("OK"),
     };
     mocks.getRedisClient.mockResolvedValue(redis);
@@ -95,8 +99,10 @@ describe("authenticateToolsBearerToken", () => {
     mocks.getRedisClient.mockResolvedValue(redis);
     const dbChain = mockDbTokenLookup([
       {
+        id: 21n,
         ownerAddress: "0x0000000000000000000000000000000000000002",
         agentKey: "ops",
+        canWrite: true,
       },
     ]);
     mocks.update.mockReturnValue({
@@ -109,8 +115,10 @@ describe("authenticateToolsBearerToken", () => {
     await flushTasks();
 
     expect(principal).toEqual({
+      tokenId: "21",
       ownerAddress: "0x0000000000000000000000000000000000000002",
       agentKey: "ops",
+      canWrite: true,
     });
     expect(dbChain.limit).toHaveBeenCalledWith(1);
     expect(redis.set).toHaveBeenCalled();
@@ -137,8 +145,10 @@ describe("authenticateToolsBearerToken", () => {
     mocks.getRedisClient.mockResolvedValue(redis);
     mockDbTokenLookup([
       {
+        id: 31n,
         ownerAddress: "invalid-address",
         agentKey: "ops",
+        canWrite: false,
       },
     ]);
 
@@ -158,8 +168,10 @@ describe("authenticateToolsBearerToken", () => {
       });
     mockDbTokenLookup([
       {
+        id: 41n,
         ownerAddress: "0x0000000000000000000000000000000000000003",
         agentKey: "fallback",
+        canWrite: false,
       },
     ]);
     mocks.update.mockReturnValue({
@@ -172,8 +184,10 @@ describe("authenticateToolsBearerToken", () => {
     await flushTasks();
 
     expect(principal).toEqual({
+      tokenId: "41",
       ownerAddress: "0x0000000000000000000000000000000000000003",
       agentKey: "fallback",
+      canWrite: false,
     });
   });
 
@@ -181,8 +195,10 @@ describe("authenticateToolsBearerToken", () => {
     const redis = {
       get: vi.fn().mockResolvedValue(
         JSON.stringify({
+          tokenId: "51",
           ownerAddress: "0x0000000000000000000000000000000000000004",
           agentKey: "readonly",
+          canWrite: false,
         }),
       ),
       set: vi.fn().mockResolvedValue(null),
@@ -197,8 +213,10 @@ describe("authenticateToolsBearerToken", () => {
     await flushTasks();
 
     expect(principal).toEqual({
+      tokenId: "51",
       ownerAddress: "0x0000000000000000000000000000000000000004",
       agentKey: "readonly",
+      canWrite: false,
     });
     expect(where).not.toHaveBeenCalled();
   });
@@ -207,8 +225,10 @@ describe("authenticateToolsBearerToken", () => {
     const redis = {
       get: vi.fn().mockResolvedValue(
         JSON.stringify({
+          tokenId: "61",
           ownerAddress: "0x0000000000000000000000000000000000000005",
           agentKey: "writer",
+          canWrite: true,
         }),
       ),
       set: vi.fn().mockResolvedValue("OK"),
@@ -224,8 +244,10 @@ describe("authenticateToolsBearerToken", () => {
     await flushTasks();
 
     expect(principal).toEqual({
+      tokenId: "61",
       ownerAddress: "0x0000000000000000000000000000000000000005",
       agentKey: "writer",
+      canWrite: true,
     });
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
@@ -235,8 +257,10 @@ describe("authenticateToolsBearerToken", () => {
     const redis = {
       get: vi.fn().mockResolvedValue(
         JSON.stringify({
+          tokenId: "71",
           ownerAddress: "0x0000000000000000000000000000000000000006",
           agentKey: "writer",
+          canWrite: true,
         }),
       ),
       set: vi.fn().mockRejectedValue(new Error("redis lock fail")),
@@ -251,8 +275,10 @@ describe("authenticateToolsBearerToken", () => {
     await flushTasks();
 
     expect(principal).toEqual({
+      tokenId: "71",
       ownerAddress: "0x0000000000000000000000000000000000000006",
       agentKey: "writer",
+      canWrite: true,
     });
     expect(where).not.toHaveBeenCalled();
   });

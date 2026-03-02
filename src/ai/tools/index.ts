@@ -4,7 +4,6 @@ import { getDiscussionThreadTool } from "./get-discussion-thread/get-discussion-
 import { getCastTool } from "./get-cast/get-cast";
 import { getUserTool } from "./get-user/tool";
 import { listDiscussionsTool } from "./list-discussions/list-discussions";
-import { replyToCastTool } from "./reply-to-cast/reply-to-cast";
 import { semanticSearchCastsTool } from "./semantic-search-casts/semantic-search-casts";
 import type { Tool } from "./tool";
 import { webSearchTool } from "./web-search/web-search";
@@ -15,7 +14,6 @@ export const defaultTools: Tool[] = [
   listDiscussionsTool,
   getDiscussionThreadTool,
   semanticSearchCastsTool,
-  replyToCastTool,
   cobuildAiContextTool,
   ...(docsFileSearchTool ? [docsFileSearchTool] : []),
   webSearchTool,
