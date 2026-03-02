@@ -205,6 +205,14 @@ describe("handleChatPostRequest", () => {
       reply,
     );
 
+    expect(getAgentMock).toHaveBeenCalledWith(
+      "chat-default",
+      expect.objectContaining({ address: "0xabc0000000000000000000000000000000000000" }),
+      {},
+      undefined,
+      { includeCobuildAiContextPrompt: false },
+    );
+
     const streamCall = streamTextMock.mock.calls[0]?.[0];
     expect(streamCall?.model).toBe(mockModel);
 
@@ -240,6 +248,14 @@ describe("handleChatPostRequest", () => {
 
     const reply = createReply();
     await handleChatPostRequest(buildRequest(baseBody, { "x-client-device": "mobile" }), reply);
+
+    expect(getAgentMock).toHaveBeenCalledWith(
+      "chat-default",
+      expect.objectContaining({ address: "0xabc0000000000000000000000000000000000000" }),
+      {},
+      undefined,
+      { includeCobuildAiContextPrompt: true },
+    );
 
     const options = streamTextMock.mock.calls[0]?.[0];
     expect(options?.providerOptions?.openai?.textVerbosity).toBe("low");

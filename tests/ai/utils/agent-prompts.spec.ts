@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Tool as AITool } from "ai";
 import { getAgentPrompts } from "../../../src/ai/utils/agent-prompts";
 import { getGoalPrompt } from "../../../src/ai/prompts/goal";
+import { cobuildAiContextPrompt } from "../../../src/ai/prompts/cobuild-ai-context";
 import type { Tool as CobuildTool } from "../../../src/ai/tools/tool";
 
 vi.mock("../../../src/ai/prompts/about", () => ({
@@ -62,5 +63,23 @@ describe("getAgentPrompts", () => {
     const contents = prompts.map((p) => p.content);
     expect(contents).toContain("user");
     expect(contents).toContain("goal");
+  });
+
+  it("skips cobuild context prompt when disabled", async () => {
+    const cobuildPromptMock = vi.mocked(cobuildAiContextPrompt);
+    cobuildPromptMock.mockClear();
+
+    const prompts = await getAgentPrompts({
+      personality: "persona",
+      user: null,
+      data: {},
+      tools: [],
+      extraPrompts: [],
+      includeCobuildAiContextPrompt: false,
+    });
+
+    const contents = prompts.map((p) => p.content);
+    expect(contents).not.toContain("context");
+    expect(cobuildPromptMock).not.toHaveBeenCalled();
   });
 });

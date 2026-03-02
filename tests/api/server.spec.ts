@@ -85,7 +85,7 @@ describe("setupServer", () => {
     const corsCall = serverMock.register.mock.calls.find((call) => call[0] === corsMock);
     expect(corsCall?.[1]?.origin).toEqual(["https://a.com", "https://b.com"]);
     expect(registerRequestLoggingMock).toHaveBeenCalledWith(serverMock);
-    expect(serverMock.post).toHaveBeenCalledTimes(7);
+    expect(serverMock.post).toHaveBeenCalledTimes(8);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/docs/search")).toBe(true);
     const docsSearchCall = serverMock.post.mock.calls.find((call) => call[0] === "/api/docs/search");
     const docsSearchOptions = docsSearchCall?.[1] as {
@@ -110,6 +110,7 @@ describe("setupServer", () => {
     expect(
       serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/cobuild-ai-context"),
     ).toBe(true);
+    expect(serverMock.post.mock.calls.some((call) => call[0] === "/v1/tool-executions")).toBe(true);
     const buildbotPaths = [
       "/api/buildbot/tools/get-user",
       "/api/buildbot/tools/get-cast",
@@ -126,7 +127,30 @@ describe("setupServer", () => {
         "enforceBuildBotToolsRateLimit",
       ]);
     }
-    expect(serverMock.get).toHaveBeenCalledTimes(3);
+    const toolExecutionsCall = serverMock.post.mock.calls.find((call) => call[0] === "/v1/tool-executions");
+    const toolExecutionsOptions = toolExecutionsCall?.[1] as {
+      preHandler?: Array<{ name?: string }>;
+      schema?: object;
+    };
+    expect(toolExecutionsOptions?.schema).toBeTruthy();
+    expect(Array.isArray(toolExecutionsOptions?.preHandler)).toBe(true);
+    expect(toolExecutionsOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+      "enforceBuildBotToolsInternalServiceAuth",
+    ]);
+
+    expect(serverMock.get.mock.calls.some((call) => call[0] === "/v1/tools")).toBe(true);
+    const toolsCall = serverMock.get.mock.calls.find((call) => call[0] === "/v1/tools");
+    const toolsOptions = toolsCall?.[1] as {
+      preHandler?: Array<{ name?: string }>;
+      schema?: object;
+    };
+    expect(toolsOptions?.schema).toBeTruthy();
+    expect(Array.isArray(toolsOptions?.preHandler)).toBe(true);
+    expect(toolsOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+      "enforceBuildBotToolsInternalServiceAuth",
+    ]);
+
+    expect(serverMock.get).toHaveBeenCalledTimes(4);
     expect(serverMock.setErrorHandler).toHaveBeenCalledTimes(1);
   });
 

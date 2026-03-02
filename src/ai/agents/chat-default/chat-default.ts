@@ -6,10 +6,15 @@ import { getAgentPrompts } from "../../utils/agent-prompts";
 import type { Agent } from "../agent";
 import { chatDefaultPersonalityPrompt } from "./personality";
 
+export type ChatDefaultOptions = {
+  includeCobuildAiContextPrompt?: boolean;
+};
+
 export async function getChatDefault(
   user: ChatUser | null,
   data: ChatData = {},
   incomingTools: Tool[] = defaultTools,
+  options: ChatDefaultOptions = {},
 ): Promise<Agent> {
   // Make a fresh copy so we don't mutate the shared defaultTools array across requests
   const tools = [...incomingTools];
@@ -20,6 +25,7 @@ export async function getChatDefault(
       tools,
       personality: chatDefaultPersonalityPrompt,
       extraPrompts: [],
+      includeCobuildAiContextPrompt: options.includeCobuildAiContextPrompt,
     }),
     tools: getTools(tools),
     defaultModel: openAIModel,

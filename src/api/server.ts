@@ -16,6 +16,7 @@ import {
   handleBuildBotToolsGetCastRequest,
   handleBuildBotToolsGetUserRequest,
 } from "./buildbot-tools/route";
+import { handleToolExecutionRequest, handleToolsListRequest } from "./tools/route";
 import { validateChatUser } from "./auth/validate-chat-user";
 import {
   chatCreateSchema,
@@ -30,6 +31,7 @@ import {
   buildBotToolsGetCastSchema,
   buildBotToolsGetUserSchema,
 } from "./buildbot-tools/schema";
+import { toolExecutionSchema, toolsListSchema } from "./tools/schema";
 import { getRateLimitConfig } from "../config/env";
 import { handleError } from "./server-helpers";
 import { registerRequestLogging } from "./request-logger";
@@ -175,6 +177,24 @@ export const setupServer = async () => {
       schema: buildBotToolsCobuildAiContextSchema,
     },
     handleBuildBotToolsCobuildAiContextRequest,
+  );
+
+  server.get(
+    "/v1/tools",
+    {
+      preHandler: [enforceBuildBotToolsInternalServiceAuth],
+      schema: toolsListSchema,
+    },
+    handleToolsListRequest,
+  );
+
+  server.post(
+    "/v1/tool-executions",
+    {
+      preHandler: [enforceBuildBotToolsInternalServiceAuth],
+      schema: toolExecutionSchema,
+    },
+    handleToolExecutionRequest,
   );
 
   server.get("/source", async (_request, reply) => {

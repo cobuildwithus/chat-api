@@ -14,10 +14,18 @@ interface Props {
   data: ChatData;
   tools: Tool[];
   extraPrompts: string[];
+  includeCobuildAiContextPrompt?: boolean;
 }
 
 export async function getAgentPrompts(props: Props): Promise<SystemModelMessage[]> {
-  const { personality, user, data, tools, extraPrompts } = props;
+  const {
+    personality,
+    user,
+    data,
+    tools,
+    extraPrompts,
+    includeCobuildAiContextPrompt = true,
+  } = props;
   const prompts: SystemModelMessage[] = [];
 
   // Add cached prompts
@@ -34,7 +42,9 @@ export async function getAgentPrompts(props: Props): Promise<SystemModelMessage[
   // Non-cached prompts
   const goalPrompt = await getGoalPrompt(data?.goalAddress);
   if (goalPrompt) prompts.push({ role: "system", content: goalPrompt });
-  prompts.push({ role: "system", content: await cobuildAiContextPrompt() });
+  if (includeCobuildAiContextPrompt) {
+    prompts.push({ role: "system", content: await cobuildAiContextPrompt() });
+  }
   prompts.push({ role: "system", content: getDataPrompt(data) });
   if (user) prompts.push({ role: "system", content: await getUserDataPrompt(user) });
 

@@ -12,15 +12,20 @@ export type Agent = {
   defaultModel: LanguageModel;
 };
 
+export type AgentOptions = {
+  includeCobuildAiContextPrompt?: boolean;
+};
+
 export async function getAgent(
   type: AgentType,
   user: ChatUser | null,
   data: ChatData,
   tools?: Tool[],
+  options: AgentOptions = {},
 ): Promise<Agent> {
   switch (type) {
     case "chat-default":
-      return getChatDefault(user, data, tools);
+      return getChatDefault(user, data, tools, options);
     default:
       throw new Error(`Unsupported agent "${type}"`);
   }

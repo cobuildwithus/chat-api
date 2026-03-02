@@ -38,6 +38,7 @@ export async function handleChatPostRequest(
   try {
     const body = request.body as ChatBody;
     const { messages, type, context, data = {}, clientMessageId } = body;
+    const includeCobuildAiContextPrompt = context === undefined;
     const user = getChatUserOrThrow();
     const chatId = body.id;
     const grantHeader = request.headers?.["x-chat-grant"];
@@ -74,7 +75,7 @@ export async function handleChatPostRequest(
     // Check the rate limit and build the agent in parallel.
     const [canUseAi, agent] = await Promise.all([
       isAiUsageAvailable(user.address),
-      getAgent(type, user, data),
+      getAgent(type, user, data, undefined, { includeCobuildAiContextPrompt }),
     ]);
 
     if (!canUseAi) {
