@@ -35,7 +35,10 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 ## Request Pipeline (Common)
 
 1. Route schema validation from route-local schema modules under `src/api/**/schema.ts`.
-2. For chat routes, `validateChatUser` pre-handler resolves `requestContext.user`:
+2. For authenticated routes, auth runs in `preValidation` so `requestContext` is set before `preHandler` rate-limit key generation:
+- chat + token routes use `validateChatUser`
+- canonical tools routes use `enforceToolsBearerAuth`
+- these auth hooks resolve `requestContext.user` / `requestContext.toolsPrincipal`
 - Privy JWT mode (`privy-id-token`)
 - Self-hosted mode (`x-chat-user`/default address and optional `x-chat-auth` shared secret)
 3. Handler logic executes per endpoint.

@@ -26,6 +26,7 @@ const CAST_EMBEDDING_DIMENSIONS = 256;
 const DEFAULT_DOCS_SEARCH_LIMIT = 8;
 const DOCS_SEARCH_LIMIT_MIN = 1;
 const DOCS_SEARCH_LIMIT_MAX = 20;
+const DOCS_SEARCH_QUERY_MAX = 1000;
 const DOCS_BASE_URL = "https://docs.co.build";
 
 const DISCUSSION_CHANNEL_URL = "https://farcaster.xyz/~/channel/cobuild";
@@ -49,6 +50,8 @@ const EXCERPT_MAX_LENGTH = 280;
 const TITLE_MAX_LENGTH = 160;
 
 const CAST_HASH_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+
+class OpenAiConfigError extends Error {}
 
 type JsonSchema = Record<string, unknown>;
 
@@ -410,6 +413,9 @@ function formatToolInputError(toolName: string, error: z.ZodError): string {
   if (toolName === "docs-search") {
     if (field === "query" && issue.code === "invalid_type") return "Query must be a string.";
     if (field === "query" && issue.code === "too_small") return "Query must not be empty.";
+    if (field === "query" && issue.code === "too_big") {
+      return `Query must be at most ${DOCS_SEARCH_QUERY_MAX} characters.`;
+    }
     if (field === "limit" && issue.code === "invalid_type") return "Limit must be an integer.";
     if (field === "limit" && (issue.code === "too_small" || issue.code === "too_big")) {
       return `Limit must be between ${DOCS_SEARCH_LIMIT_MIN} and ${DOCS_SEARCH_LIMIT_MAX}.`;
@@ -489,7 +495,7 @@ const semanticSearchCastsInputSchema = z.object({
 }).strict();
 const getTreasuryStatsInputSchema = z.object({}).strict();
 const docsSearchInputSchema = z.object({
-  query: z.string().trim().min(1),
+  query: z.string().trim().min(1).max(DOCS_SEARCH_QUERY_MAX),
   limit: z.number().int().min(1).max(20).default(DEFAULT_DOCS_SEARCH_LIMIT),
 }).strict();
 
@@ -970,7 +976,7 @@ async function executeGetDiscussionThread(
 async function createQueryEmbedding(query: string): Promise<number[]> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
+    throw new OpenAiConfigError("OPENAI_API_KEY is not configured.");
   }
 
   const openAiFetch = createTimeoutFetch({
@@ -1096,7 +1102,12 @@ async function executeSemanticSearchCasts(
       ...(rootHash ? { rootHash } : {}),
     }, SHORT_PRIVATE_CACHE_CONTROL);
   } catch (error) {
-    return failure(name, 502, `semantic-search-casts request failed: ${getDocsSearchErrorMessage(error)}`);
+    const message = getDocsSearchErrorMessage(error);
+    return failure(
+      name,
+      error instanceof OpenAiConfigError ? 503 : 502,
+      `semantic-search-casts request failed: ${message}`,
+    );
   }
 }
 

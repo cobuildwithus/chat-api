@@ -11,9 +11,13 @@ Routes and schemas are bound in `src/api/server.ts`:
 - `GET /v1/tools` -> `toolsListSchema` + `handleToolsListRequest`
 - `GET /v1/tools/:name` -> `toolMetadataSchema` + `handleToolMetadataRequest`
 - `POST /v1/tool-executions` -> `toolExecutionSchema` + `handleToolExecutionRequest`
+- `GET /v1/tokens` -> `buildBotTokensListSchema` + `handleBuildBotTokensListRequest`
+- `POST /v1/tokens` -> `buildBotTokenCreateSchema` + `handleBuildBotTokenCreateRequest`
+- `DELETE /v1/tokens` -> `buildBotTokenRevokeSchema` + `handleBuildBotTokenRevokeRequest`
 
-Chat routes run `validateChatUser` as `preHandler`.
-Canonical tool routes run `enforceToolsBearerAuth` as `preHandler`.
+Chat routes run `validateChatUser` as `preValidation`.
+Canonical tool routes run `enforceToolsBearerAuth` as `preValidation`.
+Token management routes run `validateChatUser` as `preValidation`.
 
 ## Request Schema Summary
 
@@ -53,6 +57,20 @@ Source: `src/api/chat/schema.ts`.
 - Optional body: `input` (object)
 - Requires header: `Authorization: Bearer <bbt_...>`
 
+### `GET /v1/tokens`
+
+- Requires header: `privy-id-token`
+
+### `POST /v1/tokens`
+
+- Requires header: `privy-id-token`
+- Optional body: `label`, `agentKey`
+
+### `DELETE /v1/tokens`
+
+- Requires header: `privy-id-token`
+- Requires body: `tokenId`
+
 ### Canonical tools auth
 
 - `/v1/tools`, `/v1/tools/:name`, and `/v1/tool-executions` require a valid build-bot PAT bearer token.
@@ -65,15 +83,19 @@ Source: `src/api/chat/schema.ts`.
 - `POST /api/chat`: streaming SSE response, may include refreshed `x-chat-grant`
 - `GET /v1/tools`: `{ tools: ToolMetadata[] }`
 - `GET /v1/tools/:name`: `{ tool: ToolMetadata }` or `404` with `{ error }`
-- `POST /v1/tool-executions`: `{ ok, name, output }` or error payload `{ error }`
+- `POST /v1/tool-executions`: success `{ ok: true, name, output }`; failure `{ ok: false, name, statusCode, error }`
+- `GET /v1/tokens`: `{ ok: true, tokens }`
+- `POST /v1/tokens`: `{ ok: true, token, tokenInfo }`
+- `DELETE /v1/tokens`: `{ ok: true, revoked }`
 
 ## Intentional Status-Code Semantics
 
 - Missing or unauthorized chat access returns `404` on read/write chat-id paths.
-- Auth pre-handler returns `401` for invalid/missing auth.
+- Auth pre-validation returns `401` for invalid/missing auth.
 - Usage limiter returns `429` for token-budget overage.
 - Canonical tools auth returns `401` for missing/invalid bearer token.
 - `GET /v1/tools/:name` returns `404` with `{ error: "Unknown tool \"...\"." }` when name/alias is not registered.
+- `semantic-search-casts` returns `503` for missing OpenAI config and `502` for upstream embedding failures.
 
 ## Schema/Runtime Mismatches (Current)
 

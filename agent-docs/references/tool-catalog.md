@@ -40,6 +40,7 @@ Source registries:
 - Purpose: semantic retrieval over Cobuild casts using pgvector embeddings.
 - Dependencies: OpenAI embeddings API + `farcaster.casts.text_embedding` (`vector(256)`).
 - Timeout: `OPENAI_REQUEST_TIMEOUT_MS`.
+- Error semantics: returns `503` when OpenAI API key is not configured; `502` for upstream embedding failures.
 
 ## `replyToCast`
 
@@ -67,6 +68,7 @@ Source registries:
 - Canonical alias: `docs.search` / `file_search`
 - AI wrapper: provider-native `file_search`
 - Enabled only when `DOCS_VECTOR_STORE_ID` exists.
+- Input guardrails: docs-search query text is bounded to 1000 characters.
 
 ## `web_search`
 

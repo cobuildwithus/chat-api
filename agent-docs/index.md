@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-02 (discussion tools + semantic search + reply publish flow + author username context)
+Last verified: 2026-03-02 (discussion tools + semantic search + reply publish flow + auth preValidation rate-limit keying)
 
 ## Purpose
 

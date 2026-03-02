@@ -115,7 +115,19 @@ export const setupServer = async () => {
       max: ipMax,
       timeWindow: rateLimitConfig.windowMs,
       hook: "onRequest",
-      keyGenerator: (request) => request.ip,
+      keyGenerator: (request) => {
+        const routerPath = (request as { routerPath?: string }).routerPath;
+        const requestPath = routerPath ?? request.url ?? "";
+        if (isToolsRateLimitPath(requestPath)) {
+          const bearerToken = parseBearerToken(
+            typeof request.headers.authorization === "string" ? request.headers.authorization : undefined,
+          );
+          if (bearerToken) {
+            return `tools-token:${hashRateLimitToken(bearerToken)}`;
+          }
+        }
+        return request.ip;
+      },
     });
     server.register(rateLimit, {
       max: rateLimitConfig.max,
@@ -166,7 +178,7 @@ export const setupServer = async () => {
 
   server.post(
     "/api/chat",
-    { preHandler: [validateChatUser], schema: chatSchema },
+    { preValidation: [validateChatUser], schema: chatSchema },
     handleChatPostRequest,
   );
 
@@ -175,7 +187,7 @@ export const setupServer = async () => {
   server.post(
     "/v1/tool-executions",
     {
-      preHandler: [enforceToolsBearerAuth],
+      preValidation: [enforceToolsBearerAuth],
       schema: toolExecutionSchema,
       bodyLimit: TOOL_EXECUTIONS_BODY_LIMIT_BYTES,
     },
@@ -185,7 +197,7 @@ export const setupServer = async () => {
   server.get(
     "/v1/tools",
     {
-      preHandler: [enforceToolsBearerAuth],
+      preValidation: [enforceToolsBearerAuth],
       schema: toolsListSchema,
     },
     handleToolsListRequest,
@@ -194,7 +206,7 @@ export const setupServer = async () => {
   server.get(
     "/v1/tools/:name",
     {
-      preHandler: [enforceToolsBearerAuth],
+      preValidation: [enforceToolsBearerAuth],
       schema: toolMetadataSchema,
     },
     handleToolMetadataRequest,
@@ -203,7 +215,7 @@ export const setupServer = async () => {
   server.get(
     "/v1/tokens",
     {
-      preHandler: [validateChatUser],
+      preValidation: [validateChatUser],
       schema: buildBotTokensListSchema,
     },
     handleBuildBotTokensListRequest,
@@ -212,7 +224,7 @@ export const setupServer = async () => {
   server.post(
     "/v1/tokens",
     {
-      preHandler: [validateChatUser],
+      preValidation: [validateChatUser],
       schema: buildBotTokenCreateSchema,
     },
     handleBuildBotTokenCreateRequest,
@@ -221,7 +233,7 @@ export const setupServer = async () => {
   server.delete(
     "/v1/tokens",
     {
-      preHandler: [validateChatUser],
+      preValidation: [validateChatUser],
       schema: buildBotTokenRevokeSchema,
     },
     handleBuildBotTokenRevokeRequest,
@@ -240,19 +252,19 @@ export const setupServer = async () => {
 
   server.post(
     "/api/chat/new",
-    { preHandler: [validateChatUser], schema: chatCreateSchema },
+    { preValidation: [validateChatUser], schema: chatCreateSchema },
     handleChatCreateRequest,
   );
 
   server.get(
     "/api/chats",
-    { preHandler: [validateChatUser], schema: chatListSchema },
+    { preValidation: [validateChatUser], schema: chatListSchema },
     handleChatListRequest,
   );
 
   server.get(
     "/api/chat/:chatId",
-    { preHandler: [validateChatUser], schema: chatGetSchema },
+    { preValidation: [validateChatUser], schema: chatGetSchema },
     handleChatGetRequest,
   );
 

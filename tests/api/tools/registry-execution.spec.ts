@@ -773,6 +773,12 @@ describe("tool registry execution", () => {
       statusCode: 400,
       error: "Query must not be empty.",
     });
+    expect(await executeTool("docs-search", { query: "x".repeat(1001) })).toEqual({
+      ok: false,
+      name: "docs-search",
+      statusCode: 400,
+      error: "Query must be at most 1000 characters.",
+    });
     expect(await executeTool("docs-search", { query: "x", limit: "nope" })).toEqual({
       ok: false,
       name: "docs-search",
@@ -923,7 +929,7 @@ describe("tool registry execution", () => {
     expect(await executeTool("semantic-search-casts", { query: "x" })).toEqual({
       ok: false,
       name: "semantic-search-casts",
-      statusCode: 502,
+      statusCode: 503,
       error: "semantic-search-casts request failed: OPENAI_API_KEY is not configured.",
     });
 

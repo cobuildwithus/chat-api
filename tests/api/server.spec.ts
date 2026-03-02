@@ -99,15 +99,26 @@ describe("setupServer", () => {
       serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/cobuild-ai-context"),
     ).toBe(false);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/v1/tool-executions")).toBe(true);
+    const chatCall = serverMock.post.mock.calls.find((call) => call[0] === "/api/chat");
+    const chatOptions = chatCall?.[1] as {
+      preValidation?: Array<{ name?: string }>;
+      schema?: object;
+    };
+    expect(chatOptions?.schema).toBeTruthy();
+    expect(Array.isArray(chatOptions?.preValidation)).toBe(true);
+    expect(chatOptions?.preValidation?.map((handler) => handler.name)).toEqual([
+      "validateChatUser",
+    ]);
+
     const toolExecutionsCall = serverMock.post.mock.calls.find((call) => call[0] === "/v1/tool-executions");
     const toolExecutionsOptions = toolExecutionsCall?.[1] as {
-      preHandler?: Array<{ name?: string }>;
+      preValidation?: Array<{ name?: string }>;
       schema?: object;
       bodyLimit?: number;
     };
     expect(toolExecutionsOptions?.schema).toBeTruthy();
-    expect(Array.isArray(toolExecutionsOptions?.preHandler)).toBe(true);
-    expect(toolExecutionsOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+    expect(Array.isArray(toolExecutionsOptions?.preValidation)).toBe(true);
+    expect(toolExecutionsOptions?.preValidation?.map((handler) => handler.name)).toEqual([
       "enforceToolsBearerAuth",
     ]);
     expect(toolExecutionsOptions?.bodyLimit).toBe(64 * 1024);
@@ -115,24 +126,24 @@ describe("setupServer", () => {
     expect(serverMock.get.mock.calls.some((call) => call[0] === "/v1/tools")).toBe(true);
     const toolsCall = serverMock.get.mock.calls.find((call) => call[0] === "/v1/tools");
     const toolsOptions = toolsCall?.[1] as {
-      preHandler?: Array<{ name?: string }>;
+      preValidation?: Array<{ name?: string }>;
       schema?: object;
     };
     expect(toolsOptions?.schema).toBeTruthy();
-    expect(Array.isArray(toolsOptions?.preHandler)).toBe(true);
-    expect(toolsOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+    expect(Array.isArray(toolsOptions?.preValidation)).toBe(true);
+    expect(toolsOptions?.preValidation?.map((handler) => handler.name)).toEqual([
       "enforceToolsBearerAuth",
     ]);
 
     expect(serverMock.get.mock.calls.some((call) => call[0] === "/v1/tools/:name")).toBe(true);
     const toolByNameCall = serverMock.get.mock.calls.find((call) => call[0] === "/v1/tools/:name");
     const toolByNameOptions = toolByNameCall?.[1] as {
-      preHandler?: Array<{ name?: string }>;
+      preValidation?: Array<{ name?: string }>;
       schema?: object;
     };
     expect(toolByNameOptions?.schema).toBeTruthy();
-    expect(Array.isArray(toolByNameOptions?.preHandler)).toBe(true);
-    expect(toolByNameOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+    expect(Array.isArray(toolByNameOptions?.preValidation)).toBe(true);
+    expect(toolByNameOptions?.preValidation?.map((handler) => handler.name)).toEqual([
       "enforceToolsBearerAuth",
     ]);
 
@@ -140,33 +151,33 @@ describe("setupServer", () => {
     expect(serverMock.get.mock.calls.some((call) => call[0] === "/v1/tokens")).toBe(true);
     const tokensListCall = serverMock.get.mock.calls.find((call) => call[0] === "/v1/tokens");
     const tokensListOptions = tokensListCall?.[1] as {
-      preHandler?: Array<{ name?: string }>;
+      preValidation?: Array<{ name?: string }>;
       schema?: object;
     };
     expect(tokensListOptions?.schema).toBeTruthy();
-    expect(Array.isArray(tokensListOptions?.preHandler)).toBe(true);
-    expect(tokensListOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+    expect(Array.isArray(tokensListOptions?.preValidation)).toBe(true);
+    expect(tokensListOptions?.preValidation?.map((handler) => handler.name)).toEqual([
       "validateChatUser",
     ]);
     const tokensCreateCall = serverMock.post.mock.calls.find((call) => call[0] === "/v1/tokens");
     const tokensCreateOptions = tokensCreateCall?.[1] as {
-      preHandler?: Array<{ name?: string }>;
+      preValidation?: Array<{ name?: string }>;
       schema?: object;
     };
     expect(tokensCreateOptions?.schema).toBeTruthy();
-    expect(Array.isArray(tokensCreateOptions?.preHandler)).toBe(true);
-    expect(tokensCreateOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+    expect(Array.isArray(tokensCreateOptions?.preValidation)).toBe(true);
+    expect(tokensCreateOptions?.preValidation?.map((handler) => handler.name)).toEqual([
       "validateChatUser",
     ]);
     expect(serverMock.delete.mock.calls.some((call) => call[0] === "/v1/tokens")).toBe(true);
     const tokensDeleteCall = serverMock.delete.mock.calls.find((call) => call[0] === "/v1/tokens");
     const tokensDeleteOptions = tokensDeleteCall?.[1] as {
-      preHandler?: Array<{ name?: string }>;
+      preValidation?: Array<{ name?: string }>;
       schema?: object;
     };
     expect(tokensDeleteOptions?.schema).toBeTruthy();
-    expect(Array.isArray(tokensDeleteOptions?.preHandler)).toBe(true);
-    expect(tokensDeleteOptions?.preHandler?.map((handler) => handler.name)).toEqual([
+    expect(Array.isArray(tokensDeleteOptions?.preValidation)).toBe(true);
+    expect(tokensDeleteOptions?.preValidation?.map((handler) => handler.name)).toEqual([
       "validateChatUser",
     ]);
     expect(serverMock.get).toHaveBeenCalledTimes(7);
@@ -239,6 +250,14 @@ describe("setupServer", () => {
       ip: "127.0.0.1",
     } as { headers: Record<string, string>; ip: string });
     expect(ipKey).toBe("127.0.0.1");
+    const tokenIpKey = ipLimitCall?.[1]?.keyGenerator?.({
+      headers: { authorization: "Bearer bbt_example" },
+      ip: "127.0.0.1",
+      routerPath: "/v1/tool-executions",
+      url: "/v1/tool-executions",
+    } as { headers: Record<string, string>; ip: string; routerPath: string; url: string });
+    expect(typeof tokenIpKey).toBe("string");
+    expect(String(tokenIpKey).startsWith("tools-token:")).toBe(true);
 
     requestContextGetMock.mockImplementation((key: string) => {
       if (key === "toolsPrincipal") return undefined;

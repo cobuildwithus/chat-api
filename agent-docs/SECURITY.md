@@ -32,6 +32,7 @@
 - `x-chat-user` / default address
 - `x-chat-auth` shared secret
 - Production self-hosted mode requires `SELF_HOSTED_SHARED_SECRET` at startup and middleware level.
+- Auth for chat/tools/token routes runs in `preValidation`, so authenticated principals are available to `preHandler` rate-limit key generation.
 
 ## Grant Security Notes
 
