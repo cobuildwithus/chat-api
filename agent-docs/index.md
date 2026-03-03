@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-03 (tools auth explicit write-capability fields; chat auth token normalization; db schema domain split; canonical schema migration baseline)
+Last verified: 2026-03-03 (tools auth explicit write-capability fields; chat auth token normalization; db schema domain split; canonical schema migration baseline; wire published dependency guard)
 
 ## Purpose
 
