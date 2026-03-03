@@ -15,6 +15,7 @@ import {
   getPrivyVerificationKey,
   isChatDebugEnabled,
   loadDatabaseConfig,
+  resetEnvCacheForTests,
   validateEnvVariables,
 } from "../../src/config/env";
 
@@ -38,9 +39,11 @@ describe("env helpers", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    resetEnvCacheForTests();
   });
 
   afterEach(() => {
+    resetEnvCacheForTests();
     process.env = originalEnv;
   });
 
@@ -270,5 +273,31 @@ describe("env helpers", () => {
     process.env.CLI_TOOLS_INTERNAL_KEY = "legacy-secret";
 
     expect(getChatInternalServiceKey()).toBe("legacy-secret");
+  });
+
+  it("re-parses when process.env values change on the same object", () => {
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      RATE_LIMIT_ENABLED: "true",
+      RATE_LIMIT_MAX: "10",
+    };
+
+    expect(getRateLimitConfig().max).toBe(10);
+    process.env.RATE_LIMIT_MAX = "99";
+    expect(getRateLimitConfig().max).toBe(99);
+  });
+
+  it("re-parses when process.env object reference changes", () => {
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      RATE_LIMIT_ENABLED: "true",
+      RATE_LIMIT_MAX: "10",
+    };
+    expect(getRateLimitConfig().max).toBe(10);
+
+    process.env = { ...process.env, RATE_LIMIT_MAX: "11" };
+    expect(getRateLimitConfig().max).toBe(11);
   });
 });

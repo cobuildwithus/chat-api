@@ -67,40 +67,44 @@ const envSchema = z.object({
   BUILD_BOT_JWT_AUDIENCE: z.string().min(1).optional(),
 });
 
-const chatGrantSecretSchema = envSchema.pick({ CHAT_GRANT_SECRET: true });
-const privyAppIdSchema = envSchema.pick({ PRIVY_APP_ID: true });
-const privyVerificationKeySchema = envSchema.pick({ PRIVY_VERIFICATION_KEY: true });
-const debugChatSchema = envSchema.pick({ DEBUG_CHAT: true });
-const poolConfigSchema = envSchema.pick({
-  POSTGRES_POOL_MAX: true,
-  POSTGRES_POOL_IDLE_TIMEOUT_MS: true,
-  POSTGRES_POOL_CONNECTION_TIMEOUT_MS: true,
-  POSTGRES_POOL_STATS_INTERVAL_MS: true,
-});
-const rateLimitSchema = envSchema.pick({
-  RATE_LIMIT_ENABLED: true,
-  RATE_LIMIT_MAX: true,
-  RATE_LIMIT_WINDOW_MS: true,
-});
-const timeoutSchema = envSchema.pick({
-  OPENAI_REQUEST_TIMEOUT_MS: true,
-  COBUILD_AI_CONTEXT_TIMEOUT_MS: true,
-});
-const selfHostedSchema = envSchema.pick({
-  SELF_HOSTED_MODE: true,
-  SELF_HOSTED_DEFAULT_ADDRESS: true,
-  SELF_HOSTED_SHARED_SECRET: true,
-});
-const chatInternalServiceKeySchema = envSchema.pick({
-  CHAT_INTERNAL_SERVICE_KEY: true,
-  CLI_TOOLS_INTERNAL_KEY: true,
-});
-const buildBotJwtSchema = envSchema.pick({
-  BUILD_BOT_JWT_PRIVATE_KEY: true,
-  BUILD_BOT_JWT_PUBLIC_KEY: true,
-  BUILD_BOT_JWT_ISSUER: true,
-  BUILD_BOT_JWT_AUDIENCE: true,
-});
+const envCacheSchema = envSchema
+  .extend({
+    // Getter code treats non-production uniformly; tests often run with NODE_ENV=test.
+    NODE_ENV: z.string().optional(),
+  })
+  .partial();
+
+export type Env = z.infer<typeof envCacheSchema>;
+export type ValidatedEnv = z.infer<typeof envSchema>;
+
+let cachedEnv: Env | null = null;
+let cachedEnvKey: string | null = null;
+const cacheKeys = Object.keys(envSchema.shape) as (keyof Env)[];
+
+function getEnvKey(source: NodeJS.ProcessEnv): string {
+  return cacheKeys
+    .map((key) => `${String(key)}=${source[String(key)] ?? "__undefined__"}`)
+    .join("\u0000");
+}
+
+function setCachedEnv(env: Env, envKey = getEnvKey(process.env)): Env {
+  cachedEnv = env;
+  cachedEnvKey = envKey;
+  return env;
+}
+
+export function getEnv(): Env {
+  const currentEnvKey = getEnvKey(process.env);
+  if (!cachedEnv || cachedEnvKey !== currentEnvKey) {
+    return setCachedEnv(envCacheSchema.parse(process.env), currentEnvKey);
+  }
+  return cachedEnv;
+}
+
+export function resetEnvCacheForTests(): void {
+  cachedEnv = null;
+  cachedEnvKey = null;
+}
 
 const DEFAULT_DEV_BUILD_BOT_JWT_PRIVATE_KEY = [
   "-----BEGIN PRIVATE KEY-----",
@@ -120,8 +124,9 @@ const DEFAULT_DEV_BUILD_BOT_JWT_PUBLIC_KEY = [
 const DEFAULT_BUILD_BOT_JWT_ISSUER = "cobuild-chat-api";
 const DEFAULT_BUILD_BOT_JWT_AUDIENCE = "buildbot";
 
-export function validateEnvVariables() {
+export function validateEnvVariables(): ValidatedEnv {
   const env = envSchema.parse(process.env);
+  setCachedEnv(env);
   const selfHosted = isTruthy(env.SELF_HOSTED_MODE?.toLowerCase());
   if (selfHosted && env.NODE_ENV === "production" && !env.SELF_HOSTED_SHARED_SECRET) {
     throw new Error(
@@ -168,10 +173,6 @@ const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_OPENAI_TIMEOUT_MS = 30_000;
 const DEFAULT_COBUILD_AI_CONTEXT_TIMEOUT_MS = 7_000;
 
-const parsePoolEnv = () => poolConfigSchema.parse(process.env);
-const parseRateLimitEnv = () => rateLimitSchema.parse(process.env);
-const parseTimeoutEnv = () => timeoutSchema.parse(process.env);
-
 export function loadDatabaseConfig(): DatabaseConfig {
   const env = validateEnvVariables();
   return {
@@ -181,7 +182,7 @@ export function loadDatabaseConfig(): DatabaseConfig {
 }
 
 export function getPostgresPoolOptions(): PostgresPoolOptions {
-  const env = parsePoolEnv();
+  const env = getEnv();
   const options: PostgresPoolOptions = {};
   if (env.POSTGRES_POOL_MAX !== undefined) options.max = env.POSTGRES_POOL_MAX;
   if (env.POSTGRES_POOL_IDLE_TIMEOUT_MS !== undefined) {
@@ -194,7 +195,7 @@ export function getPostgresPoolOptions(): PostgresPoolOptions {
 }
 
 export function getPostgresPoolStatsIntervalMs(): number | null {
-  const env = parsePoolEnv();
+  const env = getEnv();
   return env.POSTGRES_POOL_STATS_INTERVAL_MS ?? null;
 }
 
@@ -203,8 +204,8 @@ export function getRateLimitConfig(): {
   max: number;
   windowMs: number;
 } {
-  const env = parseRateLimitEnv();
-  const isProduction = process.env.NODE_ENV === "production";
+  const env = getEnv();
+  const isProduction = env.NODE_ENV === "production";
   const enabled =
     env.RATE_LIMIT_ENABLED === undefined
       ? isProduction
@@ -217,21 +218,25 @@ export function getRateLimitConfig(): {
 }
 
 export function getOpenAiTimeoutMs(): number {
-  const env = parseTimeoutEnv();
+  const env = getEnv();
   return env.OPENAI_REQUEST_TIMEOUT_MS ?? DEFAULT_OPENAI_TIMEOUT_MS;
 }
 
 export function getCobuildAiContextTimeoutMs(): number {
-  const env = parseTimeoutEnv();
+  const env = getEnv();
   return env.COBUILD_AI_CONTEXT_TIMEOUT_MS ?? DEFAULT_COBUILD_AI_CONTEXT_TIMEOUT_MS;
 }
 
 export function getChatGrantSecret(): string {
-  return chatGrantSecretSchema.parse(process.env).CHAT_GRANT_SECRET;
+  const secret = getEnv().CHAT_GRANT_SECRET;
+  if (!secret) {
+    throw new Error("Missing CHAT_GRANT_SECRET");
+  }
+  return secret;
 }
 
 export function getPrivyAppId(): string {
-  const appId = privyAppIdSchema.parse(process.env).PRIVY_APP_ID;
+  const appId = getEnv().PRIVY_APP_ID;
   if (!appId) {
     throw new Error("Missing PRIVY_APP_ID");
   }
@@ -239,62 +244,63 @@ export function getPrivyAppId(): string {
 }
 
 export function getPrivyVerificationKey(): string | null {
-  const key = privyVerificationKeySchema.parse(process.env).PRIVY_VERIFICATION_KEY;
-  if (!key && process.env.NODE_ENV === "production" && !isSelfHostedMode()) {
+  const env = getEnv();
+  const key = env.PRIVY_VERIFICATION_KEY;
+  if (!key && env.NODE_ENV === "production" && !isTruthy(env.SELF_HOSTED_MODE?.toLowerCase())) {
     throw new Error("Missing required env in production: PRIVY_VERIFICATION_KEY");
   }
   return key ?? null;
 }
 
 export function isChatDebugEnabled(): boolean {
-  const flag = debugChatSchema.parse(process.env).DEBUG_CHAT?.toLowerCase();
+  const flag = getEnv().DEBUG_CHAT?.toLowerCase();
   return flag === "true" || flag === "1";
 }
 
 export function isSelfHostedMode(): boolean {
-  const flag = selfHostedSchema.parse(process.env).SELF_HOSTED_MODE?.toLowerCase();
+  const flag = getEnv().SELF_HOSTED_MODE?.toLowerCase();
   return isTruthy(flag);
 }
 
 export function getSelfHostedDefaultAddress(): string | null {
-  return selfHostedSchema.parse(process.env).SELF_HOSTED_DEFAULT_ADDRESS ?? null;
+  return getEnv().SELF_HOSTED_DEFAULT_ADDRESS ?? null;
 }
 
 export function getSelfHostedSharedSecret(): string | null {
-  return selfHostedSchema.parse(process.env).SELF_HOSTED_SHARED_SECRET ?? null;
+  return getEnv().SELF_HOSTED_SHARED_SECRET ?? null;
 }
 
 export function getChatInternalServiceKey(): string | null {
-  const env = chatInternalServiceKeySchema.parse(process.env);
+  const env = getEnv();
   return env.CHAT_INTERNAL_SERVICE_KEY ?? env.CLI_TOOLS_INTERNAL_KEY ?? null;
 }
 
 export function getBuildBotJwtPrivateKey(): string {
-  const env = buildBotJwtSchema.parse(process.env);
+  const env = getEnv();
   const configured = env.BUILD_BOT_JWT_PRIVATE_KEY?.trim();
   if (configured) {
     return configured;
   }
-  if (process.env.NODE_ENV === "production") {
+  if (env.NODE_ENV === "production") {
     throw new Error("Missing required env in production: BUILD_BOT_JWT_PRIVATE_KEY");
   }
   return DEFAULT_DEV_BUILD_BOT_JWT_PRIVATE_KEY;
 }
 
 export function getBuildBotJwtPublicKey(): string {
-  const env = buildBotJwtSchema.parse(process.env);
+  const env = getEnv();
   const configured = env.BUILD_BOT_JWT_PUBLIC_KEY?.trim();
   if (configured) {
     return configured;
   }
-  if (process.env.NODE_ENV === "production") {
+  if (env.NODE_ENV === "production") {
     throw new Error("Missing required env in production: BUILD_BOT_JWT_PUBLIC_KEY");
   }
   return DEFAULT_DEV_BUILD_BOT_JWT_PUBLIC_KEY;
 }
 
 export function getBuildBotJwtIssuer(): string {
-  const env = buildBotJwtSchema.parse(process.env);
+  const env = getEnv();
   const configured = env.BUILD_BOT_JWT_ISSUER?.trim();
   if (configured) {
     return configured;
@@ -303,7 +309,7 @@ export function getBuildBotJwtIssuer(): string {
 }
 
 export function getBuildBotJwtAudience(): string {
-  const env = buildBotJwtSchema.parse(process.env);
+  const env = getEnv();
   const configured = env.BUILD_BOT_JWT_AUDIENCE?.trim();
   if (configured) {
     return configured;
