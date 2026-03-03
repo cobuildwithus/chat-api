@@ -5,17 +5,15 @@ const mocks = vi.hoisted(() => ({
   getOrSetCachedResultWithLock: vi.fn(),
   select: vi.fn(),
   execute: vi.fn(),
-  getNeynarClient: vi.fn(),
-  withTimeout: vi.fn(),
   createTimeoutFetch: vi.fn(),
   getCobuildAiContextSnapshot: vi.fn(),
   getOpenAiTimeoutMs: vi.fn(),
-  getNeynarTimeoutMs: vi.fn(),
+  createPublicClient: vi.fn(),
+  requestContextGet: vi.fn(),
 }));
 
 vi.mock("../../../src/config/env", () => ({
   getOpenAiTimeoutMs: mocks.getOpenAiTimeoutMs,
-  getNeynarTimeoutMs: mocks.getNeynarTimeoutMs,
 }));
 
 vi.mock("../../../src/infra/cache/cacheResult", () => ({
@@ -30,12 +28,7 @@ vi.mock("../../../src/infra/db/cobuildDb", () => ({
 }));
 
 vi.mock("../../../src/infra/http/timeout", () => ({
-  withTimeout: mocks.withTimeout,
   createTimeoutFetch: mocks.createTimeoutFetch,
-}));
-
-vi.mock("../../../src/infra/neynar/client", () => ({
-  getNeynarClient: mocks.getNeynarClient,
 }));
 
 vi.mock("../../../src/infra/cobuild-ai-context", async () => {
@@ -45,6 +38,20 @@ vi.mock("../../../src/infra/cobuild-ai-context", async () => {
   return {
     ...actual,
     getCobuildAiContextSnapshot: mocks.getCobuildAiContextSnapshot,
+  };
+});
+
+vi.mock("@fastify/request-context", () => ({
+  requestContext: {
+    get: (...args: unknown[]) => mocks.requestContextGet(...args),
+  },
+}));
+
+vi.mock("viem", async () => {
+  const actual = await vi.importActual<typeof import("viem")>("viem");
+  return {
+    ...actual,
+    createPublicClient: mocks.createPublicClient,
   };
 });
 
@@ -83,7 +90,7 @@ describe("tool registry execution", () => {
     vi.clearAllMocks();
 
     mocks.getOpenAiTimeoutMs.mockReturnValue(1_000);
-    mocks.getNeynarTimeoutMs.mockReturnValue(1_000);
+    mocks.requestContextGet.mockReturnValue(undefined);
     mocks.getOrSetCachedResultWithLock.mockImplementation(
       async (_key: string, _prefix: string, fetchFn: () => Promise<unknown>) => await fetchFn(),
     );
@@ -181,27 +188,40 @@ describe("tool registry execution", () => {
   });
 
   it("executes get-cast and normalizes alias names", async () => {
-    const lookupCastByHashOrUrl = vi.fn();
-    mocks.getNeynarClient.mockReturnValue({
-      lookupCastByHashOrUrl,
-    });
-    mocks.withTimeout.mockResolvedValue({
-      cast: { hash: "0xabc", text: "hello world" },
+    mocks.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          hashHex: "a".repeat(40),
+          parentHashHex: "b".repeat(40),
+          rootHashHex: "a".repeat(40),
+          rootParentUrl: "https://farcaster.xyz/~/channel/cobuild",
+          text: "hello world",
+          castTimestamp: "2026-03-02T00:00:00.000Z",
+          replyCount: 2,
+          viewCount: 9,
+          authorFid: 123,
+          authorFname: "alice",
+          authorDisplayName: "Alice",
+          authorAvatarUrl: "https://example.com/a.png",
+          authorNeynarScore: 0.8,
+        },
+      ],
     });
 
-    const result = await executeTool("buildbot.get-cast", {
-      identifier: "0xabc",
+    const result = await executeTool("cli.get-cast", {
+      identifier: `0x${"A".repeat(40)}`,
       type: "hash",
     });
 
     expect(result).toMatchObject({
       ok: true,
       name: "get-cast",
-      output: { hash: "0xabc", text: "hello world" },
-    });
-    expect(lookupCastByHashOrUrl).toHaveBeenCalledWith({
-      identifier: "0xabc",
-      type: "hash",
+      output: {
+        hash: `0x${"a".repeat(40)}`,
+        parentHash: `0x${"b".repeat(40)}`,
+        text: "hello world",
+        authorUsername: "alice",
+      },
     });
   });
 
@@ -236,6 +256,108 @@ describe("tool registry execution", () => {
       output: { asOf: "2026-03-02T00:00:00.000Z" },
       cacheControl: "public, max-age=60",
     });
+  });
+
+  it("executes get-wallet-balances with short-term cache", async () => {
+    const getBalance = vi.fn().mockResolvedValue(1_250_000_000_000_000_000n);
+    const readContract = vi.fn().mockResolvedValue(2_500_000n);
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x00000000000000000000000000000000000000aA",
+      agentKey: "default",
+    });
+    mocks.createPublicClient.mockReturnValue({
+      getBalance,
+      readContract,
+    });
+
+    const result = await executeTool("get-wallet-balances", { network: "base" });
+
+    expect(result).toEqual({
+      ok: true,
+      name: "get-wallet-balances",
+      output: {
+        agentKey: "default",
+        network: "base",
+        walletAddress: "0x00000000000000000000000000000000000000aa",
+        balances: {
+          eth: {
+            wei: "1250000000000000000",
+            formatted: "1.25",
+          },
+          usdc: {
+            raw: "2500000",
+            decimals: 6,
+            formatted: "2.5",
+            contract: "0x833589fCD6EDB6E08F4C7C32D4F71B54BDA02913",
+          },
+        },
+      },
+      cacheControl: "private, max-age=60",
+    });
+    expect(mocks.getOrSetCachedResultWithLock).toHaveBeenCalledWith(
+      "base:0x00000000000000000000000000000000000000aa",
+      "cli-tools:get-wallet-balances:",
+      expect.any(Function),
+      30,
+    );
+    expect(getBalance).toHaveBeenCalledWith({
+      address: "0x00000000000000000000000000000000000000aa",
+    });
+    expect(readContract).toHaveBeenCalledWith({
+      address: "0x833589fCD6EDB6E08F4C7C32D4F71B54BDA02913",
+      abi: expect.any(Array),
+      functionName: "balanceOf",
+      args: ["0x00000000000000000000000000000000000000aa"],
+    });
+  });
+
+  it("returns request-scoped agentKey even when wallet balances are cached", async () => {
+    const getBalance = vi.fn().mockResolvedValue(1_250_000_000_000_000_000n);
+    const readContract = vi.fn().mockResolvedValue(2_500_000n);
+    const cache = new Map<string, unknown>();
+    mocks.createPublicClient.mockReturnValue({
+      getBalance,
+      readContract,
+    });
+    mocks.getOrSetCachedResultWithLock.mockImplementation(
+      async (key: string, prefix: string, fetchFn: () => Promise<unknown>) => {
+        const cacheKey = `${prefix}${key}`;
+        if (cache.has(cacheKey)) return cache.get(cacheKey);
+        const value = await fetchFn();
+        cache.set(cacheKey, value);
+        return value;
+      },
+    );
+
+    mocks.requestContextGet
+      .mockReturnValueOnce({
+        ownerAddress: "0x00000000000000000000000000000000000000aA",
+        agentKey: "default",
+      })
+      .mockReturnValueOnce({
+        ownerAddress: "0x00000000000000000000000000000000000000aA",
+        agentKey: "ops",
+      });
+
+    const first = await executeTool("get-wallet-balances", { network: "base" });
+    const second = await executeTool("get-wallet-balances", { network: "base" });
+
+    expect(first).toMatchObject({
+      ok: true,
+      name: "get-wallet-balances",
+      output: {
+        agentKey: "default",
+      },
+    });
+    expect(second).toMatchObject({
+      ok: true,
+      name: "get-wallet-balances",
+      output: {
+        agentKey: "ops",
+      },
+    });
+    expect(getBalance).toHaveBeenCalledTimes(1);
+    expect(readContract).toHaveBeenCalledTimes(1);
   });
 
   it("executes docs-search and parses results from both payload formats", async () => {
@@ -638,14 +760,14 @@ describe("tool registry execution", () => {
   });
 
   it("covers get-cast validation and upstream failure branches", async () => {
-    process.env.ENABLE_BUILD_BOT_GET_CAST = "false";
+    process.env.ENABLE_CLI_GET_CAST = "false";
     expect(await executeTool("get-cast", { identifier: "x", type: "hash" })).toEqual({
       ok: false,
       name: "get-cast",
       statusCode: 403,
       error: "This tool is disabled.",
     });
-    delete process.env.ENABLE_BUILD_BOT_GET_CAST;
+    delete process.env.ENABLE_CLI_GET_CAST;
 
     expect(await executeTool("get-cast", {})).toEqual({
       ok: false,
@@ -668,30 +790,35 @@ describe("tool registry execution", () => {
       error: 'type must be either "hash" or "url".',
     });
 
-    mocks.getNeynarClient.mockReturnValueOnce(null);
+    expect(await executeTool("get-cast", { identifier: "https://warpcast.com/alice/0xabc", type: "url" })).toEqual({
+      ok: false,
+      name: "get-cast",
+      statusCode: 400,
+      error: "URL lookup is no longer supported. Provide a full cast hash (0x + 40 hex chars).",
+    });
+
     expect(await executeTool("get-cast", { identifier: "x", type: "hash" })).toEqual({
       ok: false,
       name: "get-cast",
-      statusCode: 503,
-      error: "get-cast request failed: Neynar API key is not configured.",
+      statusCode: 400,
+      error: "identifier must be a full cast hash (0x + 40 hex chars).",
     });
 
-    mocks.getNeynarClient.mockReturnValueOnce({ lookupCastByHashOrUrl: vi.fn() });
-    mocks.withTimeout.mockResolvedValueOnce({ cast: null });
-    expect(await executeTool("get-cast", { identifier: "x", type: "hash" })).toEqual({
+    const missingHash = `0x${"1".repeat(40)}`;
+    mocks.execute.mockResolvedValueOnce({ rows: [] });
+    expect(await executeTool("get-cast", { identifier: missingHash, type: "hash" })).toEqual({
       ok: false,
       name: "get-cast",
       statusCode: 404,
       error: "Cast not found.",
     });
 
-    mocks.getNeynarClient.mockReturnValueOnce({ lookupCastByHashOrUrl: vi.fn() });
-    mocks.withTimeout.mockRejectedValueOnce(new Error("timeout"));
-    expect(await executeTool("get-cast", { identifier: "x", type: "hash" })).toEqual({
+    mocks.execute.mockRejectedValueOnce(new Error("db fail"));
+    expect(await executeTool("get-cast", { identifier: missingHash, type: "hash" })).toEqual({
       ok: false,
       name: "get-cast",
       statusCode: 502,
-      error: "get-cast request failed: timeout",
+      error: "get-cast request failed: db fail",
     });
   });
 
@@ -732,15 +859,125 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("covers get-wallet-balances validation and auth branches", async () => {
+    expect(await executeTool("get-wallet-balances", { network: "mainnet" })).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 400,
+      error: 'network must be either "base" or "base-sepolia".',
+    });
+
+    expect(await executeTool("get-wallet-balances", { agentKey: "  " })).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 400,
+      error: "agentKey must not be empty.",
+    });
+
+    mocks.requestContextGet.mockReturnValue(undefined);
+    expect(await executeTool("get-wallet-balances", {})).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 401,
+      error: "Authenticated tools principal is required to fetch wallet balances.",
+    });
+
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+    });
+    expect(await executeTool("get-wallet-balances", { agentKey: "ops" })).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 403,
+      error: 'agentKey mismatch for this token. Expected "default".',
+    });
+  });
+
+  it("executes get-wallet-balances on base-sepolia and accepts matching explicit agent", async () => {
+    const getBalance = vi.fn().mockResolvedValue(10000000000000000n);
+    const readContract = vi.fn().mockResolvedValue(500000n);
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "ops",
+    });
+    mocks.createPublicClient.mockReturnValue({
+      getBalance,
+      readContract,
+    });
+
+    const result = await executeTool("get-wallet-balances", {
+      network: "base-sepolia",
+      agentKey: "ops",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      name: "get-wallet-balances",
+      output: {
+        agentKey: "ops",
+        network: "base-sepolia",
+      },
+    });
+    expect(readContract).toHaveBeenCalledWith({
+      address: "0x036CbD53842c5426634e7929541eC2318f3dCf7e",
+      abi: expect.any(Array),
+      functionName: "balanceOf",
+      args: ["0x0000000000000000000000000000000000000001"],
+    });
+  });
+
+  it("returns 500 when tools principal owner address is invalid", async () => {
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "not-an-address",
+      agentKey: "default",
+    });
+
+    expect(await executeTool("get-wallet-balances", {})).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 500,
+      error: "Authenticated tools principal has an invalid owner address.",
+    });
+  });
+
+  it("returns 401 when tools principal context access throws", async () => {
+    mocks.requestContextGet.mockImplementation(() => {
+      throw new Error("context unavailable");
+    });
+
+    expect(await executeTool("get-wallet-balances", {})).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 401,
+      error: "Authenticated tools principal is required to fetch wallet balances.",
+    });
+  });
+
+  it("returns 502 when balance fetch fails upstream", async () => {
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+    });
+    mocks.getOrSetCachedResultWithLock.mockRejectedValueOnce(new Error("rpc unavailable"));
+
+    expect(await executeTool("get-wallet-balances", {})).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 502,
+      error: "get-wallet-balances request failed: rpc unavailable",
+    });
+  });
+
   it("covers docs-search validation and upstream error branches", async () => {
-    process.env.ENABLE_BUILD_BOT_DOCS_SEARCH = "false";
+    process.env.ENABLE_CLI_DOCS_SEARCH = "false";
     expect(await executeTool("docs-search", { query: "x" })).toEqual({
       ok: false,
       name: "docs-search",
       statusCode: 403,
       error: "This tool is disabled.",
     });
-    delete process.env.ENABLE_BUILD_BOT_DOCS_SEARCH;
+    delete process.env.ENABLE_CLI_DOCS_SEARCH;
 
     delete process.env.DOCS_VECTOR_STORE_ID;
     delete process.env.OPENAI_API_KEY;

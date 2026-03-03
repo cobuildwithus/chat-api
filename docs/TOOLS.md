@@ -40,6 +40,9 @@ export const myTool = {
 Register the canonical tool in `src/api/tools/registry.ts`, then add an AI wrapper in `src/ai/tools/index.ts` if the model should invoke it directly.
 Keep the order stable unless behavior explicitly needs to change.
 
+Example canonical-only CLI tool:
+- `get-wallet-balances` (aliases: `getWalletBalances`, `walletBalances`) is exposed via `/v1/tool-executions` for CLI balance reads and is not registered as a model wrapper.
+
 ## Prompt guidance
 
 - Keep prompts concise and action-oriented.

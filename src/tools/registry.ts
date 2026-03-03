@@ -1,12 +1,23 @@
 import { eq, sql } from "drizzle-orm";
+import { requestContext } from "@fastify/request-context";
+import { base, baseSepolia } from "viem/chains";
+import {
+  createPublicClient,
+  erc20Abi,
+  formatEther,
+  formatUnits,
+  getAddress,
+  http,
+  type Address,
+} from "viem";
 import { z } from "zod";
-import { getNeynarTimeoutMs, getOpenAiTimeoutMs } from "../config/env";
+import { getOpenAiTimeoutMs } from "../config/env";
 import { getOrSetCachedResultWithLock } from "../infra/cache/cacheResult";
-import { formatCobuildAiContextError, getCobuildAiContextSnapshot } from "../infra/cobuild-ai-context";
+import { getCobuildAiContextSnapshot } from "../infra/cobuild-ai-context";
+import { formatErrorMessage } from "../infra/errors";
 import { cobuildDb } from "../infra/db/cobuildDb";
 import { farcasterProfiles } from "../infra/db/schema";
-import { createTimeoutFetch, withTimeout } from "../infra/http/timeout";
-import { getNeynarClient } from "../infra/neynar/client";
+import { createTimeoutFetch } from "../infra/http/timeout";
 
 export const NO_STORE_CACHE_CONTROL = "no-store";
 export const SHORT_PRIVATE_CACHE_CONTROL = "private, max-age=60";
@@ -15,8 +26,10 @@ export const SHORT_PUBLIC_CACHE_CONTROL = "public, max-age=60";
 const GET_USER_CACHE_PREFIX = "farcaster:get-user:";
 const GET_USER_CACHE_TTL_SECONDS = 60 * 10;
 
-const GET_CAST_CACHE_PREFIX = "buildbot-tools:get-cast:";
+const GET_CAST_CACHE_PREFIX = "cli-tools:get-cast:";
 const GET_CAST_CACHE_TTL_SECONDS = 60 * 2;
+const GET_WALLET_BALANCES_CACHE_PREFIX = "cli-tools:get-wallet-balances:";
+const GET_WALLET_BALANCES_CACHE_TTL_SECONDS = 30;
 
 const OPENAI_VECTOR_STORES_URL = "https://api.openai.com/v1/vector_stores";
 const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
@@ -41,8 +54,18 @@ const THREAD_PAGE_SIZE_MIN = 1;
 const THREAD_PAGE_SIZE_MAX = 100;
 const SEMANTIC_LIMIT_MIN = 1;
 const SEMANTIC_LIMIT_MAX = 25;
-const ENABLE_BUILD_BOT_DOCS_SEARCH_ENV = "ENABLE_BUILD_BOT_DOCS_SEARCH";
-const ENABLE_BUILD_BOT_GET_CAST_ENV = "ENABLE_BUILD_BOT_GET_CAST";
+const ENABLE_CLI_DOCS_SEARCH_ENV = "ENABLE_CLI_DOCS_SEARCH";
+const ENABLE_CLI_GET_CAST_ENV = "ENABLE_CLI_GET_CAST";
+const BASE_RPC_URL_ENV = "COBUILD_BASE_RPC_URL";
+const BASE_SEPOLIA_RPC_URL_ENV = "COBUILD_BASE_SEPOLIA_RPC_URL";
+
+const DEFAULT_BASE_RPC_URL = "https://mainnet.base.org";
+const DEFAULT_BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org";
+const RPC_TIMEOUT_MS = 7_000;
+const RPC_RETRY_COUNT = 1;
+const USDC_DECIMALS = 6;
+const BASE_USDC_CONTRACT = "0x833589fCD6EDB6E08F4C7C32D4F71B54BDA02913" as Address;
+const BASE_SEPOLIA_USDC_CONTRACT = "0x036CbD53842c5426634e7929541eC2318f3dCf7e" as Address;
 
 const ERROR_MAX_LENGTH = 140;
 const SNIPPET_MAX_LENGTH = 420;
@@ -57,6 +80,7 @@ type JsonSchema = Record<string, unknown>;
 
 type DiscussionSort = "last" | "replies" | "views";
 type DiscussionSortDirection = "asc" | "desc";
+type WalletBalanceNetwork = "base" | "base-sepolia";
 
 export type ToolSideEffects = "none" | "read" | "network-read" | "network-write";
 
@@ -116,6 +140,22 @@ type DiscussionListRow = {
   viewCount: string | number | null;
   lastReplyTimestamp: Date | string | null;
   lastReplyAuthorFname: string | null;
+  authorFid: number | null;
+  authorFname: string | null;
+  authorDisplayName: string | null;
+  authorAvatarUrl: string | null;
+  authorNeynarScore: number | null;
+};
+
+type GetCastRow = {
+  hashHex: string;
+  parentHashHex: string | null;
+  rootHashHex: string;
+  rootParentUrl: string | null;
+  text: string | null;
+  castTimestamp: Date | string | null;
+  replyCount: string | number | null;
+  viewCount: string | number | null;
   authorFid: number | null;
   authorFname: string | null;
   authorDisplayName: string | null;
@@ -410,6 +450,12 @@ function formatToolInputError(toolName: string, error: z.ZodError): string {
     if (field === "embeds" && issue.code === "too_big") return "embeds may include at most 2 URLs.";
   }
 
+  if (toolName === "get-wallet-balances") {
+    if (field === "agentKey" && issue.code === "invalid_type") return "agentKey must be a string.";
+    if (field === "agentKey" && issue.code === "too_small") return "agentKey must not be empty.";
+    if (field === "network") return 'network must be either "base" or "base-sepolia".';
+  }
+
   if (toolName === "docs-search") {
     if (field === "query" && issue.code === "invalid_type") return "Query must be a string.";
     if (field === "query" && issue.code === "too_small") return "Query must not be empty.";
@@ -493,11 +539,133 @@ const semanticSearchCastsInputSchema = z.object({
   limit: z.number().int().min(1).max(25).default(DEFAULT_SEMANTIC_LIMIT),
   rootHash: castHashInputSchema.optional(),
 }).strict();
+const getWalletBalancesInputSchema = z.object({
+  agentKey: z.string().trim().min(1).max(128).optional(),
+  network: z.enum(["base", "base-sepolia"]).default("base"),
+}).strict();
 const getTreasuryStatsInputSchema = z.object({}).strict();
 const docsSearchInputSchema = z.object({
   query: z.string().trim().min(1).max(DOCS_SEARCH_QUERY_MAX),
   limit: z.number().int().min(1).max(20).default(DEFAULT_DOCS_SEARCH_LIMIT),
 }).strict();
+
+function getWalletBalanceRpcUrl(network: WalletBalanceNetwork): string {
+  const envName = network === "base" ? BASE_RPC_URL_ENV : BASE_SEPOLIA_RPC_URL_ENV;
+  const fallback = network === "base" ? DEFAULT_BASE_RPC_URL : DEFAULT_BASE_SEPOLIA_RPC_URL;
+  return asString(process.env[envName]) ?? fallback;
+}
+
+function getWalletBalanceNetworkConfig(network: WalletBalanceNetwork) {
+  if (network === "base-sepolia") {
+    return {
+      chain: baseSepolia,
+      rpcUrl: getWalletBalanceRpcUrl(network),
+      usdcAddress: BASE_SEPOLIA_USDC_CONTRACT,
+    };
+  }
+  return {
+    chain: base,
+    rpcUrl: getWalletBalanceRpcUrl(network),
+    usdcAddress: BASE_USDC_CONTRACT,
+  };
+}
+
+function getToolsPrincipalFromContext(): { ownerAddress: string; agentKey: string } | null {
+  try {
+    const raw = requestContext.get("toolsPrincipal");
+    if (!isRecord(raw)) return null;
+    const ownerAddress = asString(raw.ownerAddress);
+    const agentKey = asString(raw.agentKey);
+    if (!ownerAddress || !agentKey) return null;
+    return { ownerAddress, agentKey };
+  } catch {
+    return null;
+  }
+}
+
+async function executeGetWalletBalances(
+  input: z.infer<typeof getWalletBalancesInputSchema>,
+): Promise<ToolExecutionResult> {
+  const name = "get-wallet-balances";
+  const principal = getToolsPrincipalFromContext();
+  if (!principal) {
+    return failure(name, 401, "Authenticated tools principal is required to fetch wallet balances.");
+  }
+
+  if (input.agentKey && input.agentKey !== principal.agentKey) {
+    return failure(
+      name,
+      403,
+      `agentKey mismatch for this token. Expected "${principal.agentKey}".`,
+    );
+  }
+
+  let walletAddress: Address;
+  try {
+    walletAddress = getAddress(principal.ownerAddress).toLowerCase() as Address;
+  } catch {
+    return failure(name, 500, "Authenticated tools principal has an invalid owner address.");
+  }
+
+  const agentKey = input.agentKey ?? principal.agentKey;
+  const network = input.network;
+  const { chain, rpcUrl, usdcAddress } = getWalletBalanceNetworkConfig(network);
+
+  try {
+    const cachedOutput = await getOrSetCachedResultWithLock(
+      `${network}:${walletAddress}`,
+      GET_WALLET_BALANCES_CACHE_PREFIX,
+      async () => {
+        const client = createPublicClient({
+          chain,
+          transport: http(rpcUrl, {
+            timeout: RPC_TIMEOUT_MS,
+            retryCount: RPC_RETRY_COUNT,
+          }),
+        });
+
+        const [ethBalanceWei, usdcBalanceRaw] = await Promise.all([
+          client.getBalance({ address: walletAddress }),
+          client.readContract({
+            address: usdcAddress,
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [walletAddress],
+          }),
+        ]);
+
+        return {
+          network,
+          walletAddress,
+          balances: {
+            eth: {
+              wei: ethBalanceWei.toString(),
+              formatted: formatEther(ethBalanceWei),
+            },
+            usdc: {
+              raw: usdcBalanceRaw.toString(),
+              decimals: USDC_DECIMALS,
+              formatted: formatUnits(usdcBalanceRaw, USDC_DECIMALS),
+              contract: usdcAddress,
+            },
+          },
+        };
+      },
+      GET_WALLET_BALANCES_CACHE_TTL_SECONDS,
+    );
+
+    return success(
+      name,
+      {
+        agentKey,
+        ...cachedOutput,
+      },
+      SHORT_PRIVATE_CACHE_CONTROL,
+    );
+  } catch (error) {
+    return failure(name, 502, `get-wallet-balances request failed: ${formatErrorMessage(error)}`);
+  }
+}
 
 function toVectorLiteral(vector: number[]): string {
   const sanitized = vector.map((value) => (Number.isFinite(value) ? value : 0));
@@ -561,36 +729,75 @@ async function executeGetUser(input: unknown): Promise<ToolExecutionResult> {
 
     return success(name, result, SHORT_PRIVATE_CACHE_CONTROL);
   } catch (error) {
-    return failure(name, 502, `get-user request failed: ${formatCobuildAiContextError(error)}`);
+    return failure(name, 502, `get-user request failed: ${formatErrorMessage(error)}`);
   }
 }
 
 async function executeGetCast(input: z.infer<typeof getCastInputSchema>): Promise<ToolExecutionResult> {
   const name = "get-cast";
-  if (!isFeatureEnabled(ENABLE_BUILD_BOT_GET_CAST_ENV, true)) {
+  if (!isFeatureEnabled(ENABLE_CLI_GET_CAST_ENV, true)) {
     return failure(name, 403, "This tool is disabled.");
   }
 
-  const identifier = input.identifier;
+  const identifier = input.identifier.trim();
   const type = input.type;
+  if (type !== "hash") {
+    return failure(name, 400, "URL lookup is no longer supported. Provide a full cast hash (0x + 40 hex chars).");
+  }
+
+  const hash = normalizeCastHash(identifier);
+  if (!hash) {
+    return failure(name, 400, "identifier must be a full cast hash (0x + 40 hex chars).");
+  }
 
   try {
-    const cacheKey = `${type}:${identifier.toLowerCase()}`;
+    const cacheKey = `${type}:${hash}`;
     const cast = await getOrSetCachedResultWithLock(
       cacheKey,
       GET_CAST_CACHE_PREFIX,
       async () => {
-        const neynarClient = getNeynarClient();
-        if (!neynarClient) {
-          throw new Error("Neynar API key is not configured.");
+        const hashBuffer = castHashToBuffer(hash);
+        const result = (await cobuildDb.execute(sql`
+          SELECT
+            encode(c.hash, 'hex') AS "hashHex",
+            encode(c.parent_hash, 'hex') AS "parentHashHex",
+            encode(COALESCE(c.root_parent_hash, c.hash), 'hex') AS "rootHashHex",
+            c.root_parent_url AS "rootParentUrl",
+            c.text AS "text",
+            c.timestamp AS "castTimestamp",
+            c.reply_count AS "replyCount",
+            c.view_count AS "viewCount",
+            p.fid AS "authorFid",
+            p.fname AS "authorFname",
+            p.display_name AS "authorDisplayName",
+            p.avatar_url AS "authorAvatarUrl",
+            p.neynar_user_score AS "authorNeynarScore"
+          FROM farcaster.casts c
+          LEFT JOIN farcaster.profiles p ON p.fid = c.fid
+          WHERE c.hash = ${hashBuffer}
+            AND c.deleted_at IS NULL
+            AND c.hidden_at IS NULL
+          LIMIT 1
+        `)) as { rows?: GetCastRow[] };
+
+        const row = result.rows?.[0] ?? null;
+        if (!row) {
+          return null;
         }
 
-        const response = await withTimeout(
-          neynarClient.lookupCastByHashOrUrl({ identifier, type }),
-          getNeynarTimeoutMs(),
-          "Neynar getCast",
-        );
-        return response.cast ?? null;
+        const author = toAuthor(row);
+        return {
+          hash: fromHexToCastHash(row.hashHex) ?? hash,
+          parentHash: fromHexToCastHash(row.parentHashHex),
+          rootHash: fromHexToCastHash(row.rootHashHex) ?? hash,
+          rootParentUrl: row.rootParentUrl,
+          text: asString(row.text) ?? "",
+          authorUsername: author.username,
+          createdAt: toIsoString(row.castTimestamp),
+          replyCount: asNumber(row.replyCount) ?? 0,
+          viewCount: asNumber(row.viewCount) ?? 0,
+          author,
+        };
       },
       GET_CAST_CACHE_TTL_SECONDS,
     );
@@ -601,9 +808,7 @@ async function executeGetCast(input: z.infer<typeof getCastInputSchema>): Promis
 
     return success(name, cast, SHORT_PRIVATE_CACHE_CONTROL);
   } catch (error) {
-    const message = formatCobuildAiContextError(error);
-    const isConfigError = message.includes("Neynar API key is not configured");
-    return failure(name, isConfigError ? 503 : 502, `get-cast request failed: ${message}`);
+    return failure(name, 502, `get-cast request failed: ${formatErrorMessage(error)}`);
   }
 }
 
@@ -638,14 +843,14 @@ async function executeCobuildAiContext(_input: unknown): Promise<ToolExecutionRe
     return failure(
       name,
       502,
-      `get-treasury-stats request failed: ${formatCobuildAiContextError(error)}`,
+      `get-treasury-stats request failed: ${formatErrorMessage(error)}`,
     );
   }
 }
 
 async function executeDocsSearch(input: z.infer<typeof docsSearchInputSchema>): Promise<ToolExecutionResult> {
   const name = "docs-search";
-  if (!isFeatureEnabled(ENABLE_BUILD_BOT_DOCS_SEARCH_ENV, true)) {
+  if (!isFeatureEnabled(ENABLE_CLI_DOCS_SEARCH_ENV, true)) {
     return failure(name, 403, "This tool is disabled.");
   }
 
@@ -781,7 +986,7 @@ async function executeListDiscussions(
       direction,
     }, SHORT_PRIVATE_CACHE_CONTROL);
   } catch (error) {
-    return failure(name, 502, `list-discussions request failed: ${formatCobuildAiContextError(error)}`);
+    return failure(name, 502, `list-discussions request failed: ${formatErrorMessage(error)}`);
   }
 }
 
@@ -969,7 +1174,7 @@ async function executeGetDiscussionThread(
       focusHash,
     }, SHORT_PRIVATE_CACHE_CONTROL);
   } catch (error) {
-    return failure(name, 502, `get-discussion-thread request failed: ${formatCobuildAiContextError(error)}`);
+    return failure(name, 502, `get-discussion-thread request failed: ${formatErrorMessage(error)}`);
   }
 }
 
@@ -1114,7 +1319,7 @@ async function executeSemanticSearchCasts(
 const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
   {
     name: "get-user",
-    aliases: ["getUser", "buildbot.get-user"],
+    aliases: ["getUser", "cli.get-user"],
     description:
       "Get Farcaster profile details by fname, with exact match first and fuzzy fallback.",
     input: getUserInputSchema,
@@ -1141,7 +1346,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
         },
       ],
     },
-    scopes: ["buildbot-tools", "farcaster"],
+    scopes: ["cli-tools", "farcaster"],
     sideEffects: "read",
     version: "1.0.0",
     deprecated: false,
@@ -1149,22 +1354,22 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
   },
   {
     name: "get-cast",
-    aliases: ["getCast", "buildbot.get-cast"],
-    description: "Get cast details from Neynar by cast hash or Warpcast URL.",
+    aliases: ["getCast", "cli.get-cast"],
+    description: "Get cast details from Cobuild Farcaster tables by cast hash.",
     input: getCastInputSchema,
     outputSchema: {
       type: "object",
       additionalProperties: true,
     },
-    scopes: ["buildbot-tools", "farcaster", "neynar"],
-    sideEffects: "network-read",
+    scopes: ["cli-tools", "farcaster"],
+    sideEffects: "read",
     version: "1.0.0",
     deprecated: false,
     execute: executeGetCast,
   },
   {
     name: "cast-preview",
-    aliases: ["castPreview", "buildbot.cast-preview"],
+    aliases: ["castPreview", "cli.cast-preview"],
     description: "Normalize cast preview payload for downstream publishing flow.",
     input: castPreviewInputSchema,
     outputSchema: {
@@ -1177,7 +1382,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
       },
       additionalProperties: false,
     },
-    scopes: ["buildbot-tools"],
+    scopes: ["cli-tools"],
     sideEffects: "none",
     version: "1.0.0",
     deprecated: false,
@@ -1185,7 +1390,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
   },
   {
     name: "list-discussions",
-    aliases: ["listDiscussions", "buildbot.list-discussions"],
+    aliases: ["listDiscussions", "cli.list-discussions"],
     description: "List top-level Cobuild discussion posts with sort and pagination.",
     input: listDiscussionsInputSchema,
     outputSchema: {
@@ -1201,7 +1406,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
       },
       additionalProperties: false,
     },
-    scopes: ["buildbot-tools", "farcaster", "discussion"],
+    scopes: ["cli-tools", "farcaster", "discussion"],
     sideEffects: "read",
     version: "1.0.0",
     deprecated: false,
@@ -1209,7 +1414,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
   },
   {
     name: "get-discussion-thread",
-    aliases: ["getDiscussionThread", "buildbot.get-discussion-thread"],
+    aliases: ["getDiscussionThread", "cli.get-discussion-thread"],
     description: "Get a Cobuild discussion thread with paginated replies and optional focus hash.",
     input: getDiscussionThreadInputSchema,
     outputSchema: {
@@ -1228,7 +1433,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
       },
       additionalProperties: false,
     },
-    scopes: ["buildbot-tools", "farcaster", "discussion"],
+    scopes: ["cli-tools", "farcaster", "discussion"],
     sideEffects: "read",
     version: "1.0.0",
     deprecated: false,
@@ -1236,7 +1441,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
   },
   {
     name: "semantic-search-casts",
-    aliases: ["semanticSearchCasts", "buildbot.semantic-search-casts"],
+    aliases: ["semanticSearchCasts", "cli.semantic-search-casts"],
     description: "Semantic search over Cobuild Farcaster casts using stored pgvector embeddings.",
     input: semanticSearchCastsInputSchema,
     outputSchema: {
@@ -1250,11 +1455,59 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
       },
       additionalProperties: false,
     },
-    scopes: ["buildbot-tools", "farcaster", "discussion", "semantic-search"],
+    scopes: ["cli-tools", "farcaster", "discussion", "semantic-search"],
     sideEffects: "network-read",
     version: "1.0.0",
     deprecated: false,
     execute: executeSemanticSearchCasts,
+  },
+  {
+    name: "get-wallet-balances",
+    aliases: ["getWalletBalances", "walletBalances"],
+    description: "Fetch ETH and USDC balances for the authenticated CLI wallet.",
+    input: getWalletBalancesInputSchema,
+    outputSchema: {
+      type: "object",
+      required: ["agentKey", "network", "walletAddress", "balances"],
+      properties: {
+        agentKey: { type: "string" },
+        network: { type: "string" },
+        walletAddress: { type: "string" },
+        balances: {
+          type: "object",
+          required: ["eth", "usdc"],
+          properties: {
+            eth: {
+              type: "object",
+              required: ["wei", "formatted"],
+              properties: {
+                wei: { type: "string" },
+                formatted: { type: "string" },
+              },
+              additionalProperties: false,
+            },
+            usdc: {
+              type: "object",
+              required: ["raw", "decimals", "formatted", "contract"],
+              properties: {
+                raw: { type: "string" },
+                decimals: { type: "number" },
+                formatted: { type: "string" },
+                contract: { type: "string" },
+              },
+              additionalProperties: false,
+            },
+          },
+          additionalProperties: false,
+        },
+      },
+      additionalProperties: false,
+    },
+    scopes: ["cli-tools", "wallet"],
+    sideEffects: "network-read",
+    version: "1.0.0",
+    deprecated: false,
+    execute: executeGetWalletBalances,
   },
   {
     name: "get-treasury-stats",
@@ -1265,7 +1518,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
       type: "object",
       additionalProperties: true,
     },
-    scopes: ["buildbot-tools", "cobuild-context"],
+    scopes: ["cli-tools", "cobuild-context"],
     sideEffects: "network-read",
     version: "1.0.0",
     deprecated: false,

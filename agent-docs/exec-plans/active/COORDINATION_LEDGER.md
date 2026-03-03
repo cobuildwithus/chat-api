@@ -6,6 +6,7 @@ Use this file only for currently active coding work. Keep it minimal and current
 
 | Agent/Session | Task | Files in Scope | Symbols (add/rename/delete) | Dependency Notes | Updated (YYYY-MM-DD) |
 | --- | --- | --- | --- | --- | --- |
+| codex-gpt5-oauth-pkce-cutover-2026-03-03 | Replace PAT auth with OAuth Authorization Code + PKCE, JWT access tokens, rotating refresh sessions | `src/api/server.ts`, `src/api/tools/internal-auth.ts`, `src/api/tools/token-auth.ts`, `src/api/tools/route.ts`, `src/api/tokens/*`, `src/config/env.ts`, `src/infra/db/schema.ts`, `src/api/oauth/*`, `migrations/*`, `tests/api/**`, `tests/config/env.spec.ts`, `tests/infra/db/schema.spec.ts` | add oauth authorize/token/session handlers; add JWT signer/verifier helpers; add oauth code/session DB tables; remove token-id principal usage | Full auth cutover requested across chat-api/interface/cli; maintain tool auth invariants and rate-limit keying | 2026-03-03 |
 
 ## Rules
 

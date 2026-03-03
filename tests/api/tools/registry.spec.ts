@@ -27,6 +27,8 @@ describe("tool registry", () => {
     expect(resolveToolMetadata("getUser")?.name).toBe("get-user");
     expect(resolveToolMetadata("GETUSER")?.name).toBe("get-user");
     expect(resolveToolMetadata("docs.search")?.name).toBe("docs-search");
+    expect(resolveToolMetadata("getWalletBalances")?.name).toBe("get-wallet-balances");
+    expect(resolveToolMetadata("walletBalances")?.name).toBe("get-wallet-balances");
     expect(resolveToolMetadata("listDiscussions")?.name).toBe("list-discussions");
     expect(resolveToolMetadata("getDiscussionThread")?.name).toBe("get-discussion-thread");
     expect(resolveToolMetadata("semanticSearchCasts")?.name).toBe("semantic-search-casts");
@@ -35,7 +37,7 @@ describe("tool registry", () => {
   it("does not resolve removed treasury compatibility aliases", () => {
     expect(resolveToolMetadata("gettreasurystats")).toBeNull();
     expect(resolveToolMetadata("getTreasuryStats")).toBeNull();
-    expect(resolveToolMetadata("buildbot.get-treasury-stats")).toBeNull();
+    expect(resolveToolMetadata("cli.get-treasury-stats")).toBeNull();
   });
 
   it("returns a 404 for unknown tools", async () => {
@@ -45,6 +47,16 @@ describe("tool registry", () => {
       name: "nope",
       statusCode: 404,
       error: 'Unknown tool "nope".',
+    });
+  });
+
+  it("returns a 400 when tool name is blank", async () => {
+    const result = await executeTool("   ", {});
+    expect(result).toEqual({
+      ok: false,
+      name: "",
+      statusCode: 400,
+      error: "Tool name must not be empty.",
     });
   });
 

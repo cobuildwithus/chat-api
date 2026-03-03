@@ -15,9 +15,8 @@ Source registries:
 
 - Canonical name: `get-cast`
 - AI wrapper: `getCast`
-- Purpose: fetch cast details via Neynar by hash or URL.
-- Dependencies: `NEYNAR_API_KEY`, Neynar service.
-- Timeout: `NEYNAR_REQUEST_TIMEOUT_MS`.
+- Purpose: fetch cast details by hash from `farcaster.casts` + `farcaster.profiles`.
+- Dependencies: Postgres + Redis cache/lock path.
 
 ## `listDiscussions`
 
@@ -42,15 +41,6 @@ Source registries:
 - Timeout: `OPENAI_REQUEST_TIMEOUT_MS`.
 - Error semantics: returns `503` when OpenAI API key is not configured; `502` for upstream embedding failures.
 
-## `replyToCast`
-
-- Canonical name: `reply-to-cast`
-- AI wrapper: `replyToCast`
-- Purpose: publish a Farcaster reply to a parent cast hash via Neynar.
-- Guardrails: requires `confirm=true`; strict hash/UUID/input validation.
-- Dependencies: `NEYNAR_API_KEY`, Neynar service.
-- Timeout: `NEYNAR_REQUEST_TIMEOUT_MS`.
-
 ## `castPreview`
 
 - Canonical name: `cast-preview`
@@ -62,6 +52,14 @@ Source registries:
 - AI wrapper: `get-treasury-stats`
 - Purpose: fetch the latest treasury stats snapshot.
 - Dependencies: treasury stats snapshot service.
+
+## `get-wallet-balances`
+
+- Canonical name: `get-wallet-balances`
+- Canonical aliases: `getWalletBalances`, `walletBalances`
+- Purpose: fetch ETH + USDC balances for the authenticated CLI wallet.
+- Dependencies: Base/Base Sepolia JSON-RPC + USDC ERC-20 `balanceOf`.
+- Cache: lock-backed Redis cache (30s TTL), keyed by `<network>:<wallet>`.
 
 ## `file_search` (conditional)
 
