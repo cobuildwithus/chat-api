@@ -1,2 +1,0 @@
--- Legacy no-op migration.
--- Token table/index creation is owned by 0003_build_bot_cli_tokens_table.sql.

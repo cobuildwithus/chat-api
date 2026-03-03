@@ -17,7 +17,7 @@
 Semantic search invariant:
 - `farcaster.casts.text_embedding` must be `vector(256)` to match OpenAI embedding dimensions.
 
-Schema source: `src/infra/db/schema.ts` and `migrations/0001_minimal_chat.sql`.
+Schema source: `src/infra/db/schema.ts` and `migrations/0001_canonical_schema.sql`.
 
 ## Redis Roles
 

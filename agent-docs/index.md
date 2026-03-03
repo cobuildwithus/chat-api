@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-03 (tools auth explicit write-capability fields; chat auth token normalization; db schema domain split)
+Last verified: 2026-03-03 (tools auth explicit write-capability fields; chat auth token normalization; db schema domain split; canonical schema migration baseline)
 
 ## Purpose
 
@@ -19,7 +19,7 @@ This index is the table of contents for durable, repository-local context that a
 | `agent-docs/references/api-contracts.md` | Route schemas, runtime responses, and schema/runtime gaps. | `src/api/**/schema.ts`, handlers | Chat API Maintainer | Per route/schema change | High | 2026-03-02 |
 | `agent-docs/references/runtime-ai-flow.md` | End-to-end request -> agent -> stream execution flow. | `src/api/chat/**`, `src/ai/**` | Chat API Maintainer | Per runtime flow change | High | 2026-03-02 |
 | `agent-docs/references/tool-catalog.md` | Tool-by-tool contract, dependencies, and failure behavior. | `src/ai/tools/**`, `src/infra/**` | Chat API Maintainer | Per tool behavior change | High | 2026-03-02 |
-| `agent-docs/references/data-infra-map.md` | Postgres/Redis/cache/timeout architecture and invariants. | `src/infra/**`, `src/config/env.ts` | Chat API Maintainer | Per infra/config change | High | 2026-03-02 |
+| `agent-docs/references/data-infra-map.md` | Postgres/Redis/cache/timeout architecture and invariants. | `src/infra/**`, `src/config/env.ts` | Chat API Maintainer | Per infra/config change | High | 2026-03-03 |
 | `agent-docs/references/testing-ci-map.md` | Verification and CI/local enforcement map. | `package.json`, `.github/workflows/**`, scripts | Chat API Maintainer | Per CI/process change | Medium | 2026-02-25 |
 | `agent-docs/PLANS.md` | Plan workflow and storage conventions. | `agent-docs/exec-plans/**` | Chat API Maintainer | Per process change | Medium | 2026-02-25 |
 | `agent-docs/PRODUCT_SENSE.md` | Product behavior and response-quality constraints. | API behavior + user-facing responses | Chat API Maintainer | Monthly | Medium | 2026-02-25 |

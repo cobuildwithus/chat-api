@@ -124,12 +124,12 @@ The easiest way to get it is from the docs repo upload script:
 
 Re-run the script when docs change; add `--purge` to replace existing files in the store.
 
-## Database setup (minimal)
+## Database setup (canonical)
 
-Use the provided migration to create the minimal schema (`cobuild` + `farcaster`).
+Use the canonical migration to create the current baseline schema.
 
 ```bash
-psql "$POSTGRES_URL" -f migrations/0001_minimal_chat.sql
+psql "$POSTGRES_URL" -f migrations/0001_canonical_schema.sql
 ```
 
 Notes:
@@ -137,7 +137,7 @@ Notes:
 - The `farcaster.casts` table is required for `list-discussions`, `get-discussion-thread`, and `semantic-search-casts`.
 - `farcaster.casts.text_embedding` must be `vector(256)` for semantic search.
 - If you do not plan to use Farcaster tools, these tables can remain empty.
-Migration file: [migrations/0001_minimal_chat.sql](https://github.com/cobuildwithus/chat-api/blob/main/migrations/0001_minimal_chat.sql)
+Migration file: [migrations/0001_canonical_schema.sql](https://github.com/cobuildwithus/chat-api/blob/main/migrations/0001_canonical_schema.sql)
 
 ## Tests
 
@@ -182,4 +182,4 @@ Railway injects `PORT`, and the server binds to `::` by default.
 - [ARCHITECTURE.md](ARCHITECTURE.md) for the module map and request flow.
 - [docs/TOOLS.md](docs/TOOLS.md) for adding and registering tools.
 - [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
-- [migrations/0001_minimal_chat.sql](migrations/0001_minimal_chat.sql) for minimal database setup.
+- [migrations/0001_canonical_schema.sql](migrations/0001_canonical_schema.sql) for canonical database setup.
