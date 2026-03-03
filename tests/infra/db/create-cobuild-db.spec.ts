@@ -111,7 +111,7 @@ describe("bootstrapCobuildDb", () => {
         const unref = vi.fn();
         unrefMocks.push(unref);
         return { unref } as unknown as NodeJS.Timeout;
-      }) as typeof setInterval);
+      }) as unknown as typeof setInterval);
     const primaryDb = { id: "primary" };
     const replicaDb = { id: "replica" };
     drizzleMock.mockReturnValueOnce(primaryDb).mockReturnValueOnce(replicaDb);
