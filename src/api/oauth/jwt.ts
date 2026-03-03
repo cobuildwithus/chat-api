@@ -1,6 +1,11 @@
 import * as jose from "jose";
 import { randomUUID } from "node:crypto";
 import {
+  parseCliJwtVerifiedClaims,
+  type CliAccessTokenClaims,
+  type CliJwtVerifiedClaims,
+} from "@cobuild/wire";
+import {
   getBuildBotJwtAudience,
   getBuildBotJwtIssuer,
   getBuildBotJwtPrivateKey,
@@ -17,28 +22,18 @@ type CachedKeys = {
 
 let cachedKeys: CachedKeys | null = null;
 
-export type CliAccessTokenClaims = {
-  sub: string;
-  sid: string;
-  agentKey: string;
-  scope: string;
-};
+export type { CliAccessTokenClaims };
 
-type VerifiedCliAccessTokenClaims = CliAccessTokenClaims & {
-  iat: number;
-  exp: number;
-  iss: string;
-  aud: string | string[];
-};
+type VerifiedCliAccessTokenClaims = CliJwtVerifiedClaims;
 
 async function getSigningKeys(): Promise<CachedKeys> {
   const privateKeyPem = getBuildBotJwtPrivateKey();
   const publicKeyPem = getBuildBotJwtPublicKey();
 
   if (
-    cachedKeys
-    && cachedKeys.privateKeyPem === privateKeyPem
-    && cachedKeys.publicKeyPem === publicKeyPem
+    cachedKeys &&
+    cachedKeys.privateKeyPem === privateKeyPem &&
+    cachedKeys.publicKeyPem === publicKeyPem
   ) {
     return cachedKeys;
   }
@@ -81,32 +76,12 @@ export async function signCliAccessToken(claims: CliAccessTokenClaims): Promise<
 }
 
 function parseClaims(payload: jose.JWTPayload): VerifiedCliAccessTokenClaims | null {
-  if (
-    typeof payload.sub !== "string"
-    || typeof payload.sid !== "string"
-    || typeof payload.agent_key !== "string"
-    || typeof payload.scope !== "string"
-    || typeof payload.iat !== "number"
-    || typeof payload.exp !== "number"
-    || typeof payload.iss !== "string"
-    || (typeof payload.aud !== "string" && !Array.isArray(payload.aud))
-  ) {
-    return null;
-  }
-
-  return {
-    sub: payload.sub,
-    sid: payload.sid,
-    agentKey: payload.agent_key,
-    scope: payload.scope,
-    iat: payload.iat,
-    exp: payload.exp,
-    iss: payload.iss,
-    aud: payload.aud,
-  };
+  return parseCliJwtVerifiedClaims(payload);
 }
 
-export async function verifyCliAccessToken(token: string): Promise<VerifiedCliAccessTokenClaims | null> {
+export async function verifyCliAccessToken(
+  token: string
+): Promise<VerifiedCliAccessTokenClaims | null> {
   const { publicKey } = await getSigningKeys();
   const issuer = getBuildBotJwtIssuer();
   const audience = getBuildBotJwtAudience();

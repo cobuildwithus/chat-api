@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-03 (tools auth explicit write-capability fields; chat auth token normalization; db schema domain split; canonical schema migration baseline; wire published dependency guard)
+Last verified: 2026-03-03 (oauth/tool auth dedup to wire; tools read-scope enforcement; oauth token/session transactional flow hardening; db schema domain split; canonical schema migration baseline; wire published dependency guard)
 
 ## Purpose
 
@@ -33,7 +33,7 @@ This index is the table of contents for durable, repository-local context that a
 | `agent-docs/prompts/task-finish-review.md` | Reusable final completion audit prompt. | Completion workflow | Chat API Maintainer | Per process change | High | 2026-02-25 |
 | `agent-docs/generated/README.md` | Generated doc artifacts produced by scripts. | `agent-docs/generated/**` | Chat API Maintainer | Per script change | Medium | 2026-02-25 |
 | `agent-docs/exec-plans/` | Execution plans for active and completed work. | PR-linked plan docs | Chat API Maintainer | Per multi-file/high-risk PR | High | 2026-02-25 |
-| `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` | Active task ownership ledger for multi-agent safety. | Active coding sessions | Chat API Maintainer | Continuous | High | 2026-03-02 |
+| `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` | Active task ownership ledger for multi-agent safety. | Active coding sessions | Chat API Maintainer | Continuous | High | 2026-03-03 |
 | `agent-docs/exec-plans/tech-debt-tracker.md` | Rolling debt register with owner/priority/status. | Audits, incidents, reviews | Chat API Maintainer | Bi-weekly | Medium | 2026-02-25 |
 
 ## Conventions

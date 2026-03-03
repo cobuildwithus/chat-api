@@ -54,18 +54,25 @@ vi.mock("../../../src/infra/db/schema", () => ({
 
 vi.mock("../../../src/api/oauth/security", () => ({
   OAUTH_AUTH_CODE_TTL_MS: 5 * 60_000,
-  OAUTH_REFRESH_TOKEN_TTL_MS: 60 * 24 * 60 * 60_000,
   createAuthCode: (...args: unknown[]) => mocks.createAuthCode(...args),
   createRefreshToken: (...args: unknown[]) => mocks.createRefreshToken(...args),
   digestOAuthSecret: (...args: unknown[]) => mocks.digestOAuthSecret(...args),
+  getCliRefreshTokenTtlMs: () => 90 * 24 * 60 * 60_000,
+  validateCliSessionLabel: (value: string | undefined) => {
+    if (value === undefined) return undefined;
+    const normalized = value.replace(/\s+/g, " ").trim();
+    return normalized.length > 0 ? normalized : undefined;
+  },
 }));
 
 import {
   consumeAuthorizationCodeWithPkce,
   createAuthorizationCode,
   createCliSession,
+  exchangeAuthorizationCodeForSession,
   listCliSessions,
   revokeCliSession,
+  rotateCliSessionAndIssueAccessToken,
   rotateCliSessionByRefreshToken,
 } from "../../../src/api/oauth/store";
 
@@ -85,13 +92,17 @@ function createDbMock() {
   const selectWhere = vi.fn(() => ({ orderBy: selectOrderBy }));
   const selectFrom = vi.fn(() => ({ where: selectWhere }));
   const select = vi.fn(() => ({ from: selectFrom }));
+  const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => await callback(db));
+
+  const db = {
+    insert,
+    update,
+    select,
+    transaction,
+  };
 
   return {
-    db: {
-      insert,
-      update,
-      select,
-    },
+    db,
     insert,
     insertValues,
     insertReturning,
@@ -103,6 +114,7 @@ function createDbMock() {
     selectFrom,
     selectWhere,
     selectOrderBy,
+    transaction,
   };
 }
 
@@ -194,6 +206,55 @@ describe("oauth store", () => {
     });
   });
 
+  it("exchanges auth code and creates a session in one transaction", async () => {
+    dbMock.updateReturning.mockResolvedValueOnce([
+      {
+        id: 9n,
+        ownerAddress: normalizedAddress,
+        agentKey: "default",
+        scope: "tools:read offline_access",
+        redirectUri: "http://127.0.0.1:43111/auth/callback",
+        codeChallenge: "challenge-1",
+        codeChallengeMethod: "S256",
+        label: "Laptop",
+      },
+    ]);
+    dbMock.insertReturning.mockResolvedValueOnce([{ id: 12n }]);
+    mocks.createRefreshToken.mockReturnValueOnce("rfr_exchange");
+
+    const exchanged = await exchangeAuthorizationCodeForSession({
+      rawCode: "auth-code",
+      redirectUri: "http://127.0.0.1:43111/auth/callback",
+      expectedCodeChallenge: "challenge-1",
+      codeChallengeMethod: "S256",
+    });
+
+    expect(dbMock.transaction).toHaveBeenCalledOnce();
+    expect(exchanged).toEqual({
+      ownerAddress: normalizedAddress,
+      agentKey: "default",
+      scope: "tools:read offline_access",
+      label: "Laptop",
+      sessionId: "12",
+      refreshToken: "rfr_exchange",
+      expiresAt: expect.any(Date),
+    });
+  });
+
+  it("returns null from exchange when auth code consumption fails", async () => {
+    dbMock.updateReturning.mockResolvedValueOnce([]);
+
+    await expect(
+      exchangeAuthorizationCodeForSession({
+        rawCode: "missing",
+        redirectUri: "http://127.0.0.1:43111/auth/callback",
+        expectedCodeChallenge: "challenge-1",
+        codeChallengeMethod: "S256",
+      })
+    ).resolves.toBeNull();
+    expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
   it("returns null when code cannot be consumed", async () => {
     dbMock.updateReturning.mockResolvedValueOnce([]);
     await expect(
@@ -269,6 +330,35 @@ describe("oauth store", () => {
   it("returns null when refresh token rotation misses session", async () => {
     dbMock.updateReturning.mockResolvedValueOnce([]);
     await expect(rotateCliSessionByRefreshToken("rfr_missing")).resolves.toBeNull();
+  });
+
+  it("rotates refresh token and issues access token atomically", async () => {
+    dbMock.updateReturning.mockResolvedValueOnce([
+      {
+        id: 33n,
+        ownerAddress: normalizedAddress,
+        agentKey: "default",
+        scope: "tools:read offline_access",
+        expiresAt: new Date("2026-05-01T00:00:00.000Z"),
+      },
+    ]);
+    mocks.createRefreshToken.mockReturnValueOnce("rfr_rotated_again");
+
+    const rotated = await rotateCliSessionAndIssueAccessToken({
+      refreshToken: "rfr_old",
+      issueAccessToken: async () => "jwt-access",
+    });
+
+    expect(dbMock.transaction).toHaveBeenCalled();
+    expect(rotated).toEqual({
+      sessionId: "33",
+      ownerAddress: normalizedAddress,
+      agentKey: "default",
+      scope: "tools:read offline_access",
+      refreshToken: "rfr_rotated_again",
+      expiresAt: new Date("2026-05-01T00:00:00.000Z"),
+      accessToken: "jwt-access",
+    });
   });
 
   it("lists active sessions with serialized timestamps", async () => {

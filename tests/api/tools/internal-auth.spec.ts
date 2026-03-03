@@ -93,6 +93,7 @@ describe("enforceToolsBearerAuth", () => {
       agentKey: "default",
       scope: "tools:read tools:write wallet:read offline_access",
       scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
+      hasToolsRead: true,
       hasToolsWrite: true,
       hasWalletExecute: false,
       hasAnyWriteScope: true,
@@ -114,6 +115,7 @@ describe("enforceToolsBearerAuth", () => {
       agentKey: "default",
       scope: "tools:read tools:write wallet:read offline_access",
       scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
+      hasToolsRead: true,
       hasToolsWrite: true,
       hasWalletExecute: false,
       hasAnyWriteScope: true,
@@ -141,6 +143,7 @@ describe("enforceToolsBearerAuth", () => {
       agentKey: "ops",
       scope: "tools:read wallet:read offline_access",
       scopes: ["tools:read", "wallet:read", "offline_access"],
+      hasToolsRead: true,
       hasToolsWrite: false,
       hasWalletExecute: false,
       hasAnyWriteScope: false,
@@ -155,5 +158,32 @@ describe("enforceToolsBearerAuth", () => {
       countryRegion: "NY",
       userAgent: "test-agent",
     });
+  });
+
+  it("returns 403 when token is valid but missing tools:read", async () => {
+    mocks.authenticateToolsBearerToken.mockReset();
+    mocks.requestContextSet.mockReset();
+    const request = {
+      ip: "127.0.0.1",
+      headers: { authorization: "Bearer bbt_valid" },
+    } as unknown as FastifyRequest;
+    const reply = createReply();
+    mocks.authenticateToolsBearerToken.mockResolvedValueOnce({
+      sessionId: "44",
+      ownerAddress: "0x0000000000000000000000000000000000000003",
+      agentKey: "ops",
+      scope: "wallet:read offline_access",
+      scopes: ["wallet:read", "offline_access"],
+      hasToolsRead: false,
+      hasToolsWrite: false,
+      hasWalletExecute: false,
+      hasAnyWriteScope: false,
+    });
+
+    await enforceToolsBearerAuth(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith({ error: "tools:read scope required." });
+    expect(mocks.requestContextSet).not.toHaveBeenCalled();
   });
 });

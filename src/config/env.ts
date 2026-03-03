@@ -1,4 +1,9 @@
 import { z } from "zod";
+import {
+  DEFAULT_BUILD_BOT_JWT_AUDIENCE,
+  DEFAULT_BUILD_BOT_JWT_ISSUER,
+  DEFAULT_DEV_BUILD_BOT_JWT_PUBLIC_KEY,
+} from "@cobuild/wire";
 
 const replicaUrlsSchema = z.preprocess(
   (value) => {
@@ -113,16 +118,6 @@ const DEFAULT_DEV_BUILD_BOT_JWT_PRIVATE_KEY = [
   "0kwqxsGA8QaMSyAoqeMdx5yJqudE3BWXBKPtfHuPyAhQp0H6CuHOnmM1",
   "-----END PRIVATE KEY-----",
 ].join("\n");
-
-const DEFAULT_DEV_BUILD_BOT_JWT_PUBLIC_KEY = [
-  "-----BEGIN PUBLIC KEY-----",
-  "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJez1f0LBeC5VJfNUE7v3bEwk79JO",
-  "itJMKsbBgPEGjEsgKKnjHceciarnRNwVlwSj7Xx7j8gIUKdB+grhzp5jNQ==",
-  "-----END PUBLIC KEY-----",
-].join("\n");
-
-const DEFAULT_BUILD_BOT_JWT_ISSUER = "cobuild-chat-api";
-const DEFAULT_BUILD_BOT_JWT_AUDIENCE = "buildbot";
 
 export function validateEnvVariables(): ValidatedEnv {
   const env = envSchema.parse(process.env);

@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import { fastifyRequestContext, requestContext } from "@fastify/request-context";
 import rateLimit from "@fastify/rate-limit";
+import { parseBearerToken } from "@cobuild/wire";
 import fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { handleChatCreateRequest } from "./chat/create";
@@ -33,9 +34,6 @@ import {
   chatListSchema,
   chatSchema,
 } from "./chat/schema";
-import {
-  parseBearerToken,
-} from "./auth/parse-bearer-token";
 import { toolExecutionSchema, toolMetadataSchema, toolsListSchema } from "./tools/schema";
 import { getRateLimitConfig } from "../config/env";
 import { handleError } from "./server-helpers";

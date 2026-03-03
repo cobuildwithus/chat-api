@@ -14,11 +14,25 @@ const isDebugEnabled = () => {
 };
 
 const SENSITIVE_BODY_FIELDS = new Set([
+  "access_token",
+  "authorization",
+  "client_secret",
   "code",
+  "code_challenge",
   "code_verifier",
+  "privy-id-token",
   "refresh_token",
   "id_token",
 ]);
+const SENSITIVE_BODY_ENDPOINTS = new Set([
+  "/oauth/token",
+  "/oauth/authorize-code",
+]);
+
+function normalizeRequestPath(url: string): string {
+  const [path] = url.split("?");
+  return path ?? url;
+}
 
 function getSensitiveBodyFields(body: unknown): string[] {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -28,6 +42,22 @@ function getSensitiveBodyFields(body: unknown): string[] {
   return Object.keys(record)
     .filter((key) => SENSITIVE_BODY_FIELDS.has(key.toLowerCase()))
     .sort();
+}
+
+function hasRefreshTokenLikeValue(body: unknown): boolean {
+  if (typeof body === "string") {
+    return body.includes("rfr_");
+  }
+  if (typeof body === "number" || typeof body === "boolean" || body === null || body === undefined) {
+    return false;
+  }
+  if (Array.isArray(body)) {
+    return body.some((entry) => hasRefreshTokenLikeValue(entry));
+  }
+  if (typeof body === "object") {
+    return Object.values(body as Record<string, unknown>).some((entry) => hasRefreshTokenLikeValue(entry));
+  }
+  return false;
 }
 
 export const registerRequestLogging = (server: FastifyInstance) => {
@@ -47,14 +77,19 @@ export const registerRequestLogging = (server: FastifyInstance) => {
 
   server.addHook("preHandler", (request, _reply, done) => {
     if (request.method === "GET" || request.method === "HEAD") return done();
+    const path = normalizeRequestPath(request.url);
+    const shouldRedactForEndpoint = SENSITIVE_BODY_ENDPOINTS.has(path);
     const sensitiveFields = getSensitiveBodyFields(request.body);
-    if (sensitiveFields.length > 0) {
+    const hasRefreshTokenValue = hasRefreshTokenLikeValue(request.body);
+    if (shouldRedactForEndpoint || sensitiveFields.length > 0 || hasRefreshTokenValue) {
       console.info("[req-body]", {
         id: request.id,
         url: request.url,
         summary: {
           redacted: true,
+          ...(shouldRedactForEndpoint ? { reason: "sensitive-endpoint" } : {}),
           sensitiveFields,
+          ...(hasRefreshTokenValue ? { containsRefreshTokenLikeValue: true } : {}),
         },
       });
       return done();

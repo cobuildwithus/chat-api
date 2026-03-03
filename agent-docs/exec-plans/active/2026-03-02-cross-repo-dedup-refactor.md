@@ -5,11 +5,13 @@ Reduce duplicated helper logic and route boilerplate across `chat-api`, `interfa
 
 ## Scope
 - Shared bearer-token parsing helper.
+- Shared OAuth scope/capability helpers and JWT-claim parsing from `@cobuild/wire`.
 - Shared request-user context setter from headers.
 - Shared request-body summarization helper.
 - Shared cache helper usage for profile lookup.
 - Registry-backed AI tool wrapper extraction.
 - Address normalization alignment to viem semantics (`getAddress(...).toLowerCase()`).
+- Shared OAuth security helpers (PKCE/redirect/session label validation), plus transactional auth-code exchange and refresh rotation wrappers.
 
 ## Risks and Guards
 - Keep auth and route responses behaviorally equivalent.
@@ -24,4 +26,4 @@ Reduce duplicated helper logic and route boilerplate across `chat-api`, `interfa
 - `pnpm test:coverage`
 
 ## Status
-Completed implementation; verification in progress.
+Completed implementation and verification on 2026-03-03.

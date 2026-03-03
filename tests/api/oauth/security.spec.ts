@@ -5,6 +5,10 @@ import {
   createRefreshToken,
   deriveS256CodeChallenge,
   digestOAuthSecret,
+  getCliRefreshTokenTtlMs,
+  OAUTH_REFRESH_TOKEN_TTL_READ_ONLY_MS,
+  OAUTH_REFRESH_TOKEN_TTL_WRITE_MS,
+  validateCliSessionLabel,
   validateCliRedirectUri,
   validatePkceCodeChallenge,
   validatePkceCodeVerifier,
@@ -48,18 +52,20 @@ describe("oauth security helpers", () => {
     expect(createRefreshToken()).toMatch(/^rfr_[A-Za-z0-9_-]+$/);
   });
 
-  it("validates PKCE verifier/challenge and S256 pairing", () => {
+  it("validates PKCE verifier/challenge and S256 pairing", async () => {
     const verifier = "A".repeat(43);
-    const challenge = deriveS256CodeChallenge(verifier);
+    const challenge = await deriveS256CodeChallenge(verifier);
     expect(validatePkceCodeVerifier(verifier)).toBe(verifier);
     expect(validatePkceCodeChallenge(challenge)).toBe(challenge);
-    expect(verifyPkceS256({ codeVerifier: verifier, codeChallenge: challenge })).toBe(true);
-    expect(
+    await expect(verifyPkceS256({ codeVerifier: verifier, codeChallenge: challenge })).resolves.toBe(
+      true
+    );
+    await expect(
       verifyPkceS256({
         codeVerifier: verifier,
         codeChallenge: "B".repeat(43),
       })
-    ).toBe(false);
+    ).resolves.toBe(false);
     expect(() => validatePkceCodeVerifier("bad")).toThrow(
       "code_verifier must meet PKCE RFC7636 requirements"
     );
@@ -89,6 +95,26 @@ describe("oauth security helpers", () => {
     );
     expect(() => validateCliRedirectUri("http://127.0.0.1:43111/not-callback")).toThrow(
       "redirect_uri path must be /auth/callback"
+    );
+  });
+
+  it("derives refresh token ttl from granted scope", () => {
+    expect(getCliRefreshTokenTtlMs("tools:read wallet:read offline_access")).toBe(
+      OAUTH_REFRESH_TOKEN_TTL_READ_ONLY_MS
+    );
+    expect(getCliRefreshTokenTtlMs("tools:read wallet:execute offline_access")).toBe(
+      OAUTH_REFRESH_TOKEN_TTL_WRITE_MS
+    );
+    expect(getCliRefreshTokenTtlMs("tools:write wallet:read offline_access")).toBe(
+      OAUTH_REFRESH_TOKEN_TTL_WRITE_MS
+    );
+  });
+
+  it("validates and normalizes cli session labels", () => {
+    expect(validateCliSessionLabel("  Laptop   (Main)  ")).toBe("Laptop (Main)");
+    expect(validateCliSessionLabel("   ")).toBeUndefined();
+    expect(() => validateCliSessionLabel("<script>alert(1)</script>")).toThrow(
+      "label contains unsupported characters"
     );
   });
 });

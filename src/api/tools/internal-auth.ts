@@ -1,6 +1,6 @@
 import { requestContext } from "@fastify/request-context";
+import { parseBearerToken } from "@cobuild/wire";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { parseBearerToken } from "../auth/parse-bearer-token";
 import { setRequestUserFromHeaders } from "../auth/set-request-user";
 import { authenticateToolsBearerToken } from "./token-auth";
 
@@ -12,6 +12,7 @@ declare module "@fastify/request-context" {
       agentKey: string;
       scope: string;
       scopes: string[];
+      hasToolsRead: boolean;
       hasToolsWrite: boolean;
       hasWalletExecute: boolean;
       hasAnyWriteScope: boolean;
@@ -31,6 +32,9 @@ export async function enforceToolsBearerAuth(
   const principal = await authenticateToolsBearerToken(rawToken);
   if (!principal) {
     return reply.status(401).send({ error: "Unauthorized." });
+  }
+  if (!principal.hasToolsRead) {
+    return reply.status(403).send({ error: "tools:read scope required." });
   }
 
   setRequestUserFromHeaders(principal.ownerAddress, request);

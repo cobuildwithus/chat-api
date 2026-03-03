@@ -68,6 +68,7 @@ describe("authenticateToolsBearerToken", () => {
       agentKey: "ops",
       scope: "tools:read tools:write wallet:read offline_access",
       scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
+      hasToolsRead: true,
       hasToolsWrite: true,
       hasWalletExecute: false,
       hasAnyWriteScope: true,
@@ -88,6 +89,7 @@ describe("authenticateToolsBearerToken", () => {
 
     await expect(authenticateToolsBearerToken("token")).resolves.toMatchObject({
       sessionId: "43",
+      hasToolsRead: true,
       hasToolsWrite: false,
       hasWalletExecute: true,
       hasAnyWriteScope: true,

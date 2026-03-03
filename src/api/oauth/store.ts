@@ -4,10 +4,11 @@ import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
 import { cliOauthCodes, cliSessions } from "../../infra/db/schema";
 import {
   OAUTH_AUTH_CODE_TTL_MS,
-  OAUTH_REFRESH_TOKEN_TTL_MS,
   createAuthCode,
   createRefreshToken,
   digestOAuthSecret,
+  getCliRefreshTokenTtlMs,
+  validateCliSessionLabel,
 } from "./security";
 
 export type CliSessionView = {
@@ -41,6 +42,8 @@ type OAuthCodeRow = {
   codeChallengeMethod: string;
   label: string | null;
 };
+
+type OAuthDbClient = ReturnType<typeof cobuildPrimaryDb>;
 
 function normalizeOwnerAddressOrThrow(ownerAddress: string): `0x${string}` {
   const normalized = normalizeAddress(ownerAddress);
@@ -86,13 +89,15 @@ export async function createAuthorizationCode(params: {
   codeChallenge: string;
   codeChallengeMethod: string;
   label?: string;
+  db?: OAuthDbClient;
 }): Promise<{ code: string; expiresAt: Date }> {
-  const db = cobuildPrimaryDb();
+  const db = params.db ?? cobuildPrimaryDb();
   const code = createAuthCode();
   const codeHash = digestOAuthSecret(code);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + OAUTH_AUTH_CODE_TTL_MS);
   const ownerAddress = normalizeOwnerAddressOrThrow(params.ownerAddress);
+  const label = validateCliSessionLabel(params.label);
 
   await db.insert(cliOauthCodes).values({
     codeHash,
@@ -102,7 +107,7 @@ export async function createAuthorizationCode(params: {
     redirectUri: params.redirectUri,
     codeChallenge: params.codeChallenge,
     codeChallengeMethod: params.codeChallengeMethod,
-    label: params.label?.trim() || null,
+    label: label ?? null,
     createdAt: now,
     expiresAt,
   });
@@ -128,8 +133,9 @@ export async function consumeAuthorizationCodeWithPkce(params: {
   redirectUri: string;
   expectedCodeChallenge: string;
   codeChallengeMethod: "S256";
+  db?: OAuthDbClient;
 }): Promise<ConsumedAuthorizationCode | null> {
-  const db = cobuildPrimaryDb();
+  const db = params.db ?? cobuildPrimaryDb();
   const codeHash = digestOAuthSecret(params.rawCode);
   const now = new Date();
 
@@ -169,13 +175,15 @@ export async function createCliSession(params: {
   agentKey: string;
   scope: string;
   label?: string | null;
+  db?: OAuthDbClient;
 }): Promise<{ sessionId: string; refreshToken: string; expiresAt: Date }> {
-  const db = cobuildPrimaryDb();
+  const db = params.db ?? cobuildPrimaryDb();
   const ownerAddress = normalizeOwnerAddressOrThrow(params.ownerAddress);
   const refreshToken = createRefreshToken();
   const refreshTokenHash = digestOAuthSecret(refreshToken);
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + OAUTH_REFRESH_TOKEN_TTL_MS);
+  const expiresAt = new Date(now.getTime() + getCliRefreshTokenTtlMs(params.scope));
+  const label = validateCliSessionLabel(params.label ?? undefined);
 
   const [session] = await db
     .insert(cliSessions)
@@ -183,7 +191,7 @@ export async function createCliSession(params: {
       ownerAddress,
       agentKey: params.agentKey,
       scope: params.scope,
-      label: params.label?.trim() || null,
+      label: label ?? null,
       refreshTokenHash,
       createdAt: now,
       lastUsedAt: now,
@@ -202,6 +210,55 @@ export async function createCliSession(params: {
   };
 }
 
+export async function exchangeAuthorizationCodeForSession(params: {
+  rawCode: string;
+  redirectUri: string;
+  expectedCodeChallenge: string;
+  codeChallengeMethod: "S256";
+}): Promise<{
+  ownerAddress: `0x${string}`;
+  agentKey: string;
+  scope: string;
+  label: string | null;
+  sessionId: string;
+  refreshToken: string;
+  expiresAt: Date;
+} | null> {
+  const db = cobuildPrimaryDb();
+  const result = await db.transaction(async (tx) => {
+    const consumedCode = await consumeAuthorizationCodeWithPkce({
+      rawCode: params.rawCode,
+      redirectUri: params.redirectUri,
+      expectedCodeChallenge: params.expectedCodeChallenge,
+      codeChallengeMethod: params.codeChallengeMethod,
+      db: tx as OAuthDbClient,
+    });
+    if (!consumedCode) {
+      return null;
+    }
+
+    const session = await createCliSession({
+      ownerAddress: consumedCode.ownerAddress,
+      agentKey: consumedCode.agentKey,
+      scope: consumedCode.scope,
+      label: consumedCode.label,
+      db: tx as OAuthDbClient,
+    });
+
+    return {
+      ownerAddress: consumedCode.ownerAddress,
+      agentKey: consumedCode.agentKey,
+      scope: consumedCode.scope,
+      label: consumedCode.label,
+      sessionId: session.sessionId,
+      refreshToken: session.refreshToken,
+      expiresAt: session.expiresAt,
+    };
+  });
+
+  return result;
+}
+
 export async function rotateCliSessionByRefreshToken(refreshToken: string): Promise<{
   sessionId: string;
   ownerAddress: `0x${string}`;
@@ -209,8 +266,30 @@ export async function rotateCliSessionByRefreshToken(refreshToken: string): Prom
   scope: string;
   refreshToken: string;
   expiresAt: Date;
+} | null>;
+export async function rotateCliSessionByRefreshToken(
+  refreshToken: string,
+  db: OAuthDbClient,
+): Promise<{
+  sessionId: string;
+  ownerAddress: `0x${string}`;
+  agentKey: string;
+  scope: string;
+  refreshToken: string;
+  expiresAt: Date;
+} | null>;
+export async function rotateCliSessionByRefreshToken(
+  refreshToken: string,
+  dbInput?: OAuthDbClient,
+): Promise<{
+  sessionId: string;
+  ownerAddress: `0x${string}`;
+  agentKey: string;
+  scope: string;
+  refreshToken: string;
+  expiresAt: Date;
 } | null> {
-  const db = cobuildPrimaryDb();
+  const db = dbInput ?? cobuildPrimaryDb();
   const currentHash = digestOAuthSecret(refreshToken);
   const nextRefreshToken = createRefreshToken();
   const nextRefreshTokenHash = digestOAuthSecret(nextRefreshToken);
@@ -249,6 +328,44 @@ export async function rotateCliSessionByRefreshToken(refreshToken: string): Prom
     refreshToken: nextRefreshToken,
     expiresAt: row.expiresAt,
   };
+}
+
+export async function rotateCliSessionAndIssueAccessToken(params: {
+  refreshToken: string;
+  issueAccessToken: (claims: {
+    ownerAddress: `0x${string}`;
+    sessionId: string;
+    agentKey: string;
+    scope: string;
+  }) => Promise<string>;
+}): Promise<{
+  sessionId: string;
+  ownerAddress: `0x${string}`;
+  agentKey: string;
+  scope: string;
+  refreshToken: string;
+  expiresAt: Date;
+  accessToken: string;
+} | null> {
+  const db = cobuildPrimaryDb();
+  const rotated = await db.transaction(async (tx) => {
+    const session = await rotateCliSessionByRefreshToken(params.refreshToken, tx as OAuthDbClient);
+    if (!session) {
+      return null;
+    }
+    const accessToken = await params.issueAccessToken({
+      ownerAddress: session.ownerAddress,
+      sessionId: session.sessionId,
+      agentKey: session.agentKey,
+      scope: session.scope,
+    });
+    return {
+      ...session,
+      accessToken,
+    };
+  });
+
+  return rotated;
 }
 
 export async function listCliSessions(ownerAddress: string): Promise<CliSessionView[]> {

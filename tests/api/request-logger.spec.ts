@@ -115,11 +115,37 @@ describe("registerRequestLogging", () => {
       url: "/oauth/token",
       summary: {
         redacted: true,
+        reason: "sensitive-endpoint",
         sensitiveFields: ["code_verifier", "refresh_token"],
+        containsRefreshTokenLikeValue: true,
       },
     });
     const serializedLogCalls = JSON.stringify(infoSpy.mock.calls);
     expect(serializedLogCalls).not.toContain("rfr_secret_value");
+
+    hooks.preHandler(
+      {
+        id: "req-4",
+        method: "POST",
+        url: "/oauth/authorize-code",
+        body: {
+          client_id: "buildbot_cli",
+          code_challenge: "A".repeat(43),
+          state: "state-12345678",
+        },
+      },
+      {},
+      done,
+    );
+    expect(infoSpy).toHaveBeenCalledWith("[req-body]", {
+      id: "req-4",
+      url: "/oauth/authorize-code",
+      summary: {
+        redacted: true,
+        reason: "sensitive-endpoint",
+        sensitiveFields: ["code_challenge"],
+      },
+    });
 
     vi.mocked(requestContext.get).mockReturnValue(1000);
     hooks.onResponse(

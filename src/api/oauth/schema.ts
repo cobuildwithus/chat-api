@@ -23,7 +23,12 @@ export const oauthAuthorizeCodeSchema = {
         maxLength: 64,
         pattern: "^[A-Za-z0-9._-]+$",
       },
-      label: { type: "string", minLength: 1, maxLength: 128 },
+      label: {
+        type: "string",
+        minLength: 1,
+        maxLength: 128,
+        pattern: "^[A-Za-z0-9 ._()\\-]+$",
+      },
     },
     additionalProperties: false,
   },

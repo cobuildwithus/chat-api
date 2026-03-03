@@ -1,25 +1,25 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import {
+  hasAnyWriteCapability,
+  validateScope,
+} from "@cobuild/wire";
 import { getChatUserOrThrow } from "../auth/validate-chat-user";
 import { signCliAccessToken } from "./jwt";
 import {
-  canWriteFromScope,
-  validateScope,
-} from "./scopes";
-import {
+  CLI_OAUTH_PUBLIC_CLIENT_ID,
   OAUTH_ACCESS_TOKEN_TTL_SECONDS,
-  OAUTH_PUBLIC_CLIENT_ID,
   deriveS256CodeChallenge,
+  validateCliSessionLabel,
   validateCliRedirectUri,
   validatePkceCodeChallenge,
   validatePkceCodeVerifier,
 } from "./security";
 import {
-  consumeAuthorizationCodeWithPkce,
   createAuthorizationCode,
-  createCliSession,
+  exchangeAuthorizationCodeForSession,
   listCliSessions,
   revokeCliSession,
-  rotateCliSessionByRefreshToken,
+  rotateCliSessionAndIssueAccessToken,
 } from "./store";
 
 type OauthAuthorizeCodeBody = {
@@ -52,14 +52,20 @@ function sendOauthError(
   error: string,
   description: string,
 ) {
+  setOauthNoStoreHeaders(reply);
   return reply.status(statusCode).send({
     error,
     error_description: description,
   });
 }
 
+function setOauthNoStoreHeaders(reply: FastifyReply): void {
+  reply.header("Cache-Control", "no-store");
+  reply.header("Pragma", "no-cache");
+}
+
 function assertPublicClient(clientId: string): void {
-  if (clientId !== OAUTH_PUBLIC_CLIENT_ID) {
+  if (clientId !== CLI_OAUTH_PUBLIC_CLIENT_ID) {
     throw new Error("Unsupported client_id");
   }
 }
@@ -91,6 +97,7 @@ export async function handleOauthAuthorizeCodeRequest(
     if (!agentKey) {
       throw new Error("agent_key is required");
     }
+    const label = validateCliSessionLabel(body.label);
 
     const created = await createAuthorizationCode({
       ownerAddress: user.address,
@@ -99,9 +106,10 @@ export async function handleOauthAuthorizeCodeRequest(
       redirectUri,
       codeChallenge,
       codeChallengeMethod: "S256",
-      label: body.label,
+      ...(label ? { label } : {}),
     });
 
+    setOauthNoStoreHeaders(reply);
     return reply.send({
       code: created.code,
       state,
@@ -127,7 +135,7 @@ function tokenResponse(params: {
     refresh_token: params.refreshToken,
     scope: params.scope,
     session_id: params.sessionId,
-    can_write: canWriteFromScope(params.scope),
+    can_write: hasAnyWriteCapability(params.scope),
   };
 }
 
@@ -151,36 +159,31 @@ export async function handleOauthTokenRequest(
 
       const redirectUri = validateCliRedirectUri(body.redirect_uri);
       const codeVerifier = validatePkceCodeVerifier(body.code_verifier);
-      const expectedCodeChallenge = deriveS256CodeChallenge(codeVerifier);
-      const consumedCode = await consumeAuthorizationCodeWithPkce({
+      const expectedCodeChallenge = await deriveS256CodeChallenge(codeVerifier);
+      const exchanged = await exchangeAuthorizationCodeForSession({
         rawCode: body.code,
         redirectUri,
         expectedCodeChallenge,
         codeChallengeMethod: "S256",
       });
-      if (!consumedCode) {
+      if (!exchanged) {
         return sendOauthError(reply, 400, "invalid_grant", "Authorization code is invalid or expired");
       }
 
-      const session = await createCliSession({
-        ownerAddress: consumedCode.ownerAddress,
-        agentKey: consumedCode.agentKey,
-        scope: consumedCode.scope,
-        label: consumedCode.label,
-      });
       const accessToken = await signCliAccessToken({
-        sub: consumedCode.ownerAddress,
-        sid: session.sessionId,
-        agentKey: consumedCode.agentKey,
-        scope: consumedCode.scope,
+        sub: exchanged.ownerAddress,
+        sid: exchanged.sessionId,
+        agentKey: exchanged.agentKey,
+        scope: exchanged.scope,
       });
 
+      setOauthNoStoreHeaders(reply);
       return reply.send(
         tokenResponse({
           accessToken,
-          refreshToken: session.refreshToken,
-          scope: consumedCode.scope,
-          sessionId: session.sessionId,
+          refreshToken: exchanged.refreshToken,
+          scope: exchanged.scope,
+          sessionId: exchanged.sessionId,
         }),
       );
     } catch (error) {
@@ -195,20 +198,24 @@ export async function handleOauthTokenRequest(
         throw new Error("refresh_token is required");
       }
 
-      const rotated = await rotateCliSessionByRefreshToken(body.refresh_token);
+      const rotated = await rotateCliSessionAndIssueAccessToken({
+        refreshToken: body.refresh_token,
+        issueAccessToken: async (claims) =>
+          await signCliAccessToken({
+            sub: claims.ownerAddress,
+            sid: claims.sessionId,
+            agentKey: claims.agentKey,
+            scope: claims.scope,
+          }),
+      });
       if (!rotated) {
         return sendOauthError(reply, 400, "invalid_grant", "Refresh token is invalid or expired");
       }
-      const accessToken = await signCliAccessToken({
-        sub: rotated.ownerAddress,
-        sid: rotated.sessionId,
-        agentKey: rotated.agentKey,
-        scope: rotated.scope,
-      });
 
+      setOauthNoStoreHeaders(reply);
       return reply.send(
         tokenResponse({
-          accessToken,
+          accessToken: rotated.accessToken,
           refreshToken: rotated.refreshToken,
           scope: rotated.scope,
           sessionId: rotated.sessionId,
@@ -229,6 +236,7 @@ export async function handleCliSessionsListRequest(
 ) {
   const user = getChatUserOrThrow();
   const sessions = await listCliSessions(user.address);
+  setOauthNoStoreHeaders(reply);
   return reply.send({
     ok: true,
     sessions,
@@ -245,6 +253,7 @@ export async function handleCliSessionRevokeRequest(
     ownerAddress: user.address,
     sessionId: body.sessionId,
   });
+  setOauthNoStoreHeaders(reply);
   return reply.send({
     ok: true,
     revoked,

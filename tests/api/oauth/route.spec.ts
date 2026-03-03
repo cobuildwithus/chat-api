@@ -1,6 +1,6 @@
 import type { FastifyRequest } from "fastify";
-import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { deriveS256CodeChallenge } from "@cobuild/wire";
 import {
   handleCliSessionRevokeRequest,
   handleCliSessionsListRequest,
@@ -12,9 +12,8 @@ import { createReply } from "../../utils/fastify";
 const mocks = vi.hoisted(() => ({
   getChatUserOrThrow: vi.fn(),
   createAuthorizationCode: vi.fn(),
-  consumeAuthorizationCodeWithPkce: vi.fn(),
-  createCliSession: vi.fn(),
-  rotateCliSessionByRefreshToken: vi.fn(),
+  exchangeAuthorizationCodeForSession: vi.fn(),
+  rotateCliSessionAndIssueAccessToken: vi.fn(),
   listCliSessions: vi.fn(),
   revokeCliSession: vi.fn(),
   signCliAccessToken: vi.fn(),
@@ -26,10 +25,10 @@ vi.mock("../../../src/api/auth/validate-chat-user", () => ({
 
 vi.mock("../../../src/api/oauth/store", () => ({
   createAuthorizationCode: (...args: unknown[]) => mocks.createAuthorizationCode(...args),
-  consumeAuthorizationCodeWithPkce: (...args: unknown[]) => mocks.consumeAuthorizationCodeWithPkce(...args),
-  createCliSession: (...args: unknown[]) => mocks.createCliSession(...args),
-  rotateCliSessionByRefreshToken: (...args: unknown[]) =>
-    mocks.rotateCliSessionByRefreshToken(...args),
+  exchangeAuthorizationCodeForSession: (...args: unknown[]) =>
+    mocks.exchangeAuthorizationCodeForSession(...args),
+  rotateCliSessionAndIssueAccessToken: (...args: unknown[]) =>
+    mocks.rotateCliSessionAndIssueAccessToken(...args),
   listCliSessions: (...args: unknown[]) => mocks.listCliSessions(...args),
   revokeCliSession: (...args: unknown[]) => mocks.revokeCliSession(...args),
 }));
@@ -69,6 +68,8 @@ describe("oauth route handlers", () => {
     );
 
     expect(mocks.createAuthorizationCode).toHaveBeenCalled();
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
     expect(reply.send).toHaveBeenCalledWith(
       expect.objectContaining({
         code: "auth-code",
@@ -79,17 +80,11 @@ describe("oauth route handlers", () => {
   });
 
   it("exchanges authorization codes for JWT access + refresh tokens", async () => {
-    mocks.consumeAuthorizationCodeWithPkce.mockResolvedValueOnce({
-      id: "9",
+    mocks.exchangeAuthorizationCodeForSession.mockResolvedValueOnce({
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
       scope: "tools:read tools:write wallet:read wallet:execute offline_access",
-      redirectUri: "http://127.0.0.1:4545/auth/callback",
-      codeChallenge: "DwBzhbb51LfusnSGBa_hqYSgo7-j8BTQnip4TOnlzRo",
-      codeChallengeMethod: "S256",
       label: "local",
-    });
-    mocks.createCliSession.mockResolvedValueOnce({
       sessionId: "22",
       refreshToken: "refresh",
       expiresAt: new Date(Date.now() + 1_000),
@@ -110,19 +105,21 @@ describe("oauth route handlers", () => {
       reply,
     );
 
-    expect(mocks.consumeAuthorizationCodeWithPkce).toHaveBeenCalledWith({
+    const expectedCodeChallenge = await deriveS256CodeChallenge("A".repeat(43));
+    expect(mocks.exchangeAuthorizationCodeForSession).toHaveBeenCalledWith({
       rawCode: "code",
       redirectUri: "http://127.0.0.1:4545/auth/callback",
-      expectedCodeChallenge: createHash("sha256").update("A".repeat(43)).digest("base64url"),
+      expectedCodeChallenge,
       codeChallengeMethod: "S256",
     });
-    expect(mocks.createCliSession).toHaveBeenCalled();
     expect(mocks.signCliAccessToken).toHaveBeenCalledWith({
       sub: "0x0000000000000000000000000000000000000001",
       sid: "22",
       agentKey: "default",
       scope: "tools:read tools:write wallet:read wallet:execute offline_access",
     });
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
     expect(reply.send).toHaveBeenCalledWith(
       expect.objectContaining({
         token_type: "Bearer",
@@ -134,15 +131,15 @@ describe("oauth route handlers", () => {
   });
 
   it("refreshes sessions by rotating refresh token", async () => {
-    mocks.rotateCliSessionByRefreshToken.mockResolvedValueOnce({
+    mocks.rotateCliSessionAndIssueAccessToken.mockResolvedValueOnce({
       sessionId: "33",
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
       scope: "tools:read wallet:read offline_access",
       refreshToken: "refresh-next",
       expiresAt: new Date(Date.now() + 10_000),
+      accessToken: "jwt-access-next",
     });
-    mocks.signCliAccessToken.mockResolvedValueOnce("jwt-access-next");
 
     const reply = createReply();
     await handleOauthTokenRequest(
@@ -163,10 +160,16 @@ describe("oauth route handlers", () => {
         session_id: "33",
       }),
     );
+    expect(mocks.rotateCliSessionAndIssueAccessToken).toHaveBeenCalledWith({
+      refreshToken: "refresh-old",
+      issueAccessToken: expect.any(Function),
+    });
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("returns invalid_grant when code + redirect_uri + PKCE tuple does not match", async () => {
-    mocks.consumeAuthorizationCodeWithPkce.mockResolvedValueOnce(null);
+    mocks.exchangeAuthorizationCodeForSession.mockResolvedValueOnce(null);
 
     const reply = createReply();
     await handleOauthTokenRequest(
@@ -187,7 +190,7 @@ describe("oauth route handlers", () => {
       error: "invalid_grant",
       error_description: "Authorization code is invalid or expired",
     });
-    expect(mocks.createCliSession).not.toHaveBeenCalled();
+    expect(mocks.exchangeAuthorizationCodeForSession).toHaveBeenCalledOnce();
     expect(mocks.signCliAccessToken).not.toHaveBeenCalled();
   });
 
@@ -211,6 +214,8 @@ describe("oauth route handlers", () => {
       error: "invalid_client",
       error_description: "Unsupported client_id",
     });
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("returns invalid_request when authorization_code grant fields are missing", async () => {
@@ -230,6 +235,8 @@ describe("oauth route handlers", () => {
       error: "invalid_request",
       error_description: "code, redirect_uri, and code_verifier are required",
     });
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("returns invalid_request when refresh_token grant omits refresh token", async () => {
@@ -249,10 +256,12 @@ describe("oauth route handlers", () => {
       error: "invalid_request",
       error_description: "refresh_token is required",
     });
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("returns invalid_grant when refresh token is invalid or expired", async () => {
-    mocks.rotateCliSessionByRefreshToken.mockResolvedValueOnce(null);
+    mocks.rotateCliSessionAndIssueAccessToken.mockResolvedValueOnce(null);
 
     const reply = createReply();
     await handleOauthTokenRequest(
@@ -272,6 +281,8 @@ describe("oauth route handlers", () => {
       error_description: "Refresh token is invalid or expired",
     });
     expect(mocks.signCliAccessToken).not.toHaveBeenCalled();
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("returns unsupported_grant_type for unknown grant types", async () => {
@@ -291,6 +302,8 @@ describe("oauth route handlers", () => {
       error: "unsupported_grant_type",
       error_description: "Unsupported grant_type",
     });
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("returns invalid_request for bad authorize-code payloads", async () => {
@@ -304,7 +317,7 @@ describe("oauth route handlers", () => {
         body: {
           client_id: "buildbot_cli",
           redirect_uri: "https://127.0.0.1:4545/auth/callback",
-          scope: "tools:read offline_access",
+          scope: "tools:read wallet:read offline_access",
           code_challenge: "1".repeat(43),
           code_challenge_method: "S256",
           state: "state-12345678",
@@ -320,6 +333,8 @@ describe("oauth route handlers", () => {
       error_description: "redirect_uri must use http loopback transport",
     });
     expect(mocks.createAuthorizationCode).not.toHaveBeenCalled();
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("rejects authorize-code requests when state is blank", async () => {
@@ -333,7 +348,7 @@ describe("oauth route handlers", () => {
         body: {
           client_id: "buildbot_cli",
           redirect_uri: "http://127.0.0.1:4545/auth/callback",
-          scope: "tools:read offline_access",
+          scope: "tools:read wallet:read offline_access",
           code_challenge: "1".repeat(43),
           code_challenge_method: "S256",
           state: "   ",
@@ -349,6 +364,8 @@ describe("oauth route handlers", () => {
       error_description: "state is required",
     });
     expect(mocks.createAuthorizationCode).not.toHaveBeenCalled();
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("rejects authorize-code requests when PKCE method is not S256", async () => {
@@ -362,7 +379,7 @@ describe("oauth route handlers", () => {
         body: {
           client_id: "buildbot_cli",
           redirect_uri: "http://127.0.0.1:4545/auth/callback",
-          scope: "tools:read offline_access",
+          scope: "tools:read wallet:read offline_access",
           code_challenge: "1".repeat(43),
           code_challenge_method: "plain",
           state: "state-12345678",
@@ -378,6 +395,8 @@ describe("oauth route handlers", () => {
       error_description: "code_challenge_method must be S256",
     });
     expect(mocks.createAuthorizationCode).not.toHaveBeenCalled();
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("rejects authorize-code requests when agent_key is blank", async () => {
@@ -391,7 +410,7 @@ describe("oauth route handlers", () => {
         body: {
           client_id: "buildbot_cli",
           redirect_uri: "http://127.0.0.1:4545/auth/callback",
-          scope: "tools:read offline_access",
+          scope: "tools:read wallet:read offline_access",
           code_challenge: "1".repeat(43),
           code_challenge_method: "S256",
           state: "state-12345678",
@@ -407,6 +426,40 @@ describe("oauth route handlers", () => {
       error_description: "agent_key is required",
     });
     expect(mocks.createAuthorizationCode).not.toHaveBeenCalled();
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
+  });
+
+  it("rejects authorize-code requests when label contains unsupported characters", async () => {
+    mocks.getChatUserOrThrow.mockReturnValueOnce({
+      address: "0x0000000000000000000000000000000000000001",
+    });
+
+    const reply = createReply();
+    await handleOauthAuthorizeCodeRequest(
+      {
+        body: {
+          client_id: "buildbot_cli",
+          redirect_uri: "http://127.0.0.1:4545/auth/callback",
+          scope: "tools:read wallet:read offline_access",
+          code_challenge: "1".repeat(43),
+          code_challenge_method: "S256",
+          state: "state-12345678",
+          agent_key: "default",
+          label: "<script>",
+        },
+      } as FastifyRequest,
+      reply,
+    );
+
+    expect(reply.status).toHaveBeenCalledWith(400);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: "invalid_request",
+      error_description: "label contains unsupported characters",
+    });
+    expect(mocks.createAuthorizationCode).not.toHaveBeenCalled();
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("lists active sessions for authenticated users", async () => {
@@ -442,6 +495,8 @@ describe("oauth route handlers", () => {
         },
       ],
     });
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 
   it("revokes sessions owned by the authenticated user", async () => {
@@ -468,5 +523,7 @@ describe("oauth route handlers", () => {
       ok: true,
       revoked: true,
     });
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.header).toHaveBeenCalledWith("Pragma", "no-cache");
   });
 });

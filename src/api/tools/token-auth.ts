@@ -1,6 +1,11 @@
+import {
+  hasAnyWriteCapability,
+  hasToolsWrite,
+  hasWalletExecute,
+  splitScope,
+} from "@cobuild/wire";
 import { normalizeAddress } from "../../chat/address";
 import { verifyCliAccessToken } from "../oauth/jwt";
-import { splitScope } from "../oauth/scopes";
 
 export async function authenticateToolsBearerToken(rawToken: string): Promise<{
   sessionId: string;
@@ -8,6 +13,7 @@ export async function authenticateToolsBearerToken(rawToken: string): Promise<{
   agentKey: string;
   scope: string;
   scopes: string[];
+  hasToolsRead: boolean;
   hasToolsWrite: boolean;
   hasWalletExecute: boolean;
   hasAnyWriteScope: boolean;
@@ -33,8 +39,9 @@ export async function authenticateToolsBearerToken(rawToken: string): Promise<{
   }
 
   const scopes = splitScope(scope);
-  const hasToolsWrite = scopes.includes("tools:write");
-  const hasWalletExecute = scopes.includes("wallet:execute");
+  const hasToolsRead = scopes.includes("tools:read");
+  const hasToolsWriteScope = hasToolsWrite(scope);
+  const hasWalletExecuteScope = hasWalletExecute(scope);
 
   return {
     sessionId: claims.sid,
@@ -42,8 +49,9 @@ export async function authenticateToolsBearerToken(rawToken: string): Promise<{
     agentKey,
     scope,
     scopes,
-    hasToolsWrite,
-    hasWalletExecute,
-    hasAnyWriteScope: hasToolsWrite || hasWalletExecute,
+    hasToolsRead,
+    hasToolsWrite: hasToolsWriteScope,
+    hasWalletExecute: hasWalletExecuteScope,
+    hasAnyWriteScope: hasAnyWriteCapability(scope),
   };
 }
