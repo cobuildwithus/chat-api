@@ -59,6 +59,30 @@ describe("validateChatUser", () => {
     expect(reply.send).toHaveBeenCalledWith({ error: "Invalid chat user" });
   });
 
+  it("normalizes token by trimming surrounding whitespace", async () => {
+    getUserAddressFromTokenMock.mockResolvedValue(undefined);
+    const reply = createReply();
+
+    await validateChatUser(
+      { headers: { "privy-id-token": "  token-value  " } } as unknown as FastifyRequest,
+      reply,
+    );
+
+    expect(getUserAddressFromTokenMock).toHaveBeenCalledWith("token-value");
+  });
+
+  it("normalizes token by stripping accidental surrounding quotes", async () => {
+    getUserAddressFromTokenMock.mockResolvedValue(undefined);
+    const reply = createReply();
+
+    await validateChatUser(
+      { headers: { "privy-id-token": '  "token-value"  ' } } as unknown as FastifyRequest,
+      reply,
+    );
+
+    expect(getUserAddressFromTokenMock).toHaveBeenCalledWith("token-value");
+  });
+
   it("returns 401 when address normalization fails", async () => {
     getUserAddressFromTokenMock.mockResolvedValue("not-an-address");
 

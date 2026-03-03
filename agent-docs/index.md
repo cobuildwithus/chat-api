@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-03 (tools auth explicit write-capability fields for principal scope checks)
+Last verified: 2026-03-03 (tools auth explicit write-capability fields; chat auth token normalization)
 
 ## Purpose
 

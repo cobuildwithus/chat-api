@@ -26,6 +26,19 @@ function isValidSharedSecret(authHeader: string, sharedSecret: string): boolean 
   return timingSafeEqual(authBuffer, secretBuffer);
 }
 
+function normalizePrivyToken(rawToken: unknown): string | undefined {
+  if (typeof rawToken !== "string") {
+    return undefined;
+  }
+
+  const trimmed = rawToken.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed.replace(/^"(.*)"$/, "$1");
+}
+
 export async function validateChatUser(request: FastifyRequest, reply: FastifyReply) {
   try {
     if (isSelfHostedMode()) {
@@ -56,13 +69,12 @@ export async function validateChatUser(request: FastifyRequest, reply: FastifyRe
       return;
     }
 
-    const token = request.headers["privy-id-token"];
-
-    if (!token || typeof token !== "string") {
+    const token = normalizePrivyToken(request.headers["privy-id-token"]);
+    if (!token) {
       return reply.code(401).send({ error: "Missing privy id token" });
     }
 
-    const address = await getUserAddressFromToken(token.replace('"', ""));
+    const address = await getUserAddressFromToken(token);
     const normalizedAddress = normalizeAddress(address);
     if (!normalizedAddress) {
       return reply.code(401).send({ error: "Invalid chat user" });
