@@ -93,7 +93,9 @@ describe("enforceToolsBearerAuth", () => {
       agentKey: "default",
       scope: "tools:read tools:write wallet:read offline_access",
       scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
-      canWrite: true,
+      hasToolsWrite: true,
+      hasWalletExecute: false,
+      hasAnyWriteScope: true,
     });
 
     await enforceToolsBearerAuth(request, reply);
@@ -112,7 +114,9 @@ describe("enforceToolsBearerAuth", () => {
       agentKey: "default",
       scope: "tools:read tools:write wallet:read offline_access",
       scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
-      canWrite: true,
+      hasToolsWrite: true,
+      hasWalletExecute: false,
+      hasAnyWriteScope: true,
     });
     expect(reply.status).not.toHaveBeenCalled();
     expect(reply.send).not.toHaveBeenCalled();
@@ -137,7 +141,9 @@ describe("enforceToolsBearerAuth", () => {
       agentKey: "ops",
       scope: "tools:read wallet:read offline_access",
       scopes: ["tools:read", "wallet:read", "offline_access"],
-      canWrite: false,
+      hasToolsWrite: false,
+      hasWalletExecute: false,
+      hasAnyWriteScope: false,
     });
 
     await enforceToolsBearerAuth(request, reply);

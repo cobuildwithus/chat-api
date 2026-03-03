@@ -1,6 +1,6 @@
 import { normalizeAddress } from "../../chat/address";
 import { verifyCliAccessToken } from "../oauth/jwt";
-import { canWriteFromScope, splitScope } from "../oauth/scopes";
+import { splitScope } from "../oauth/scopes";
 
 export async function authenticateToolsBearerToken(rawToken: string): Promise<{
   sessionId: string;
@@ -8,7 +8,9 @@ export async function authenticateToolsBearerToken(rawToken: string): Promise<{
   agentKey: string;
   scope: string;
   scopes: string[];
-  canWrite: boolean;
+  hasToolsWrite: boolean;
+  hasWalletExecute: boolean;
+  hasAnyWriteScope: boolean;
 } | null> {
   const claims = await verifyCliAccessToken(rawToken);
   if (!claims) {
@@ -30,12 +32,18 @@ export async function authenticateToolsBearerToken(rawToken: string): Promise<{
     return null;
   }
 
+  const scopes = splitScope(scope);
+  const hasToolsWrite = scopes.includes("tools:write");
+  const hasWalletExecute = scopes.includes("wallet:execute");
+
   return {
     sessionId: claims.sid,
     ownerAddress: ownerAddress as `0x${string}`,
     agentKey,
     scope,
-    scopes: splitScope(scope),
-    canWrite: canWriteFromScope(scope),
+    scopes,
+    hasToolsWrite,
+    hasWalletExecute,
+    hasAnyWriteScope: hasToolsWrite || hasWalletExecute,
   };
 }

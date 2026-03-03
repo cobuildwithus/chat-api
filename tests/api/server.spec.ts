@@ -293,7 +293,9 @@ describe("setupServer", () => {
           ownerAddress: "0x0000000000000000000000000000000000000001",
           agentKey: "default",
           sessionId: "42",
-          canWrite: false,
+          hasToolsWrite: false,
+          hasWalletExecute: false,
+          hasAnyWriteScope: false,
         };
       }
       return undefined;

@@ -50,8 +50,8 @@ export async function handleToolExecutionRequest(
   const body = request.body as ToolExecutionBody;
   const toolsPrincipal = requestContext.get("toolsPrincipal");
   const requiresWriteScope = requiresWriteScopeForTool(body.name);
-  const hasToolsWriteScope = toolsPrincipal?.scopes.includes("tools:write") === true;
-  const hasWalletExecuteScope = toolsPrincipal?.scopes.includes("wallet:execute") === true;
+  const hasToolsWriteScope = toolsPrincipal?.hasToolsWrite === true;
+  const hasWalletExecuteScope = toolsPrincipal?.hasWalletExecute === true;
   if (requiresWriteScope && !hasToolsWriteScope) {
     return reply.status(403).send({
       ok: false,

@@ -12,7 +12,9 @@ declare module "@fastify/request-context" {
       agentKey: string;
       scope: string;
       scopes: string[];
-      canWrite: boolean;
+      hasToolsWrite: boolean;
+      hasWalletExecute: boolean;
+      hasAnyWriteScope: boolean;
     };
   }
 }

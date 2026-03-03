@@ -68,11 +68,13 @@ describe("authenticateToolsBearerToken", () => {
       agentKey: "ops",
       scope: "tools:read tools:write wallet:read offline_access",
       scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
-      canWrite: true,
+      hasToolsWrite: true,
+      hasWalletExecute: false,
+      hasAnyWriteScope: true,
     });
   });
 
-  it("derives canWrite from wallet:execute scope for compatibility", async () => {
+  it("derives explicit write capabilities from wallet:execute scope", async () => {
     mocks.verifyCliAccessToken.mockResolvedValueOnce({
       sub: "0x0000000000000000000000000000000000000001",
       sid: "43",
@@ -86,7 +88,9 @@ describe("authenticateToolsBearerToken", () => {
 
     await expect(authenticateToolsBearerToken("token")).resolves.toMatchObject({
       sessionId: "43",
-      canWrite: true,
+      hasToolsWrite: false,
+      hasWalletExecute: true,
+      hasAnyWriteScope: true,
     });
   });
 });

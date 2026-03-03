@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-02 (cross-repo helper dedup: auth bearer parsing, request-user context extraction, request body summarization, registry-backed AI tool wrappers, cache helper consolidation)
+Last verified: 2026-03-03 (tools auth explicit write-capability fields for principal scope checks)
 
 ## Purpose
 
@@ -44,4 +44,4 @@ This index is the table of contents for durable, repository-local context that a
 - Buildbot tools auth/rate-limit prehandler ordering changes require updates to Architecture + Security + API Contracts docs in the same change.
 - For multi-file/high-risk work, add a plan in `agent-docs/exec-plans/active/`.
 - Keep `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` current during active coding work.
-- Current active plan example: `agent-docs/exec-plans/active/2026-03-02-discussion-tools-semantic-search-reply-cast.md`.
+- Current active plan example: `agent-docs/exec-plans/active/2026-03-03-explicit-write-capabilities.md`.

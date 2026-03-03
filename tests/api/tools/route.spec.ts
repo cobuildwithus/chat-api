@@ -208,7 +208,9 @@ describe("tools v1 handlers", () => {
       agentKey: "default",
       scope: "tools:read wallet:read offline_access",
       scopes: ["tools:read", "wallet:read", "offline_access"],
-      canWrite: false,
+      hasToolsWrite: false,
+      hasWalletExecute: false,
+      hasAnyWriteScope: false,
     });
     const request = {
       body: {
@@ -238,7 +240,9 @@ describe("tools v1 handlers", () => {
       agentKey: "default",
       scope: "tools:read tools:write wallet:read offline_access",
       scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
-      canWrite: true,
+      hasToolsWrite: true,
+      hasWalletExecute: false,
+      hasAnyWriteScope: true,
     });
     const request = {
       body: {
