@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import {
   chat,
   chatMessage,
@@ -14,5 +15,16 @@ describe("db schema", () => {
     expect(farcasterProfiles).toBeDefined();
     expect(cliOauthCodes).toBeDefined();
     expect(cliSessions).toBeDefined();
+  });
+
+  it("registers expected indexes and constraints", () => {
+    const chatMessageConfig = getTableConfig(chatMessage);
+    expect(chatMessageConfig.indexes).toHaveLength(1);
+
+    const oauthCodesConfig = getTableConfig(cliOauthCodes);
+    expect(oauthCodesConfig.indexes).toHaveLength(2);
+
+    const cliSessionsConfig = getTableConfig(cliSessions);
+    expect(cliSessionsConfig.indexes).toHaveLength(3);
   });
 });
