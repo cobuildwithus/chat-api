@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ModelMessage } from "ai";
 import { getDiscussionThreadTool } from "../../../src/ai/tools/get-discussion-thread/get-discussion-thread";
-import { executeTool } from "../../../src/api/tools/registry";
+import { executeTool } from "../../../src/tools/registry";
 
-vi.mock("../../../src/api/tools/registry", () => ({
+vi.mock("../../../src/tools/registry", () => ({
   executeTool: vi.fn(),
 }));
 

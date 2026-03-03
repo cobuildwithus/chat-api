@@ -1,5 +1,11 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { executeTool, listToolMetadata, resolveToolMetadata } from "./registry";
+import { requestContext } from "@fastify/request-context";
+import {
+  executeTool,
+  listToolMetadata,
+  requiresWriteScopeForTool,
+  resolveToolMetadata,
+} from "../../tools/registry";
 
 type ToolExecutionBody = {
   name: string;
@@ -42,10 +48,36 @@ export async function handleToolExecutionRequest(
   reply: FastifyReply,
 ) {
   const body = request.body as ToolExecutionBody;
+  const toolsPrincipal = requestContext.get("toolsPrincipal");
+  const requiresWriteScope = requiresWriteScopeForTool(body.name);
+  const hasToolsWriteScope = toolsPrincipal?.scopes.includes("tools:write") === true;
+  const hasWalletExecuteScope = toolsPrincipal?.scopes.includes("wallet:execute") === true;
+  if (requiresWriteScope && !hasToolsWriteScope) {
+    return reply.status(403).send({
+      ok: false,
+      name: body.name,
+      statusCode: 403,
+      error: "This token does not have tools:write scope for the requested tool.",
+    });
+  }
+  if (requiresWriteScope && !hasWalletExecuteScope) {
+    return reply.status(403).send({
+      ok: false,
+      name: body.name,
+      statusCode: 403,
+      error: "This token does not have wallet:execute scope for the requested tool.",
+    });
+  }
+
   const result = await executeTool(body.name, body.input ?? {});
 
   if (!result.ok) {
-    return reply.status(result.statusCode).send({ error: result.error });
+    return reply.status(result.statusCode).send({
+      ok: false,
+      name: result.name,
+      statusCode: result.statusCode,
+      error: result.error,
+    });
   }
 
   if (result.cacheControl) {

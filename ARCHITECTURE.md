@@ -131,7 +131,6 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 
 ### External APIs
 
-- Neynar client in `src/infra/neynar/client.ts`.
 - Cobuild AI context fetch in `src/infra/cobuild-ai-context.ts`.
 - Timeout wrapper in `src/infra/http/timeout.ts`.
 

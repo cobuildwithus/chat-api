@@ -1,5 +1,6 @@
 import { requestContext } from "@fastify/request-context";
 import type { FastifyInstance } from "fastify";
+import { summarizeRequestBody } from "./request-body-summary";
 
 declare module "@fastify/request-context" {
   interface RequestContextData {
@@ -12,20 +13,22 @@ const isDebugEnabled = () => {
   return flag === "1" || flag === "true";
 };
 
-const summarizeBody = (body: unknown) => {
-  if (!body || typeof body !== "object") return null;
-  const record = body as Record<string, unknown>;
-  const summary: Record<string, unknown> = {};
+const SENSITIVE_BODY_FIELDS = new Set([
+  "code",
+  "code_verifier",
+  "refresh_token",
+  "id_token",
+]);
 
-  if (typeof record.type === "string") summary.type = record.type;
-  if (typeof record.id === "string") summary.id = record.id;
-  if (Array.isArray(record.messages)) summary.messageCount = record.messages.length;
-  if (record.data && typeof record.data === "object") {
-    summary.dataKeys = Object.keys(record.data as Record<string, unknown>);
+function getSensitiveBodyFields(body: unknown): string[] {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return [];
   }
-
-  return Object.keys(summary).length > 0 ? summary : null;
-};
+  const record = body as Record<string, unknown>;
+  return Object.keys(record)
+    .filter((key) => SENSITIVE_BODY_FIELDS.has(key.toLowerCase()))
+    .sort();
+}
 
 export const registerRequestLogging = (server: FastifyInstance) => {
   if (!isDebugEnabled()) return;
@@ -44,7 +47,19 @@ export const registerRequestLogging = (server: FastifyInstance) => {
 
   server.addHook("preHandler", (request, _reply, done) => {
     if (request.method === "GET" || request.method === "HEAD") return done();
-    const summary = summarizeBody(request.body);
+    const sensitiveFields = getSensitiveBodyFields(request.body);
+    if (sensitiveFields.length > 0) {
+      console.info("[req-body]", {
+        id: request.id,
+        url: request.url,
+        summary: {
+          redacted: true,
+          sensitiveFields,
+        },
+      });
+      return done();
+    }
+    const summary = summarizeRequestBody(request.body);
     if (summary) {
       console.info("[req-body]", {
         id: request.id,

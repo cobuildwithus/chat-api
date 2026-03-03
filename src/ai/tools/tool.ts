@@ -21,7 +21,7 @@ export async function getToolPrompts(tools: Tool[]): Promise<SystemModelMessage[
   );
 }
 
-export function cachedPrompts(prompts: SystemModelMessage[]): SystemModelMessage[] {
+export function clonePromptList(prompts: SystemModelMessage[]): SystemModelMessage[] {
   if (prompts.length === 0) return prompts;
 
   const lastIndex = prompts.length - 1;

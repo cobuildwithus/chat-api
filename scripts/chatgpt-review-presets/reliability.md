@@ -3,7 +3,7 @@ Audit reliability and operational safety for this API in unattended production u
 
 Focus:
 - Idempotency/retry safety for requests that trigger model/tool work.
-- Timeout/backoff/cancellation behavior around OpenAI, Neynar, Redis, and Postgres.
+- Timeout/backoff/cancellation behavior around OpenAI, Redis, and Postgres.
 - Race conditions around grants, pending messages, and stream completion/failure paths.
 - Deterministic error contracts and stable status-code behavior.
 - Cleanup behavior for partial stream failures and interrupted requests.

@@ -88,9 +88,11 @@ describe("enforceToolsBearerAuth", () => {
     } as unknown as FastifyRequest;
     const reply = createReply();
     mocks.authenticateToolsBearerToken.mockResolvedValueOnce({
-      tokenId: "42",
+      sessionId: "42",
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
+      scope: "tools:read tools:write wallet:read offline_access",
+      scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
       canWrite: true,
     });
 
@@ -105,9 +107,11 @@ describe("enforceToolsBearerAuth", () => {
       userAgent: null,
     });
     expect(mocks.requestContextSet).toHaveBeenCalledWith("toolsPrincipal", {
-      tokenId: "42",
+      sessionId: "42",
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
+      scope: "tools:read tools:write wallet:read offline_access",
+      scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
       canWrite: true,
     });
     expect(reply.status).not.toHaveBeenCalled();
@@ -128,9 +132,11 @@ describe("enforceToolsBearerAuth", () => {
     } as unknown as FastifyRequest;
     const reply = createReply();
     mocks.authenticateToolsBearerToken.mockResolvedValueOnce({
-      tokenId: "43",
+      sessionId: "43",
       ownerAddress: "0x0000000000000000000000000000000000000002",
       agentKey: "ops",
+      scope: "tools:read wallet:read offline_access",
+      scopes: ["tools:read", "wallet:read", "offline_access"],
       canWrite: false,
     });
 

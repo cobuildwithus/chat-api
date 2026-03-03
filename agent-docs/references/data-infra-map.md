@@ -36,7 +36,7 @@ Schema source: `src/infra/db/schema.ts` and `migrations/0001_minimal_chat.sql`.
 
 - Timeout helpers: `src/infra/http/timeout.ts`.
 - OpenAI model fetch is timeout-wrapped.
-- Neynar and cobuild-context fetches are timeout-bound with separate env defaults.
+- Cobuild-context fetches are timeout-bound with dedicated env defaults.
 
 ## Startup and Shutdown Semantics
 

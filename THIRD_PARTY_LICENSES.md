@@ -25,7 +25,6 @@
 | @nestjs/axios | 4.0.1 | MIT |
 | @nestjs/common | 11.1.12 | MIT |
 | @nestjs/core | 11.1.12 | MIT |
-| @neynar/nodejs-sdk | 3.123.0 | MIT |
 | @noble/ciphers | 1.3.0 | MIT |
 | @noble/curves | 1.9.1 | MIT |
 | @noble/hashes | 1.8.0 | MIT |

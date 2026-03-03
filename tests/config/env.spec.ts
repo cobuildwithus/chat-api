@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getChatInternalServiceKey,
   getChatGrantSecret,
+  getBuildBotJwtAudience,
+  getBuildBotJwtIssuer,
+  getBuildBotJwtPrivateKey,
+  getBuildBotJwtPublicKey,
   getCobuildAiContextTimeoutMs,
-  getNeynarTimeoutMs,
   getOpenAiTimeoutMs,
   getPostgresPoolOptions,
   getPostgresPoolStatsIntervalMs,
@@ -22,8 +25,12 @@ const baseEnv = {
   POSTGRES_URL: "postgres://localhost",
   PRIVY_APP_ID: "privy",
   CHAT_GRANT_SECRET: "secret",
-  NEYNAR_API_KEY: "neynar",
   CHAT_INTERNAL_SERVICE_KEY: "internal-secret",
+  BUILD_BOT_TOKEN_PEPPER: "pepper",
+  BUILD_BOT_JWT_PRIVATE_KEY: "private-key",
+  BUILD_BOT_JWT_PUBLIC_KEY: "public-key",
+  BUILD_BOT_JWT_ISSUER: "issuer",
+  BUILD_BOT_JWT_AUDIENCE: "audience",
 };
 
 describe("env helpers", () => {
@@ -43,6 +50,10 @@ describe("env helpers", () => {
     expect(getChatGrantSecret()).toBe("secret");
     expect(getPrivyAppId()).toBe("privy");
     expect(getChatInternalServiceKey()).toBe("internal-secret");
+    expect(getBuildBotJwtPrivateKey()).toBe("private-key");
+    expect(getBuildBotJwtPublicKey()).toBe("public-key");
+    expect(getBuildBotJwtIssuer()).toBe("issuer");
+    expect(getBuildBotJwtAudience()).toBe("audience");
   });
 
   it("parses replica urls and debug flag", () => {
@@ -133,10 +144,8 @@ describe("env helpers", () => {
   it("uses timeout defaults when not configured", () => {
     process.env = { ...process.env, ...baseEnv };
     delete process.env.OPENAI_REQUEST_TIMEOUT_MS;
-    delete process.env.NEYNAR_REQUEST_TIMEOUT_MS;
     delete process.env.COBUILD_AI_CONTEXT_TIMEOUT_MS;
     expect(getOpenAiTimeoutMs()).toBe(30_000);
-    expect(getNeynarTimeoutMs()).toBe(8_000);
     expect(getCobuildAiContextTimeoutMs()).toBe(7_000);
   });
 
@@ -162,7 +171,7 @@ describe("env helpers", () => {
       PRIVY_VERIFICATION_KEY: "verification-key",
     };
     delete process.env.CHAT_INTERNAL_SERVICE_KEY;
-    delete process.env.BUILD_BOT_TOOLS_INTERNAL_KEY;
+    delete process.env.CLI_TOOLS_INTERNAL_KEY;
     expect(() => validateEnvVariables()).not.toThrow();
   });
 
@@ -196,6 +205,52 @@ describe("env helpers", () => {
     );
   });
 
+  it("requires token pepper in production", () => {
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      NODE_ENV: "production",
+      PRIVY_VERIFICATION_KEY: "verification-key",
+    };
+    delete process.env.BUILD_BOT_TOKEN_PEPPER;
+
+    expect(() => validateEnvVariables()).toThrow(
+      "Missing required env in production: BUILD_BOT_TOKEN_PEPPER",
+    );
+  });
+
+  it("requires JWT signing key env values in production", () => {
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      NODE_ENV: "production",
+      PRIVY_VERIFICATION_KEY: "verification-key",
+    };
+
+    delete process.env.BUILD_BOT_JWT_PRIVATE_KEY;
+    expect(() => validateEnvVariables()).toThrow(
+      "Missing required env in production: BUILD_BOT_JWT_PRIVATE_KEY",
+    );
+
+    process.env.BUILD_BOT_JWT_PRIVATE_KEY = "private-key";
+    delete process.env.BUILD_BOT_JWT_PUBLIC_KEY;
+    expect(() => validateEnvVariables()).toThrow(
+      "Missing required env in production: BUILD_BOT_JWT_PUBLIC_KEY",
+    );
+
+    process.env.BUILD_BOT_JWT_PUBLIC_KEY = "public-key";
+    delete process.env.BUILD_BOT_JWT_ISSUER;
+    expect(() => validateEnvVariables()).toThrow(
+      "Missing required env in production: BUILD_BOT_JWT_ISSUER",
+    );
+
+    process.env.BUILD_BOT_JWT_ISSUER = "issuer";
+    delete process.env.BUILD_BOT_JWT_AUDIENCE;
+    expect(() => validateEnvVariables()).toThrow(
+      "Missing required env in production: BUILD_BOT_JWT_AUDIENCE",
+    );
+  });
+
   it("throws from getPrivyAppId when missing", () => {
     process.env = { ...process.env, ...baseEnv };
     delete process.env.PRIVY_APP_ID;
@@ -209,10 +264,10 @@ describe("env helpers", () => {
     expect(getChatInternalServiceKey()).toBeNull();
   });
 
-  it("falls back to legacy buildbot env key when new key is missing", () => {
+  it("falls back to legacy cli env key when new key is missing", () => {
     process.env = { ...process.env, ...baseEnv };
     delete process.env.CHAT_INTERNAL_SERVICE_KEY;
-    process.env.BUILD_BOT_TOOLS_INTERNAL_KEY = "legacy-secret";
+    process.env.CLI_TOOLS_INTERNAL_KEY = "legacy-secret";
 
     expect(getChatInternalServiceKey()).toBe("legacy-secret");
   });

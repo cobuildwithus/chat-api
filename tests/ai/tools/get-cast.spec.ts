@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ModelMessage } from "ai";
 import { getCastTool } from "../../../src/ai/tools/get-cast/get-cast";
-import { executeTool } from "../../../src/api/tools/registry";
+import { executeTool } from "../../../src/tools/registry";
 
-vi.mock("../../../src/api/tools/registry", () => ({
+vi.mock("../../../src/tools/registry", () => ({
   executeTool: vi.fn(),
 }));
 

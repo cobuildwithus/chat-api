@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Tool as AITool } from "ai";
-import { cachedPrompts, getToolPrompts, getTools } from "../../../src/ai/tools/tool";
+import { clonePromptList, getToolPrompts, getTools } from "../../../src/ai/tools/tool";
 import type { Tool } from "../../../src/ai/tools/tool";
 
 const tools: Tool[] = [
@@ -29,11 +29,11 @@ describe("tool helpers", () => {
       { role: "system" as const, content: "second" },
     ];
     const lastPrompt = prompts[1];
-    const result = cachedPrompts(prompts);
+    const result = clonePromptList(prompts);
     expect(result).toBe(prompts);
     expect(result[1]).not.toBe(lastPrompt);
 
-    const empty = cachedPrompts([]);
+    const empty = clonePromptList([]);
     expect(empty).toEqual([]);
   });
 });

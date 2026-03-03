@@ -4,4 +4,8 @@ import { createCobuildDbResources } from "./create-cobuild-db";
 const databaseConfig = loadDatabaseConfig();
 const { db: cobuildDb, close: closeCobuildDb } = createCobuildDbResources(databaseConfig);
 
-export { cobuildDb, closeCobuildDb };
+function cobuildPrimaryDb() {
+  return cobuildDb.$primary ?? cobuildDb;
+}
+
+export { cobuildDb, cobuildPrimaryDb, closeCobuildDb };

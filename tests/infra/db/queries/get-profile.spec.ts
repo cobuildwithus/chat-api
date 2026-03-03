@@ -1,19 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const redisGet = vi.fn();
-const redisSet = vi.fn();
-const redisDel = vi.fn();
-
+const getOrSetCachedResultWithLock = vi.fn();
+const deleteCachedResult = vi.fn();
 const whereMock = vi.fn();
 const fromMock = vi.fn(() => ({ where: whereMock }));
 
-vi.mock("../../../../src/infra/redis", () => ({
-  getRedisClient: vi.fn(async () => ({
-    get: redisGet,
-    set: redisSet,
-    del: redisDel,
-  })),
-  withRedisLock: vi.fn(async (_key: string, fn: () => Promise<unknown>) => fn()),
+vi.mock("../../../../src/infra/cache/cacheResult", () => ({
+  getOrSetCachedResultWithLock,
+  deleteCachedResult,
 }));
 
 vi.mock("../../../../src/infra/db/cobuildDb", () => ({
@@ -29,8 +23,8 @@ describe("getFarcasterProfileByAddress", () => {
     vi.unmock("../../../../src/infra/db/queries/profiles/get-profile");
   });
 
-  it("returns cached profile when available", async () => {
-    redisGet.mockResolvedValueOnce(JSON.stringify({ fid: 1, fname: "alice" }));
+  it("returns a valid cached/fetched profile", async () => {
+    getOrSetCachedResultWithLock.mockResolvedValueOnce({ fid: 1, fname: "alice" });
 
     const { getFarcasterProfileByAddress } = await import(
       "../../../../src/infra/db/queries/profiles/get-profile"
@@ -38,10 +32,43 @@ describe("getFarcasterProfileByAddress", () => {
 
     const result = await getFarcasterProfileByAddress("0xabc");
     expect(result).toEqual({ fid: 1, fname: "alice" });
+    expect(deleteCachedResult).not.toHaveBeenCalled();
   });
 
-  it("clears invalid cache and queries db", async () => {
-    redisGet.mockResolvedValueOnce(JSON.stringify({ fid: 0 }));
+  it("clears invalid profile cache entries and reloads once", async () => {
+    getOrSetCachedResultWithLock
+      .mockResolvedValueOnce({ fid: 0, fname: "invalid" })
+      .mockResolvedValueOnce({ fid: 3, fname: "carol" });
+
+    const { getFarcasterProfileByAddress } = await import(
+      "../../../../src/infra/db/queries/profiles/get-profile"
+    );
+
+    const result = await getFarcasterProfileByAddress("0xabc");
+    expect(result).toEqual({ fid: 3, fname: "carol" });
+    expect(deleteCachedResult).toHaveBeenCalledWith("0xabc", "farcaster-profile-by-address:");
+    expect(getOrSetCachedResultWithLock).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns null when cache/fetch has no profile", async () => {
+    getOrSetCachedResultWithLock.mockResolvedValueOnce(null);
+
+    const { getFarcasterProfileByAddress } = await import(
+      "../../../../src/infra/db/queries/profiles/get-profile"
+    );
+
+    const result = await getFarcasterProfileByAddress("0xabc");
+    expect(result).toBeNull();
+  });
+
+  it("queries db and returns newest profile when cache misses", async () => {
+    getOrSetCachedResultWithLock.mockImplementationOnce(
+      async (
+        _key: string,
+        _prefix: string,
+        fetchFn: () => Promise<unknown>
+      ) => await fetchFn()
+    );
     whereMock.mockResolvedValueOnce([
       { fid: 2, fname: "bob", updatedAt: 2 },
       { fid: 3, fname: "carol", updatedAt: 5 },
@@ -52,13 +79,19 @@ describe("getFarcasterProfileByAddress", () => {
     );
 
     const result = await getFarcasterProfileByAddress("0xabc");
-    expect(redisDel).toHaveBeenCalled();
-    expect(result?.fid).toBe(3);
-    expect(redisSet).toHaveBeenCalled();
+    expect(result).toEqual({ fid: 3, fname: "carol", updatedAt: 5 });
+    expect(fromMock).toHaveBeenCalled();
+    expect(whereMock).toHaveBeenCalled();
   });
 
-  it("returns null when no profiles found", async () => {
-    redisGet.mockResolvedValueOnce(null);
+  it("returns null when cache misses and db has no rows", async () => {
+    getOrSetCachedResultWithLock.mockImplementationOnce(
+      async (
+        _key: string,
+        _prefix: string,
+        fetchFn: () => Promise<unknown>
+      ) => await fetchFn()
+    );
     whereMock.mockResolvedValueOnce([]);
 
     const { getFarcasterProfileByAddress } = await import(
@@ -69,22 +102,10 @@ describe("getFarcasterProfileByAddress", () => {
     expect(result).toBeNull();
   });
 
-  it("skips caching when sorted result is falsy", async () => {
-    redisGet.mockResolvedValueOnce(null);
-    whereMock.mockResolvedValueOnce([undefined]);
-
-    const { getFarcasterProfileByAddress } = await import(
-      "../../../../src/infra/db/queries/profiles/get-profile"
-    );
-
-    const result = await getFarcasterProfileByAddress("0xabc");
-    expect(result).toBeUndefined();
-    expect(redisSet).not.toHaveBeenCalled();
-  });
-
-  it("handles errors gracefully", async () => {
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    redisGet.mockRejectedValueOnce(new Error("boom"));
+  it("returns null when refreshed profile is still invalid", async () => {
+    getOrSetCachedResultWithLock
+      .mockResolvedValueOnce({ fid: 0, fname: "invalid" })
+      .mockResolvedValueOnce({ fid: 0, fname: "still-invalid" });
 
     const { getFarcasterProfileByAddress } = await import(
       "../../../../src/infra/db/queries/profiles/get-profile"
@@ -92,6 +113,20 @@ describe("getFarcasterProfileByAddress", () => {
 
     const result = await getFarcasterProfileByAddress("0xabc");
     expect(result).toBeNull();
+    expect(deleteCachedResult).toHaveBeenCalledWith("0xabc", "farcaster-profile-by-address:");
+  });
+
+  it("handles errors gracefully", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    getOrSetCachedResultWithLock.mockRejectedValueOnce(new Error("boom"));
+
+    const { getFarcasterProfileByAddress } = await import(
+      "../../../../src/infra/db/queries/profiles/get-profile"
+    );
+
+    const result = await getFarcasterProfileByAddress("0xabc");
+    expect(result).toBeNull();
+    expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
 });

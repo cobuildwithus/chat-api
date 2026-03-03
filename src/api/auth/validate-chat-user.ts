@@ -9,6 +9,7 @@ import {
   isSelfHostedMode,
 } from "../../config/env";
 import { getUserAddressFromToken } from "./get-user-from-token";
+import { setRequestUserFromHeaders } from "./set-request-user";
 
 declare module "@fastify/request-context" {
   interface RequestContextData {
@@ -51,13 +52,7 @@ export async function validateChatUser(request: FastifyRequest, reply: FastifyRe
         return reply.code(401).send({ error: "Missing chat user" });
       }
 
-      requestContext.set("user", {
-        address: normalizedAddress,
-        city: request.headers["city"]?.toString() ?? null,
-        country: request.headers["country"]?.toString() ?? null,
-        countryRegion: request.headers["country-region"]?.toString() ?? null,
-        userAgent: request.headers["user-agent"]?.toString() ?? null,
-      });
+      setRequestUserFromHeaders(normalizedAddress, request);
       return;
     }
 
@@ -73,13 +68,7 @@ export async function validateChatUser(request: FastifyRequest, reply: FastifyRe
       return reply.code(401).send({ error: "Invalid chat user" });
     }
 
-    requestContext.set("user", {
-      address: normalizedAddress,
-      city: request.headers["city"]?.toString() ?? null,
-      country: request.headers["country"]?.toString() ?? null,
-      countryRegion: request.headers["country-region"]?.toString() ?? null,
-      userAgent: request.headers["user-agent"]?.toString() ?? null,
-    });
+    setRequestUserFromHeaders(normalizedAddress, request);
   } catch (error) {
     console.error("Error in validateChatUser middleware:", error);
     throw error;

@@ -1,5 +1,2 @@
-CREATE UNIQUE INDEX IF NOT EXISTS build_bot_cli_tokens_token_hash_uq
-  ON cobuild.build_bot_cli_tokens (token_hash);
-
-CREATE INDEX IF NOT EXISTS build_bot_cli_tokens_owner_agent_idx
-  ON cobuild.build_bot_cli_tokens (owner_address, agent_key);
+-- Legacy no-op migration.
+-- Token table/index creation is owned by 0003_build_bot_cli_tokens_table.sql.

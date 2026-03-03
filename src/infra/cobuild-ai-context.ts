@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { getOrSetCachedResultWithLock } from "./cache/cacheResult";
+import { formatErrorMessage } from "./errors";
 import {
   onchainParticipants,
   onchainPayEvents,
@@ -12,7 +13,6 @@ import { cobuildDb } from "./db/cobuildDb";
 const CACHE_PREFIX = "cobuild:ai-context:";
 const CACHE_KEY = "snapshot";
 const CACHE_TTL_SECONDS = 60 * 15;
-const ERROR_MAX_CHARS = 120;
 const COBUILD_CHAIN_ID = Number(process.env.COBUILD_CHAIN_ID ?? "8453");
 const COBUILD_PROJECT_ID = Number(process.env.COBUILD_JUICEBOX_PROJECT_ID ?? "6");
 const JB_TOKEN_DECIMALS = 18;
@@ -81,19 +81,6 @@ export type CobuildAiContextResponse = {
     };
   };
 };
-
-function truncate(value: string, maxLength = ERROR_MAX_CHARS): string {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
-}
-
-export function formatCobuildAiContextError(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return truncate(error.message);
-  }
-  if (typeof error === "string") return truncate(error);
-  return "Unknown error";
-}
 
 export function getCobuildAiContextUrl(): string {
   return "/api/cobuild/ai-context";
@@ -524,6 +511,6 @@ export async function getCobuildAiContextSnapshot(): Promise<{
     );
     return { data };
   } catch (error) {
-    return { data: null, error: formatCobuildAiContextError(error) };
+    return { data: null, error: formatErrorMessage(error) };
   }
 }

@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { digestOAuthSecret } from "../../src/api/oauth/security";
 
 type ServerMock = FastifyInstance & {
   register: ReturnType<typeof vi.fn>;
@@ -76,6 +76,7 @@ describe("setupServer rate-limit keying order", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    process.env.NODE_ENV = "test";
     delete process.env.RATE_LIMIT_ENABLED;
     delete process.env.RATE_LIMIT_MAX;
     delete process.env.RATE_LIMIT_WINDOW_MS;
@@ -107,7 +108,7 @@ describe("setupServer rate-limit keying order", () => {
         return {
           ownerAddress: "0x0000000000000000000000000000000000000001",
           agentKey: "default",
-          tokenId: "42",
+          sessionId: "42",
         };
       }
       if (key === "user") {
@@ -137,7 +138,7 @@ describe("setupServer rate-limit keying order", () => {
     });
 
     const token = "bbt_example";
-    const expectedTokenHash = createHash("sha256").update(token).digest("hex");
+    const expectedTokenHash = digestOAuthSecret(token);
 
     expect(
       keyGenerator({

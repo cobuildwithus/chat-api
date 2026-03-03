@@ -87,16 +87,16 @@ describe("setupServer", () => {
     const corsCall = serverMock.register.mock.calls.find((call) => call[0] === corsMock);
     expect(corsCall?.[1]?.origin).toEqual(["https://a.com", "https://b.com"]);
     expect(registerRequestLoggingMock).toHaveBeenCalledWith(serverMock);
-    expect(serverMock.post).toHaveBeenCalledTimes(4);
+    expect(serverMock.post).toHaveBeenCalledTimes(5);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/docs/search")).toBe(false);
-    expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/get-user")).toBe(
+    expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/cli/tools/get-user")).toBe(
       false,
     );
-    expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/get-cast")).toBe(
+    expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/cli/tools/get-cast")).toBe(
       false,
     );
     expect(
-      serverMock.post.mock.calls.some((call) => call[0] === "/api/buildbot/tools/cobuild-ai-context"),
+      serverMock.post.mock.calls.some((call) => call[0] === "/api/cli/tools/cobuild-ai-context"),
     ).toBe(false);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/v1/tool-executions")).toBe(true);
     const chatCall = serverMock.post.mock.calls.find((call) => call[0] === "/api/chat");
@@ -148,36 +148,46 @@ describe("setupServer", () => {
     ]);
 
     expect(serverMock.get.mock.calls.some((call) => call[0] === "/api/cobuild/ai-context")).toBe(true);
-    expect(serverMock.get.mock.calls.some((call) => call[0] === "/v1/tokens")).toBe(true);
-    const tokensListCall = serverMock.get.mock.calls.find((call) => call[0] === "/v1/tokens");
-    const tokensListOptions = tokensListCall?.[1] as {
+    expect(serverMock.get.mock.calls.some((call) => call[0] === "/v1/sessions")).toBe(true);
+    const sessionsListCall = serverMock.get.mock.calls.find((call) => call[0] === "/v1/sessions");
+    const sessionsListOptions = sessionsListCall?.[1] as {
       preValidation?: Array<{ name?: string }>;
       schema?: object;
     };
-    expect(tokensListOptions?.schema).toBeTruthy();
-    expect(Array.isArray(tokensListOptions?.preValidation)).toBe(true);
-    expect(tokensListOptions?.preValidation?.map((handler) => handler.name)).toEqual([
+    expect(sessionsListOptions?.schema).toBeTruthy();
+    expect(Array.isArray(sessionsListOptions?.preValidation)).toBe(true);
+    expect(sessionsListOptions?.preValidation?.map((handler) => handler.name)).toEqual([
       "validateChatUser",
     ]);
-    const tokensCreateCall = serverMock.post.mock.calls.find((call) => call[0] === "/v1/tokens");
-    const tokensCreateOptions = tokensCreateCall?.[1] as {
+    const authorizeCodeCall = serverMock.post.mock.calls.find(
+      (call) => call[0] === "/oauth/authorize-code",
+    );
+    const authorizeCodeOptions = authorizeCodeCall?.[1] as {
       preValidation?: Array<{ name?: string }>;
       schema?: object;
     };
-    expect(tokensCreateOptions?.schema).toBeTruthy();
-    expect(Array.isArray(tokensCreateOptions?.preValidation)).toBe(true);
-    expect(tokensCreateOptions?.preValidation?.map((handler) => handler.name)).toEqual([
+    expect(authorizeCodeOptions?.schema).toBeTruthy();
+    expect(Array.isArray(authorizeCodeOptions?.preValidation)).toBe(true);
+    expect(authorizeCodeOptions?.preValidation?.map((handler) => handler.name)).toEqual([
       "validateChatUser",
     ]);
-    expect(serverMock.delete.mock.calls.some((call) => call[0] === "/v1/tokens")).toBe(true);
-    const tokensDeleteCall = serverMock.delete.mock.calls.find((call) => call[0] === "/v1/tokens");
-    const tokensDeleteOptions = tokensDeleteCall?.[1] as {
+    const oauthTokenCall = serverMock.post.mock.calls.find((call) => call[0] === "/oauth/token");
+    const oauthTokenOptions = oauthTokenCall?.[1] as {
+      schema?: object;
+    };
+    expect(oauthTokenOptions?.schema).toBeTruthy();
+    expect(oauthTokenOptions).not.toHaveProperty("preValidation");
+    expect(serverMock.delete.mock.calls.some((call) => call[0] === "/v1/sessions")).toBe(true);
+    const sessionsDeleteCall = serverMock.delete.mock.calls.find(
+      (call) => call[0] === "/v1/sessions",
+    );
+    const sessionsDeleteOptions = sessionsDeleteCall?.[1] as {
       preValidation?: Array<{ name?: string }>;
       schema?: object;
     };
-    expect(tokensDeleteOptions?.schema).toBeTruthy();
-    expect(Array.isArray(tokensDeleteOptions?.preValidation)).toBe(true);
-    expect(tokensDeleteOptions?.preValidation?.map((handler) => handler.name)).toEqual([
+    expect(sessionsDeleteOptions?.schema).toBeTruthy();
+    expect(Array.isArray(sessionsDeleteOptions?.preValidation)).toBe(true);
+    expect(sessionsDeleteOptions?.preValidation?.map((handler) => handler.name)).toEqual([
       "validateChatUser",
     ]);
     expect(serverMock.get).toHaveBeenCalledTimes(7);
@@ -282,7 +292,7 @@ describe("setupServer", () => {
         return {
           ownerAddress: "0x0000000000000000000000000000000000000001",
           agentKey: "default",
-          tokenId: "42",
+          sessionId: "42",
           canWrite: false,
         };
       }

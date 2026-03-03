@@ -39,7 +39,7 @@ describe("tools v1 handlers", () => {
         name: "get-user",
         description: "desc",
         inputSchema: { type: "object" },
-        scopes: ["buildbot-tools"],
+        scopes: ["cli-tools"],
         sideEffects: "read",
         version: "1.0.0",
         deprecated: false,
@@ -55,7 +55,7 @@ describe("tools v1 handlers", () => {
           name: "get-user",
           description: "desc",
           inputSchema: { type: "object" },
-          scopes: ["buildbot-tools"],
+          scopes: ["cli-tools"],
           sideEffects: "read",
           version: "1.0.0",
           deprecated: false,
@@ -203,9 +203,11 @@ describe("tools v1 handlers", () => {
   it("rejects write tools when principal lacks write scope", async () => {
     mocks.requiresWriteScopeForTool.mockReturnValueOnce(true);
     mocks.requestContextGet.mockReturnValueOnce({
-      tokenId: "42",
+      sessionId: "42",
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
+      scope: "tools:read wallet:read offline_access",
+      scopes: ["tools:read", "wallet:read", "offline_access"],
       canWrite: false,
     });
     const request = {
@@ -224,7 +226,37 @@ describe("tools v1 handlers", () => {
       ok: false,
       name: "network-write-tool",
       statusCode: 403,
-      error: "This token does not have write scope for the requested tool.",
+      error: "This token does not have tools:write scope for the requested tool.",
+    });
+  });
+
+  it("rejects write tools when principal lacks wallet:execute scope", async () => {
+    mocks.requiresWriteScopeForTool.mockReturnValueOnce(true);
+    mocks.requestContextGet.mockReturnValueOnce({
+      sessionId: "42",
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+      scope: "tools:read tools:write wallet:read offline_access",
+      scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
+      canWrite: true,
+    });
+    const request = {
+      body: {
+        name: "network-write-tool",
+        input: {},
+      },
+    } as FastifyRequest;
+    const reply = createReply();
+
+    await handleToolExecutionRequest(request, reply);
+
+    expect(mocks.executeTool).not.toHaveBeenCalled();
+    expect(reply.status).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith({
+      ok: false,
+      name: "network-write-tool",
+      statusCode: 403,
+      error: "This token does not have wallet:execute scope for the requested tool.",
     });
   });
 });

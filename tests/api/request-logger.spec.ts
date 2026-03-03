@@ -96,6 +96,31 @@ describe("registerRequestLogging", () => {
 
     hooks.preHandler({ method: "GET" }, {}, done);
 
+    hooks.preHandler(
+      {
+        id: "req-3",
+        method: "POST",
+        url: "/oauth/token",
+        body: {
+          grant_type: "refresh_token",
+          refresh_token: "rfr_secret_value",
+          code_verifier: "A".repeat(43),
+        },
+      },
+      {},
+      done,
+    );
+    expect(infoSpy).toHaveBeenCalledWith("[req-body]", {
+      id: "req-3",
+      url: "/oauth/token",
+      summary: {
+        redacted: true,
+        sensitiveFields: ["code_verifier", "refresh_token"],
+      },
+    });
+    const serializedLogCalls = JSON.stringify(infoSpy.mock.calls);
+    expect(serializedLogCalls).not.toContain("rfr_secret_value");
+
     vi.mocked(requestContext.get).mockReturnValue(1000);
     hooks.onResponse(
       { id: "req-1", method: "POST", url: "/api/chat" },

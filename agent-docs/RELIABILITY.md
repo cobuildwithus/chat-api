@@ -17,12 +17,11 @@
 - Workload-level controls:
 - Token-usage rate limiter per address over Redis sorted-set window
 - Async usage recording after successful stream finish
-- Route-local docs-search limiter and buildbot-tools limiter (Redis-backed)
+- Route-local docs-search limiter and cli-tools limiter (Redis-backed)
 
 ## Timeout Matrix
 
 - `OPENAI_REQUEST_TIMEOUT_MS` default: `30000`
-- `NEYNAR_REQUEST_TIMEOUT_MS` default: `8000`
 - `COBUILD_AI_CONTEXT_TIMEOUT_MS` default: `7000`
 
 ## Cache + Lock Behavior

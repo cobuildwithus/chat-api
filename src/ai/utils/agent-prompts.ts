@@ -5,7 +5,7 @@ import { cobuildAiContextPrompt } from "../prompts/cobuild-ai-context";
 import { manifestoPrompt } from "../prompts/manifesto";
 import { getGoalPrompt } from "../prompts/goal";
 import { getUserDataPrompt } from "../prompts/user-data";
-import { Tool, cachedPrompts, getToolPrompts } from "../tools/tool";
+import { Tool, clonePromptList, getToolPrompts } from "../tools/tool";
 import type { ChatData, ChatUser } from "../types";
 
 interface Props {
@@ -28,9 +28,9 @@ export async function getAgentPrompts(props: Props): Promise<SystemModelMessage[
   } = props;
   const prompts: SystemModelMessage[] = [];
 
-  // Add cached prompts
+  // Add reusable static prompts first.
   prompts.push(
-    ...cachedPrompts([
+    ...clonePromptList([
       { role: "system", content: await aboutPrompt() },
       { role: "system", content: await manifestoPrompt() },
       { role: "system", content: await billOfRightsPrompt() },

@@ -105,7 +105,10 @@ vi.mock("../../../src/infra/db/cobuildDb", () => {
     }),
   };
   cobuildDb.$primary = cobuildDb;
-  return { cobuildDb };
+  return {
+    cobuildDb,
+    cobuildPrimaryDb: () => cobuildDb.$primary ?? cobuildDb,
+  };
 });
 
 // Mock getFarcasterProfileByAddress

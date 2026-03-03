@@ -69,7 +69,6 @@ curl -H "x-chat-user: 0xabc0000000000000000000000000000000000000" \
 - Redis (cache + rate limiting)
 - Vercel AI SDK + OpenAI Responses API (LLM runtime)
 - Zod (request validation)
-- Neynar SDK (optional Farcaster tools)
 
 ## Environment
 
@@ -83,7 +82,6 @@ Key variables:
 - `PRIVY_VERIFICATION_KEY` (required in production unless `SELF_HOSTED_MODE=true`)
 - `CHAT_GRANT_SECRET`
 - `DOCS_VECTOR_STORE_ID` (optional, enable docs search tool)
-- `NEYNAR_API_KEY` (optional, for getCast tool)
 - `SELF_HOSTED_MODE` (optional, set to `true` to bypass Privy)
 - `SELF_HOSTED_DEFAULT_ADDRESS` (optional, fallback address in self-hosted mode)
 - `SELF_HOSTED_SHARED_SECRET` (optional, require `x-chat-auth` in self-hosted mode)
@@ -95,7 +93,6 @@ Key variables:
 - `RATE_LIMIT_MAX` (optional, default 30)
 - `RATE_LIMIT_WINDOW_MS` (optional, default 60000)
 - `OPENAI_REQUEST_TIMEOUT_MS` (optional, default 30000)
-- `NEYNAR_REQUEST_TIMEOUT_MS` (optional, default 8000)
 - `COBUILD_AI_CONTEXT_TIMEOUT_MS` (optional, default 7000)
 
 Generate a `CHAT_GRANT_SECRET` with:

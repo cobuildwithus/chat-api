@@ -1,3 +1,5 @@
+import { summarizeRequestBody } from "./request-body-summary";
+
 type ErrorDetails = {
   message?: string;
   code?: string;
@@ -49,30 +51,6 @@ function sanitizeHeaders(headers: unknown): unknown {
     }
   }
   return sanitized;
-}
-
-function summarizeBody(body: unknown): unknown {
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return null;
-  }
-
-  const record = body as Record<string, unknown>;
-  const summary: Record<string, unknown> = {};
-
-  if (typeof record.type === "string") summary.type = record.type;
-  if (typeof record.id === "string") summary.id = record.id;
-  if (Array.isArray(record.messages)) summary.messageCount = record.messages.length;
-  if (record.data && typeof record.data === "object") {
-    summary.dataKeys = Object.keys(record.data as Record<string, unknown>);
-  }
-  if (typeof record.query === "string") {
-    summary.queryLength = record.query.length;
-  }
-  if (typeof record.limit === "number") {
-    summary.limit = record.limit;
-  }
-
-  return Object.keys(summary).length > 0 ? summary : null;
 }
 
 function toErrorDetails(error: unknown): ErrorDetails {
@@ -131,7 +109,10 @@ export function handleError(error: unknown, request: RequestDetails, reply: Repl
     method: request.method,
     url: request.url,
     headers: sanitizeHeaders(request.headers),
-    bodySummary: summarizeBody(request.body),
+    bodySummary: summarizeRequestBody(request.body, {
+      includeQueryLength: true,
+      includeLimit: true,
+    }),
   });
 
   const response: ErrorResponse = {

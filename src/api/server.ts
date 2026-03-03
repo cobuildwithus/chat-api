@@ -3,7 +3,6 @@ import { fastifyRequestContext, requestContext } from "@fastify/request-context"
 import rateLimit from "@fastify/rate-limit";
 import fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { createHash } from "node:crypto";
 import { handleChatCreateRequest } from "./chat/create";
 import { handleChatGetRequest } from "./chat/get";
 import { handleChatListRequest } from "./chat/list";
@@ -11,10 +10,17 @@ import { handleChatPostRequest } from "./chat/route";
 import { handleCobuildAiContextRequest } from "./cobuild-ai-context/route";
 import { enforceToolsBearerAuth } from "./tools/internal-auth";
 import {
-  handleBuildBotTokenCreateRequest,
-  handleBuildBotTokenRevokeRequest,
-  handleBuildBotTokensListRequest,
-} from "./tokens/route";
+  handleCliSessionRevokeRequest,
+  handleCliSessionsListRequest,
+  handleOauthAuthorizeCodeRequest,
+  handleOauthTokenRequest,
+} from "./oauth/route";
+import {
+  cliSessionRevokeSchema,
+  cliSessionsListSchema,
+  oauthAuthorizeCodeSchema,
+  oauthTokenSchema,
+} from "./oauth/schema";
 import {
   handleToolExecutionRequest,
   handleToolMetadataRequest,
@@ -28,14 +34,13 @@ import {
   chatSchema,
 } from "./chat/schema";
 import {
-  buildBotTokenCreateSchema,
-  buildBotTokenRevokeSchema,
-  buildBotTokensListSchema,
-} from "./tokens/schema";
+  parseBearerToken,
+} from "./auth/parse-bearer-token";
 import { toolExecutionSchema, toolMetadataSchema, toolsListSchema } from "./tools/schema";
 import { getRateLimitConfig } from "../config/env";
 import { handleError } from "./server-helpers";
 import { registerRequestLogging } from "./request-logger";
+import { digestOAuthSecret } from "./oauth/security";
 
 const DEFAULT_PROD_ORIGINS = ["https://co.build", "https://www.co.build"];
 const DEFAULT_SOURCE_URL = "https://github.com/cobuildwithus/chat-api";
@@ -59,16 +64,8 @@ const IP_RATE_LIMIT_MULTIPLIER = 3;
 const TOOL_EXECUTIONS_BODY_LIMIT_BYTES = 64 * 1024;
 const TOOLS_RATE_LIMIT_PATH_PREFIXES = ["/v1/tool-executions", "/v1/tools"];
 
-function parseBearerToken(value: string | undefined): string | null {
-  if (!value) return null;
-  const match = value.match(/^Bearer\s+(.+)$/i);
-  if (!match) return null;
-  const token = match[1]?.trim();
-  return token && token.length > 0 ? token : null;
-}
-
 function hashRateLimitToken(rawToken: string): string {
-  return createHash("sha256").update(rawToken).digest("hex");
+  return digestOAuthSecret(rawToken);
 }
 
 function isToolsRateLimitPath(path: string): boolean {
@@ -136,7 +133,7 @@ export const setupServer = async () => {
       keyGenerator: (request) => {
         const toolsPrincipal = requestContext.get("toolsPrincipal");
         if (toolsPrincipal) {
-          return `tools:${toolsPrincipal.ownerAddress}:${toolsPrincipal.agentKey}:${toolsPrincipal.tokenId}`;
+          return `tools:${toolsPrincipal.ownerAddress}:${toolsPrincipal.agentKey}:${toolsPrincipal.sessionId}`;
         }
         const routerPath = (request as { routerPath?: string }).routerPath;
         const requestPath = routerPath ?? request.url ?? "";
@@ -213,30 +210,38 @@ export const setupServer = async () => {
   );
 
   server.get(
-    "/v1/tokens",
+    "/v1/sessions",
     {
       preValidation: [validateChatUser],
-      schema: buildBotTokensListSchema,
+      schema: cliSessionsListSchema,
     },
-    handleBuildBotTokensListRequest,
+    handleCliSessionsListRequest,
   );
 
   server.post(
-    "/v1/tokens",
+    "/oauth/authorize-code",
     {
       preValidation: [validateChatUser],
-      schema: buildBotTokenCreateSchema,
+      schema: oauthAuthorizeCodeSchema,
     },
-    handleBuildBotTokenCreateRequest,
+    handleOauthAuthorizeCodeRequest,
+  );
+
+  server.post(
+    "/oauth/token",
+    {
+      schema: oauthTokenSchema,
+    },
+    handleOauthTokenRequest,
   );
 
   server.delete(
-    "/v1/tokens",
+    "/v1/sessions",
     {
       preValidation: [validateChatUser],
-      schema: buildBotTokenRevokeSchema,
+      schema: cliSessionRevokeSchema,
     },
-    handleBuildBotTokenRevokeRequest,
+    handleCliSessionRevokeRequest,
   );
 
   server.get("/source", async (_request, reply) => {

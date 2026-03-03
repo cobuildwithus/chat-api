@@ -21,7 +21,7 @@
 4. API -> Data boundary (`src/infra/db/**`, `src/infra/redis.ts`)
 - Ownership checks
 - grant validation + issuance
-5. API -> External services (`OpenAI`, `Neynar`, `co.build`)
+5. API -> External services (`OpenAI`, `co.build`)
 - timeout-bounded requests
 - constrained tool surfaces
 

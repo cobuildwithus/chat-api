@@ -1,24 +1,20 @@
 import { requestContext } from "@fastify/request-context";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { parseBearerToken } from "../auth/parse-bearer-token";
+import { setRequestUserFromHeaders } from "../auth/set-request-user";
 import { authenticateToolsBearerToken } from "./token-auth";
 
 declare module "@fastify/request-context" {
   interface RequestContextData {
     toolsPrincipal?: {
-      tokenId: string;
+      sessionId: string;
       ownerAddress: `0x${string}`;
       agentKey: string;
+      scope: string;
+      scopes: string[];
       canWrite: boolean;
     };
   }
-}
-
-function parseBearerToken(headerValue: unknown): string | null {
-  if (typeof headerValue !== "string") return null;
-  const match = headerValue.match(/^Bearer\s+(.+)$/i);
-  if (!match) return null;
-  const token = match[1]?.trim();
-  return token && token.length > 0 ? token : null;
 }
 
 export async function enforceToolsBearerAuth(
@@ -35,12 +31,6 @@ export async function enforceToolsBearerAuth(
     return reply.status(401).send({ error: "Unauthorized." });
   }
 
-  requestContext.set("user", {
-    address: principal.ownerAddress,
-    city: request.headers["city"]?.toString() ?? null,
-    country: request.headers["country"]?.toString() ?? null,
-    countryRegion: request.headers["country-region"]?.toString() ?? null,
-    userAgent: request.headers["user-agent"]?.toString() ?? null,
-  });
+  setRequestUserFromHeaders(principal.ownerAddress, request);
   requestContext.set("toolsPrincipal", principal);
 }

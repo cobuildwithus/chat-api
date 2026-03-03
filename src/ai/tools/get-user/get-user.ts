@@ -1,16 +1,9 @@
-import { tool } from "ai";
 import { z } from "zod";
-import { executeTool } from "../../../api/tools/registry";
+import { registryBackedTool } from "../registry-backed-tool";
 
-export const getUser = tool({
+export const getUser = registryBackedTool({
+  registryName: "get-user",
   inputSchema: z.object({ fname: z.string() }),
   description:
     "Get user details including FID and verified addresses for a given Farcaster profile given their fname (username)",
-  execute: async ({ fname }: { fname: string }) => {
-    const result = await executeTool("get-user", { fname });
-    if (result.ok) {
-      return result.output;
-    }
-    return { error: result.error };
-  },
 });

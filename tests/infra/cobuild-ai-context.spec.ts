@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchCobuildAiContextFresh,
-  formatCobuildAiContextError,
   getCobuildAiContextSnapshot,
   getCobuildAiContextUrl,
 } from "../../src/infra/cobuild-ai-context";
+import { formatErrorMessage } from "../../src/infra/errors";
 import {
   onchainParticipants,
   onchainPayEvents,
@@ -28,10 +28,10 @@ describe("cobuild ai context", () => {
   });
 
   it("formats errors consistently", () => {
-    expect(formatCobuildAiContextError(new Error("boom"))).toBe("boom");
-    expect(formatCobuildAiContextError("fail")).toBe("fail");
-    expect(formatCobuildAiContextError({})).toBe("Unknown error");
-    expect(formatCobuildAiContextError("x".repeat(200))).toHaveLength(120);
+    expect(formatErrorMessage(new Error("boom"))).toBe("boom");
+    expect(formatErrorMessage("fail")).toBe("fail");
+    expect(formatErrorMessage({})).toBe("Unknown error");
+    expect(formatErrorMessage("x".repeat(200))).toHaveLength(120);
     expect(getCobuildAiContextUrl()).toBe("/api/cobuild/ai-context");
   });
 

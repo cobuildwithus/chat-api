@@ -47,7 +47,6 @@ const envSchema = z.object({
   RATE_LIMIT_MAX: optionalPositiveIntSchema,
   RATE_LIMIT_WINDOW_MS: optionalPositiveIntSchema,
   OPENAI_REQUEST_TIMEOUT_MS: optionalPositiveIntSchema,
-  NEYNAR_REQUEST_TIMEOUT_MS: optionalPositiveIntSchema,
   COBUILD_AI_CONTEXT_TIMEOUT_MS: optionalPositiveIntSchema,
   PRIVY_APP_ID: z.string().min(1).optional(),
   PRIVY_VERIFICATION_KEY: z.string().min(1).optional(),
@@ -56,12 +55,16 @@ const envSchema = z.object({
   DEBUG_CHAT: z.string().min(1).optional(),
   DEBUG_HTTP: z.string().min(1).optional(),
   CHAT_ALLOWED_ORIGINS: z.string().min(1).optional(),
-  NEYNAR_API_KEY: z.string().min(1).optional(),
   SELF_HOSTED_MODE: z.string().min(1).optional(),
   SELF_HOSTED_DEFAULT_ADDRESS: z.string().min(1).optional(),
   SELF_HOSTED_SHARED_SECRET: z.string().min(1).optional(),
   CHAT_INTERNAL_SERVICE_KEY: z.string().min(1).optional(),
-  BUILD_BOT_TOOLS_INTERNAL_KEY: z.string().min(1).optional(),
+  CLI_TOOLS_INTERNAL_KEY: z.string().min(1).optional(),
+  BUILD_BOT_TOKEN_PEPPER: z.string().min(1).optional(),
+  BUILD_BOT_JWT_PRIVATE_KEY: z.string().min(1).optional(),
+  BUILD_BOT_JWT_PUBLIC_KEY: z.string().min(1).optional(),
+  BUILD_BOT_JWT_ISSUER: z.string().min(1).optional(),
+  BUILD_BOT_JWT_AUDIENCE: z.string().min(1).optional(),
 });
 
 const chatGrantSecretSchema = envSchema.pick({ CHAT_GRANT_SECRET: true });
@@ -81,7 +84,6 @@ const rateLimitSchema = envSchema.pick({
 });
 const timeoutSchema = envSchema.pick({
   OPENAI_REQUEST_TIMEOUT_MS: true,
-  NEYNAR_REQUEST_TIMEOUT_MS: true,
   COBUILD_AI_CONTEXT_TIMEOUT_MS: true,
 });
 const selfHostedSchema = envSchema.pick({
@@ -91,8 +93,32 @@ const selfHostedSchema = envSchema.pick({
 });
 const chatInternalServiceKeySchema = envSchema.pick({
   CHAT_INTERNAL_SERVICE_KEY: true,
-  BUILD_BOT_TOOLS_INTERNAL_KEY: true,
+  CLI_TOOLS_INTERNAL_KEY: true,
 });
+const buildBotJwtSchema = envSchema.pick({
+  BUILD_BOT_JWT_PRIVATE_KEY: true,
+  BUILD_BOT_JWT_PUBLIC_KEY: true,
+  BUILD_BOT_JWT_ISSUER: true,
+  BUILD_BOT_JWT_AUDIENCE: true,
+});
+
+const DEFAULT_DEV_BUILD_BOT_JWT_PRIVATE_KEY = [
+  "-----BEGIN PRIVATE KEY-----",
+  "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgXeejR7RjCYJB0drU",
+  "9BOiYSmdA5NNri/Pt+sYzGoE5kihRANCAAQl7PV/QsF4LlUl81QTu/dsTCTv0k6K",
+  "0kwqxsGA8QaMSyAoqeMdx5yJqudE3BWXBKPtfHuPyAhQp0H6CuHOnmM1",
+  "-----END PRIVATE KEY-----",
+].join("\n");
+
+const DEFAULT_DEV_BUILD_BOT_JWT_PUBLIC_KEY = [
+  "-----BEGIN PUBLIC KEY-----",
+  "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJez1f0LBeC5VJfNUE7v3bEwk79JO",
+  "itJMKsbBgPEGjEsgKKnjHceciarnRNwVlwSj7Xx7j8gIUKdB+grhzp5jNQ==",
+  "-----END PUBLIC KEY-----",
+].join("\n");
+
+const DEFAULT_BUILD_BOT_JWT_ISSUER = "cobuild-chat-api";
+const DEFAULT_BUILD_BOT_JWT_AUDIENCE = "buildbot";
 
 export function validateEnvVariables() {
   const env = envSchema.parse(process.env);
@@ -107,6 +133,21 @@ export function validateEnvVariables() {
   }
   if (!selfHosted && env.NODE_ENV === "production" && !env.PRIVY_VERIFICATION_KEY) {
     throw new Error("Missing required env in production: PRIVY_VERIFICATION_KEY");
+  }
+  if (env.NODE_ENV === "production" && !env.BUILD_BOT_TOKEN_PEPPER) {
+    throw new Error("Missing required env in production: BUILD_BOT_TOKEN_PEPPER");
+  }
+  if (env.NODE_ENV === "production" && !env.BUILD_BOT_JWT_PRIVATE_KEY) {
+    throw new Error("Missing required env in production: BUILD_BOT_JWT_PRIVATE_KEY");
+  }
+  if (env.NODE_ENV === "production" && !env.BUILD_BOT_JWT_PUBLIC_KEY) {
+    throw new Error("Missing required env in production: BUILD_BOT_JWT_PUBLIC_KEY");
+  }
+  if (env.NODE_ENV === "production" && !env.BUILD_BOT_JWT_ISSUER) {
+    throw new Error("Missing required env in production: BUILD_BOT_JWT_ISSUER");
+  }
+  if (env.NODE_ENV === "production" && !env.BUILD_BOT_JWT_AUDIENCE) {
+    throw new Error("Missing required env in production: BUILD_BOT_JWT_AUDIENCE");
   }
   return env;
 }
@@ -125,7 +166,6 @@ export type PostgresPoolOptions = {
 const DEFAULT_RATE_LIMIT_MAX = 30;
 const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_OPENAI_TIMEOUT_MS = 30_000;
-const DEFAULT_NEYNAR_TIMEOUT_MS = 8_000;
 const DEFAULT_COBUILD_AI_CONTEXT_TIMEOUT_MS = 7_000;
 
 const parsePoolEnv = () => poolConfigSchema.parse(process.env);
@@ -181,11 +221,6 @@ export function getOpenAiTimeoutMs(): number {
   return env.OPENAI_REQUEST_TIMEOUT_MS ?? DEFAULT_OPENAI_TIMEOUT_MS;
 }
 
-export function getNeynarTimeoutMs(): number {
-  const env = parseTimeoutEnv();
-  return env.NEYNAR_REQUEST_TIMEOUT_MS ?? DEFAULT_NEYNAR_TIMEOUT_MS;
-}
-
 export function getCobuildAiContextTimeoutMs(): number {
   const env = parseTimeoutEnv();
   return env.COBUILD_AI_CONTEXT_TIMEOUT_MS ?? DEFAULT_COBUILD_AI_CONTEXT_TIMEOUT_MS;
@@ -231,11 +266,53 @@ export function getSelfHostedSharedSecret(): string | null {
 
 export function getChatInternalServiceKey(): string | null {
   const env = chatInternalServiceKeySchema.parse(process.env);
-  return env.CHAT_INTERNAL_SERVICE_KEY ?? env.BUILD_BOT_TOOLS_INTERNAL_KEY ?? null;
+  return env.CHAT_INTERNAL_SERVICE_KEY ?? env.CLI_TOOLS_INTERNAL_KEY ?? null;
+}
+
+export function getBuildBotJwtPrivateKey(): string {
+  const env = buildBotJwtSchema.parse(process.env);
+  const configured = env.BUILD_BOT_JWT_PRIVATE_KEY?.trim();
+  if (configured) {
+    return configured;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Missing required env in production: BUILD_BOT_JWT_PRIVATE_KEY");
+  }
+  return DEFAULT_DEV_BUILD_BOT_JWT_PRIVATE_KEY;
+}
+
+export function getBuildBotJwtPublicKey(): string {
+  const env = buildBotJwtSchema.parse(process.env);
+  const configured = env.BUILD_BOT_JWT_PUBLIC_KEY?.trim();
+  if (configured) {
+    return configured;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Missing required env in production: BUILD_BOT_JWT_PUBLIC_KEY");
+  }
+  return DEFAULT_DEV_BUILD_BOT_JWT_PUBLIC_KEY;
+}
+
+export function getBuildBotJwtIssuer(): string {
+  const env = buildBotJwtSchema.parse(process.env);
+  const configured = env.BUILD_BOT_JWT_ISSUER?.trim();
+  if (configured) {
+    return configured;
+  }
+  return DEFAULT_BUILD_BOT_JWT_ISSUER;
+}
+
+export function getBuildBotJwtAudience(): string {
+  const env = buildBotJwtSchema.parse(process.env);
+  const configured = env.BUILD_BOT_JWT_AUDIENCE?.trim();
+  if (configured) {
+    return configured;
+  }
+  return DEFAULT_BUILD_BOT_JWT_AUDIENCE;
 }
 
 // Backward-compatible alias. Prefer getChatInternalServiceKey.
-export function getBuildBotToolsInternalKey(): string | null {
+export function getCliToolsInternalKey(): string | null {
   return getChatInternalServiceKey();
 }
 

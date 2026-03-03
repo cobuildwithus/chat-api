@@ -11,9 +11,9 @@ Routes and schemas are bound in `src/api/server.ts`:
 - `GET /v1/tools` -> `toolsListSchema` + `handleToolsListRequest`
 - `GET /v1/tools/:name` -> `toolMetadataSchema` + `handleToolMetadataRequest`
 - `POST /v1/tool-executions` -> `toolExecutionSchema` + `handleToolExecutionRequest`
-- `GET /v1/tokens` -> `buildBotTokensListSchema` + `handleBuildBotTokensListRequest`
-- `POST /v1/tokens` -> `buildBotTokenCreateSchema` + `handleBuildBotTokenCreateRequest`
-- `DELETE /v1/tokens` -> `buildBotTokenRevokeSchema` + `handleBuildBotTokenRevokeRequest`
+- `GET /v1/tokens` -> `cliTokensListSchema` + `handleCliTokensListRequest`
+- `POST /v1/tokens` -> `cliTokenCreateSchema` + `handleCliTokenCreateRequest`
+- `DELETE /v1/tokens` -> `cliTokenRevokeSchema` + `handleCliTokenRevokeRequest`
 
 Chat routes run `validateChatUser` as `preValidation`.
 Canonical tool routes run `enforceToolsBearerAuth` as `preValidation`.
@@ -73,7 +73,7 @@ Source: `src/api/chat/schema.ts`.
 
 ### Canonical tools auth
 
-- `/v1/tools`, `/v1/tools/:name`, and `/v1/tool-executions` require a valid build-bot PAT bearer token.
+- `/v1/tools`, `/v1/tools/:name`, and `/v1/tool-executions` require a valid cli PAT bearer token.
 
 ## Runtime Response Summary
 

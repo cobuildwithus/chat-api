@@ -3,7 +3,7 @@ import { and, eq, inArray, isNull, not, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import type { ChatData, ChatUser } from "../ai/types";
 import { chat, chatMessage } from "../infra/db/schema";
-import { cobuildDb } from "../infra/db/cobuildDb";
+import { cobuildDb, cobuildPrimaryDb } from "../infra/db/cobuildDb";
 import { generateChatTitle } from "./generate-title";
 import { getFirstUserText } from "./message-text";
 
@@ -28,7 +28,7 @@ export async function storeChatMessages({
   trustedMessageIds = [],
   generateTitle = true,
 }: StoreChatMessagesArgs) {
-  const primaryDb = cobuildDb.$primary ?? cobuildDb;
+  const primaryDb = cobuildPrimaryDb();
   const now = new Date();
   const serializedData = JSON.stringify(data ?? {});
 

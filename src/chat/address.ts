@@ -1,10 +1,14 @@
-const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+import { getAddress } from "viem";
 
 export function normalizeAddress(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
-  if (!ADDRESS_RE.test(trimmed)) return null;
-  return trimmed.toLowerCase();
+  if (!trimmed) return null;
+  try {
+    return getAddress(trimmed).toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 export function isSameAddress(left: unknown, right: unknown): boolean {

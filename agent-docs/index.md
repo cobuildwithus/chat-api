@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-02 (discussion tools + semantic search + reply publish flow + auth preValidation rate-limit keying)
+Last verified: 2026-03-02 (cross-repo helper dedup: auth bearer parsing, request-user context extraction, request body summarization, registry-backed AI tool wrappers, cache helper consolidation)
 
 ## Purpose
 

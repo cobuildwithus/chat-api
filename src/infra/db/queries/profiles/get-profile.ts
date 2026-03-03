@@ -1,52 +1,44 @@
 import { arrayContains } from "drizzle-orm";
-import { getRedisClient, withRedisLock } from "../../../redis";
+import {
+  deleteCachedResult,
+  getOrSetCachedResultWithLock,
+} from "../../../cache/cacheResult";
 import { type FarcasterProfile, farcasterProfiles } from "../../schema";
 import { cobuildDb } from "../../cobuildDb";
+
+const PROFILE_BY_ADDRESS_CACHE_PREFIX = "farcaster-profile-by-address:";
+const PROFILE_BY_ADDRESS_CACHE_TTL_SECONDS = 60 * 60 * 24;
+
+async function fetchLatestFarcasterProfileByAddress(
+  address: string,
+): Promise<FarcasterProfile | null> {
+  const profile = await cobuildDb
+    .select()
+    .from(farcasterProfiles)
+    .where(arrayContains(farcasterProfiles.verifiedAddresses, [address]));
+
+  if (profile.length === 0) return null;
+  return profile.sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0];
+}
 
 export const getFarcasterProfileByAddress = async (
   address: string,
 ): Promise<FarcasterProfile | null> => {
   try {
-    const cacheKey = `farcaster-profile-by-address:${address}`;
-    const redisClient = await getRedisClient();
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      const profile = JSON.parse(cached);
-      if (profile.fid > 0) return profile as FarcasterProfile;
-      await redisClient.del(cacheKey); // delete invalid cache
-    }
-    const lockKey = `${cacheKey}:lock`;
+    const loadProfile = () =>
+      getOrSetCachedResultWithLock<FarcasterProfile | null>(
+        address,
+        PROFILE_BY_ADDRESS_CACHE_PREFIX,
+        () => fetchLatestFarcasterProfileByAddress(address),
+        PROFILE_BY_ADDRESS_CACHE_TTL_SECONDS,
+      );
 
-    return await withRedisLock(
-      lockKey,
-      async () => {
-        const cachedAfterLock = await redisClient.get(cacheKey);
-        if (cachedAfterLock) {
-          const profile = JSON.parse(cachedAfterLock);
-          if (profile.fid > 0) return profile as FarcasterProfile;
-          await redisClient.del(cacheKey);
-        }
+    const profile = await loadProfile();
+    if (!profile || profile.fid > 0) return profile;
 
-        // Query database if not in cache
-        const profile = await cobuildDb
-          .select()
-          .from(farcasterProfiles)
-          .where(arrayContains(farcasterProfiles.verifiedAddresses, [address]));
-
-        if (profile.length === 0) return null;
-
-        const result = profile.sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0];
-
-        if (result) {
-          await redisClient.set(cacheKey, JSON.stringify(result), {
-            EX: 60 * 60 * 24, // 24 hour TTL
-          });
-        }
-
-        return result;
-      },
-      { ttlMs: 5_000, maxWaitMs: 5_000 },
-    );
+    await deleteCachedResult(address, PROFILE_BY_ADDRESS_CACHE_PREFIX);
+    const refreshed = await loadProfile();
+    return refreshed && refreshed.fid > 0 ? refreshed : null;
   } catch (error) {
     console.error(error);
     return null;

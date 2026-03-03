@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ModelMessage } from "ai";
 import { semanticSearchCastsTool } from "../../../src/ai/tools/semantic-search-casts/semantic-search-casts";
-import { executeTool } from "../../../src/api/tools/registry";
+import { executeTool } from "../../../src/tools/registry";
 
-vi.mock("../../../src/api/tools/registry", () => ({
+vi.mock("../../../src/tools/registry", () => ({
   executeTool: vi.fn(),
 }));
 
