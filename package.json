@@ -20,6 +20,7 @@
     "docs:drift": "bash scripts/check-agent-docs-drift.sh",
     "docs:gardening": "bash scripts/doc-gardening.sh --fail-on-issues",
     "review:gpt": "scripts/chatgpt-oracle-review.sh",
+    "review-gpt:ensure-published": "bash scripts/review-gpt-ensure-published.sh",
     "wire:status": "pnpm pkg get dependencies.@cobuild/wire",
     "wire:ensure-published": "bash scripts/wire-ensure-published.sh",
     "wire:use-local": "bash scripts/wire-use-local.sh",
@@ -32,7 +33,7 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@cobuild/review-gpt": "^0.2.7",
+    "@cobuild/review-gpt": "^0.2.8",
     "@tsconfig/recommended": "^1.0.1",
     "@types/node": "^22.14.1",
     "@types/pg": "^8.11.10",
@@ -44,8 +45,8 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
-    "@cobuild/wire": "^0.1.3",
     "@ai-sdk/openai": "^3.0.9",
+    "@cobuild/wire": "^0.1.3",
     "@fastify/cors": "^10.0.2",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/request-context": "^6.0.2",
