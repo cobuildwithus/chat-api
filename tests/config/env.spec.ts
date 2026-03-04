@@ -2,10 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getChatInternalServiceKey,
   getChatGrantSecret,
-  getBuildBotJwtAudience,
-  getBuildBotJwtIssuer,
-  getBuildBotJwtPrivateKey,
-  getBuildBotJwtPublicKey,
+  getCliJwtAudience,
+  getCliJwtIssuer,
+  getCliJwtPrivateKey,
+  getCliJwtPublicKey,
   getCobuildAiContextTimeoutMs,
   getOpenAiTimeoutMs,
   getPostgresPoolOptions,
@@ -27,11 +27,11 @@ const baseEnv = {
   PRIVY_APP_ID: "privy",
   CHAT_GRANT_SECRET: "secret",
   CHAT_INTERNAL_SERVICE_KEY: "internal-secret",
-  BUILD_BOT_TOKEN_PEPPER: "pepper",
-  BUILD_BOT_JWT_PRIVATE_KEY: "private-key",
-  BUILD_BOT_JWT_PUBLIC_KEY: "public-key",
-  BUILD_BOT_JWT_ISSUER: "issuer",
-  BUILD_BOT_JWT_AUDIENCE: "audience",
+  CLI_TOKEN_PEPPER: "pepper",
+  CLI_JWT_PRIVATE_KEY: "private-key",
+  CLI_JWT_PUBLIC_KEY: "public-key",
+  CLI_JWT_ISSUER: "issuer",
+  CLI_JWT_AUDIENCE: "audience",
 };
 
 describe("env helpers", () => {
@@ -53,10 +53,10 @@ describe("env helpers", () => {
     expect(getChatGrantSecret()).toBe("secret");
     expect(getPrivyAppId()).toBe("privy");
     expect(getChatInternalServiceKey()).toBe("internal-secret");
-    expect(getBuildBotJwtPrivateKey()).toBe("private-key");
-    expect(getBuildBotJwtPublicKey()).toBe("public-key");
-    expect(getBuildBotJwtIssuer()).toBe("issuer");
-    expect(getBuildBotJwtAudience()).toBe("audience");
+    expect(getCliJwtPrivateKey()).toBe("private-key");
+    expect(getCliJwtPublicKey()).toBe("public-key");
+    expect(getCliJwtIssuer()).toBe("issuer");
+    expect(getCliJwtAudience()).toBe("audience");
   });
 
   it("parses replica urls and debug flag", () => {
@@ -185,17 +185,21 @@ describe("env helpers", () => {
   });
 
   it("allows missing privy config when self-hosted", () => {
-    process.env = { ...process.env, ...baseEnv, SELF_HOSTED_MODE: "true" };
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      SELF_HOSTED_MODE: "true",
+      SELF_HOSTED_SHARED_SECRET: "self-hosted-secret",
+    };
     delete process.env.PRIVY_APP_ID;
     delete process.env.PRIVY_VERIFICATION_KEY;
     expect(() => validateEnvVariables()).not.toThrow();
   });
 
-  it("requires self-hosted shared secret in production self-hosted mode", () => {
+  it("requires self-hosted shared secret whenever self-hosted mode is enabled", () => {
     process.env = {
       ...process.env,
       ...baseEnv,
-      NODE_ENV: "production",
       SELF_HOSTED_MODE: "true",
       CHAT_INTERNAL_SERVICE_KEY: "internal-secret",
     };
@@ -204,8 +208,30 @@ describe("env helpers", () => {
     delete process.env.SELF_HOSTED_SHARED_SECRET;
 
     expect(() => validateEnvVariables()).toThrow(
-      "Missing required env in production self-hosted mode: SELF_HOSTED_SHARED_SECRET",
+      "Missing required env in self-hosted mode: SELF_HOSTED_SHARED_SECRET",
     );
+  });
+
+  it("requires JWT signing key env values outside production unless dev fallback is explicitly allowed", () => {
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      NODE_ENV: "development",
+      PRIVY_VERIFICATION_KEY: "verification-key",
+      VITEST: "false",
+    };
+    delete process.env.CLI_JWT_PRIVATE_KEY;
+    delete process.env.CLI_JWT_PUBLIC_KEY;
+    delete process.env.CLI_ALLOW_DEV_KEYS;
+
+    expect(() => validateEnvVariables()).toThrow(
+      "Missing CLI_JWT_PRIVATE_KEY. Configure CLI JWT keys or set CLI_ALLOW_DEV_KEYS=1 for local development only.",
+    );
+
+    process.env.CLI_ALLOW_DEV_KEYS = "1";
+    expect(() => validateEnvVariables()).not.toThrow();
+    expect(getCliJwtPrivateKey()).toContain("BEGIN PRIVATE KEY");
+    expect(getCliJwtPublicKey()).toContain("BEGIN PUBLIC KEY");
   });
 
   it("requires token pepper in production", () => {
@@ -215,10 +241,10 @@ describe("env helpers", () => {
       NODE_ENV: "production",
       PRIVY_VERIFICATION_KEY: "verification-key",
     };
-    delete process.env.BUILD_BOT_TOKEN_PEPPER;
+    delete process.env.CLI_TOKEN_PEPPER;
 
     expect(() => validateEnvVariables()).toThrow(
-      "Missing required env in production: BUILD_BOT_TOKEN_PEPPER",
+      "Missing required env in production: CLI_TOKEN_PEPPER",
     );
   });
 
@@ -230,27 +256,27 @@ describe("env helpers", () => {
       PRIVY_VERIFICATION_KEY: "verification-key",
     };
 
-    delete process.env.BUILD_BOT_JWT_PRIVATE_KEY;
+    delete process.env.CLI_JWT_PRIVATE_KEY;
     expect(() => validateEnvVariables()).toThrow(
-      "Missing required env in production: BUILD_BOT_JWT_PRIVATE_KEY",
+      "Missing required env in production: CLI_JWT_PRIVATE_KEY",
     );
 
-    process.env.BUILD_BOT_JWT_PRIVATE_KEY = "private-key";
-    delete process.env.BUILD_BOT_JWT_PUBLIC_KEY;
+    process.env.CLI_JWT_PRIVATE_KEY = "private-key";
+    delete process.env.CLI_JWT_PUBLIC_KEY;
     expect(() => validateEnvVariables()).toThrow(
-      "Missing required env in production: BUILD_BOT_JWT_PUBLIC_KEY",
+      "Missing required env in production: CLI_JWT_PUBLIC_KEY",
     );
 
-    process.env.BUILD_BOT_JWT_PUBLIC_KEY = "public-key";
-    delete process.env.BUILD_BOT_JWT_ISSUER;
+    process.env.CLI_JWT_PUBLIC_KEY = "public-key";
+    delete process.env.CLI_JWT_ISSUER;
     expect(() => validateEnvVariables()).toThrow(
-      "Missing required env in production: BUILD_BOT_JWT_ISSUER",
+      "Missing required env in production: CLI_JWT_ISSUER",
     );
 
-    process.env.BUILD_BOT_JWT_ISSUER = "issuer";
-    delete process.env.BUILD_BOT_JWT_AUDIENCE;
+    process.env.CLI_JWT_ISSUER = "issuer";
+    delete process.env.CLI_JWT_AUDIENCE;
     expect(() => validateEnvVariables()).toThrow(
-      "Missing required env in production: BUILD_BOT_JWT_AUDIENCE",
+      "Missing required env in production: CLI_JWT_AUDIENCE",
     );
   });
 
