@@ -14,7 +14,7 @@
 - Docs inventory/report generation: `scripts/doc-gardening.sh`
 - Plan lifecycle: `scripts/open-exec-plan.sh`, `scripts/close-exec-plan.sh`
 - Selective commits: `scripts/committer`
-- Oracle review + packaged audit context: `scripts/chatgpt-oracle-review.sh`
+- Oracle review + packaged audit context: `pnpm review:gpt`
 
 ## CI Posture
 

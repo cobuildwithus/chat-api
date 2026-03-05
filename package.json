@@ -19,8 +19,7 @@
     "test:coverage": "vitest run --coverage",
     "docs:drift": "bash scripts/check-agent-docs-drift.sh",
     "docs:gardening": "bash scripts/doc-gardening.sh --fail-on-issues",
-    "review:gpt": "scripts/chatgpt-oracle-review.sh",
-    "review-gpt:ensure-published": "bash scripts/review-gpt-ensure-published.sh",
+    "review:gpt": "cobuild-review-gpt --config scripts/review-gpt.config.sh",
     "wire:status": "pnpm pkg get dependencies.@cobuild/wire",
     "wire:ensure-published": "bash scripts/wire-ensure-published.sh",
     "wire:use-local": "bash scripts/wire-use-local.sh",
@@ -33,7 +32,7 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@cobuild/review-gpt": "^0.2.9",
+    "@cobuild/review-gpt": "^0.2.11",
     "@tsconfig/recommended": "^1.0.1",
     "@types/node": "^22.14.1",
     "@types/pg": "^8.11.10",
