@@ -5,9 +5,9 @@ import {
   verifyCliAccessToken,
 } from "../../../src/api/oauth/jwt";
 import {
-  getBuildBotJwtAudience,
-  getBuildBotJwtIssuer,
-  getBuildBotJwtPrivateKey,
+  getCliJwtAudience,
+  getCliJwtIssuer,
+  getCliJwtPrivateKey,
 } from "../../../src/config/env";
 
 describe("oauth jwt helpers", () => {
@@ -56,10 +56,10 @@ describe("oauth jwt helpers", () => {
       ...originalEnv,
       NODE_ENV: "development",
     };
-    const privateKeyPem = getBuildBotJwtPrivateKey().replace(/\\n/g, "\n").trim();
+    const privateKeyPem = getCliJwtPrivateKey().replace(/\\n/g, "\n").trim();
     const privateKey = await importPKCS8(privateKeyPem, "ES256");
-    const issuer = getBuildBotJwtIssuer();
-    const audience = getBuildBotJwtAudience();
+    const issuer = getCliJwtIssuer();
+    const audience = getCliJwtAudience();
 
     const missingClaimsToken = await new SignJWT({
       scope: "tools:read offline_access",

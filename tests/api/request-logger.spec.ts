@@ -129,7 +129,7 @@ describe("registerRequestLogging", () => {
         method: "POST",
         url: "/oauth/authorize-code",
         body: {
-          client_id: "buildbot_cli",
+          client_id: "cli",
           code_challenge: "A".repeat(43),
           state: "state-12345678",
         },

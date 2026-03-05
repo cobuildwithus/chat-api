@@ -5,11 +5,11 @@ Collapse historical incremental SQL migrations into one canonical baseline migra
 
 ## Scope
 - `migrations/0001_minimal_chat.sql` (delete)
-- `migrations/0002_build_bot_cli_token_indexes.sql` (delete)
-- `migrations/0003_build_bot_cli_tokens_table.sql` (delete)
-- `migrations/0004_build_bot_cli_tokens_write_scope.sql` (delete)
-- `migrations/0005_build_bot_cli_tokens_expiry.sql` (delete)
-- `migrations/0006_build_bot_oauth_sessions.sql` (delete)
+- `migrations/0002_cli_cli_token_indexes.sql` (delete)
+- `migrations/0003_cli_cli_tokens_table.sql` (delete)
+- `migrations/0004_cli_cli_tokens_write_scope.sql` (delete)
+- `migrations/0005_cli_cli_tokens_expiry.sql` (delete)
+- `migrations/0006_cli_oauth_sessions.sql` (delete)
 - `migrations/0001_canonical_schema.sql` (add)
 - `README.md`
 - `agent-docs/references/data-infra-map.md`

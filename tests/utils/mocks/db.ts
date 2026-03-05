@@ -65,8 +65,10 @@ vi.mock("../../../src/infra/db/cobuildDb", () => {
     update: (table: unknown) => {
       set: (vals: unknown) => { where: (_cond?: unknown) => Promise<void> };
     };
+    execute: (_statement: unknown) => Promise<unknown[]>;
     insert: (table: unknown) => ReturnType<typeof makeInsertChain>;
     delete: (table: unknown) => { where: (_cond?: unknown) => Promise<void> };
+    transaction: <T>(fn: (tx: CobuildDbMock) => Promise<T>) => Promise<T>;
     $primary?: CobuildDbMock;
   };
 
@@ -96,6 +98,7 @@ vi.mock("../../../src/infra/db/cobuildDb", () => {
         },
       }),
     }),
+    execute: (_statement: unknown) => Promise.resolve([]),
     insert: (table: unknown) => makeInsertChain(table),
     delete: (table: unknown) => ({
       where: (_cond?: unknown) => {
@@ -103,6 +106,7 @@ vi.mock("../../../src/infra/db/cobuildDb", () => {
         return Promise.resolve();
       },
     }),
+    transaction: async <T>(fn: (tx: CobuildDbMock) => Promise<T>) => fn(cobuildDb),
   };
   cobuildDb.$primary = cobuildDb;
   return {

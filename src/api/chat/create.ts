@@ -26,7 +26,7 @@ export async function handleChatCreateRequest(
         .values({
           id: chatId,
           type,
-          data: JSON.stringify(data ?? {}),
+          data: data ?? {},
           user: user.address,
           updatedAt: new Date(),
         })

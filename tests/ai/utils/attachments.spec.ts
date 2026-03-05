@@ -26,13 +26,30 @@ describe("attachments", () => {
   it("extracts attachments and builds prompt", () => {
     const attachments = extractAttachments(baseMessages);
     expect(attachments).toEqual([
-      "[Image](https://image)",
-      "[Video](https://video)",
-      "[Image](https://image2)",
+      "[Image](https://image/)",
+      "[Video](https://video/)",
+      "[Image](https://image2/)",
     ]);
 
     const prompt = getAttachmentsPrompt(baseMessages);
     expect(prompt?.content).toContain("attachments");
+  });
+
+  it("omits inline data payloads from attachment references", () => {
+    const attachments = extractAttachments([
+      {
+        role: "user",
+        content: [
+          {
+            type: "file",
+            data: "data:image/png;base64,abcd",
+            mediaType: "image/png",
+          },
+        ],
+      },
+    ] as unknown as ModelMessage[]);
+
+    expect(attachments).toEqual(["[Image]((inline image))"]);
   });
 
   it("removes video parts from user messages", () => {

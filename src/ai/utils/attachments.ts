@@ -4,6 +4,8 @@ type UnknownWithType = { type?: unknown };
 type UnknownImage = { image?: unknown };
 type UnknownFileExtras = { mediaType?: string; mimeType?: string; url?: unknown; data?: unknown };
 type UnknownFilePart = FilePart & UnknownFileExtras;
+const MAX_ATTACHMENT_REFERENCE_LENGTH = 512;
+const MAX_ATTACHMENTS_IN_PROMPT = 25;
 
 const isImagePart = (p: unknown): p is ImagePart =>
   !!p && typeof p === "object" && (p as UnknownWithType).type === "image";
@@ -11,7 +13,10 @@ const isFilePart = (p: unknown): p is FilePart =>
   !!p && typeof p === "object" && (p as UnknownWithType).type === "file";
 
 function toUrlString(value: unknown): string | null {
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
   if (value instanceof URL) return value.toString();
   return null;
 }
@@ -44,17 +49,35 @@ function getAttachmentInfo(part: unknown): { kind: "image" | "video"; url: strin
   return null;
 }
 
+function formatAttachmentReference(kind: "image" | "video", url: string | null): string {
+  if (!url || url.startsWith("data:")) return `(inline ${kind})`;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return `(inline ${kind})`;
+    }
+    const normalized = `${parsed.origin}${parsed.pathname}`;
+    if (normalized.length <= MAX_ATTACHMENT_REFERENCE_LENGTH) {
+      return normalized;
+    }
+    return `${normalized.slice(0, MAX_ATTACHMENT_REFERENCE_LENGTH - 3)}...`;
+  } catch {
+    return `(inline ${kind})`;
+  }
+}
+
 export function extractAttachments(messages: ModelMessage[]): string[] {
   const out: string[] = [];
-  for (const m of messages) {
+  outer: for (const m of messages) {
     if (!Array.isArray(m.content)) continue;
     for (const part of m.content) {
       const info = getAttachmentInfo(part);
       if (!info) continue;
-      if (info.kind === "image") {
-        out.push(`[Image](${info.url ?? "(inline image)"})`);
-      } else if (info.kind === "video") {
-        out.push(`[Video](${info.url ?? "(inline video)"})`);
+      const label = info.kind === "image" ? "Image" : "Video";
+      const reference = formatAttachmentReference(info.kind, info.url);
+      out.push(`[${label}](${reference})`);
+      if (out.length >= MAX_ATTACHMENTS_IN_PROMPT) {
+        break outer;
       }
     }
   }

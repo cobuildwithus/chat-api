@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import { chat } from "../../infra/db/schema";
-import { cobuildDb } from "../../infra/db/cobuildDb";
+import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
 import { getAgent } from "../../ai/agents/agent";
 import { isAiUsageAvailable } from "../../ai/ai-rate.limit";
 import type { ChatBody } from "../../ai/types";
@@ -26,6 +26,7 @@ import {
   CHAT_PERSIST_ERROR,
   buildStreamMessages,
   createReasoningTracker,
+  fireAndForget,
   recordUsageIfPresent,
   resolveIsMobileRequest,
   streamErrorMessage,
@@ -49,26 +50,30 @@ export async function handleChatPostRequest(
         ? await verifyChatGrant(grantHeader)
         : null;
 
+    const existing = await cobuildPrimaryDb()
+      .select({ user: chat.user, type: chat.type })
+      .from(chat)
+      .where(eq(chat.id, chatId))
+      .limit(1);
+
+    if (!existing.length) {
+      return reply.status(404).send({ error: "Chat not found" });
+    }
+
+    if (!isSameAddress(existing[0].user, user.address)) {
+      return reply.status(404).send({ error: "Chat not found" });
+    }
+
+    if (existing[0].type !== type) {
+      return reply.status(400).send({ error: "Chat type mismatch" });
+    }
+
     const grantMatches =
       !!validGrant &&
       validGrant.cid === chatId &&
       isSameAddress(validGrant.sub, user.address);
 
     if (!grantMatches) {
-      const existing = await cobuildDb
-        .select({ user: chat.user })
-        .from(chat)
-        .where(eq(chat.id, chatId))
-        .limit(1);
-
-      if (!existing.length) {
-        return reply.status(404).send({ error: "Chat not found" });
-      }
-
-      if (!isSameAddress(existing[0].user, user.address)) {
-        return reply.status(404).send({ error: "Chat not found" });
-      }
-
       issuedGrant = await signChatGrant(chatId, user.address);
     }
 
@@ -147,7 +152,7 @@ export async function handleChatPostRequest(
       stopWhen: stepCountIs(7),
     });
 
-    void recordUsageIfPresent(result.usage, user.address);
+    fireAndForget(recordUsageIfPresent(result.usage, user.address), "record AI usage");
 
     let usedPendingMessageId = false;
     const generateMessageId = () => {
@@ -197,7 +202,10 @@ export async function handleChatPostRequest(
       },
       onError: (error) => {
         const message = streamErrorMessage(error);
-        void markAssistantMessageFailed(chatId, pendingAssistantId, message);
+        fireAndForget(
+          markAssistantMessageFailed(chatId, pendingAssistantId, message),
+          "mark assistant message",
+        );
         return message;
       },
     });
@@ -205,7 +213,7 @@ export async function handleChatPostRequest(
       stream: uiStream,
       ...(issuedGrant ? { headers: { "x-chat-grant": issuedGrant } } : {}),
     });
-    void result.consumeStream();
+    fireAndForget(result.consumeStream(), "consume stream");
     return response;
   } catch (error) {
     console.error("Chat handler error:", error);

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import {
-  DEFAULT_BUILD_BOT_JWT_AUDIENCE,
-  DEFAULT_BUILD_BOT_JWT_ISSUER,
-  DEFAULT_DEV_BUILD_BOT_JWT_PUBLIC_KEY,
+  DEFAULT_CLI_JWT_AUDIENCE,
+  DEFAULT_CLI_JWT_ISSUER,
+  DEFAULT_DEV_CLI_JWT_PUBLIC_KEY,
 } from "@cobuild/wire";
 
 const replicaUrlsSchema = z.preprocess(
@@ -65,11 +65,12 @@ const envSchema = z.object({
   SELF_HOSTED_SHARED_SECRET: z.string().min(1).optional(),
   CHAT_INTERNAL_SERVICE_KEY: z.string().min(1).optional(),
   CLI_TOOLS_INTERNAL_KEY: z.string().min(1).optional(),
-  BUILD_BOT_TOKEN_PEPPER: z.string().min(1).optional(),
-  BUILD_BOT_JWT_PRIVATE_KEY: z.string().min(1).optional(),
-  BUILD_BOT_JWT_PUBLIC_KEY: z.string().min(1).optional(),
-  BUILD_BOT_JWT_ISSUER: z.string().min(1).optional(),
-  BUILD_BOT_JWT_AUDIENCE: z.string().min(1).optional(),
+  CLI_TOKEN_PEPPER: z.string().min(1).optional(),
+  CLI_JWT_PRIVATE_KEY: z.string().min(1).optional(),
+  CLI_JWT_PUBLIC_KEY: z.string().min(1).optional(),
+  CLI_JWT_ISSUER: z.string().min(1).optional(),
+  CLI_JWT_AUDIENCE: z.string().min(1).optional(),
+  CLI_ALLOW_DEV_KEYS: z.string().min(1).optional(),
 });
 
 const envCacheSchema = envSchema
@@ -111,7 +112,7 @@ export function resetEnvCacheForTests(): void {
   cachedEnvKey = null;
 }
 
-const DEFAULT_DEV_BUILD_BOT_JWT_PRIVATE_KEY = [
+const DEFAULT_DEV_CLI_JWT_PRIVATE_KEY = [
   "-----BEGIN PRIVATE KEY-----",
   "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgXeejR7RjCYJB0drU",
   "9BOiYSmdA5NNri/Pt+sYzGoE5kihRANCAAQl7PV/QsF4LlUl81QTu/dsTCTv0k6K",
@@ -119,14 +120,25 @@ const DEFAULT_DEV_BUILD_BOT_JWT_PRIVATE_KEY = [
   "-----END PRIVATE KEY-----",
 ].join("\n");
 
+function allowDevCliKeyFallback(env: {
+  NODE_ENV?: string;
+  CLI_ALLOW_DEV_KEYS?: string;
+}): boolean {
+  if (env.NODE_ENV === "production") {
+    return false;
+  }
+  if (process.env.VITEST === "true") {
+    return true;
+  }
+  return isTruthy(env.CLI_ALLOW_DEV_KEYS?.toLowerCase());
+}
+
 export function validateEnvVariables(): ValidatedEnv {
   const env = envSchema.parse(process.env);
   setCachedEnv(env);
   const selfHosted = isTruthy(env.SELF_HOSTED_MODE?.toLowerCase());
-  if (selfHosted && env.NODE_ENV === "production" && !env.SELF_HOSTED_SHARED_SECRET) {
-    throw new Error(
-      "Missing required env in production self-hosted mode: SELF_HOSTED_SHARED_SECRET",
-    );
+  if (selfHosted && !env.SELF_HOSTED_SHARED_SECRET) {
+    throw new Error("Missing required env in self-hosted mode: SELF_HOSTED_SHARED_SECRET");
   }
   if (!selfHosted && !env.PRIVY_APP_ID) {
     throw new Error("Missing required env: PRIVY_APP_ID");
@@ -134,20 +146,30 @@ export function validateEnvVariables(): ValidatedEnv {
   if (!selfHosted && env.NODE_ENV === "production" && !env.PRIVY_VERIFICATION_KEY) {
     throw new Error("Missing required env in production: PRIVY_VERIFICATION_KEY");
   }
-  if (env.NODE_ENV === "production" && !env.BUILD_BOT_TOKEN_PEPPER) {
-    throw new Error("Missing required env in production: BUILD_BOT_TOKEN_PEPPER");
+  if (env.NODE_ENV === "production" && !env.CLI_TOKEN_PEPPER) {
+    throw new Error("Missing required env in production: CLI_TOKEN_PEPPER");
   }
-  if (env.NODE_ENV === "production" && !env.BUILD_BOT_JWT_PRIVATE_KEY) {
-    throw new Error("Missing required env in production: BUILD_BOT_JWT_PRIVATE_KEY");
+  if (!env.CLI_JWT_PRIVATE_KEY && !allowDevCliKeyFallback(env)) {
+    if (env.NODE_ENV === "production") {
+      throw new Error("Missing required env in production: CLI_JWT_PRIVATE_KEY");
+    }
+    throw new Error(
+      "Missing CLI_JWT_PRIVATE_KEY. Configure CLI JWT keys or set CLI_ALLOW_DEV_KEYS=1 for local development only.",
+    );
   }
-  if (env.NODE_ENV === "production" && !env.BUILD_BOT_JWT_PUBLIC_KEY) {
-    throw new Error("Missing required env in production: BUILD_BOT_JWT_PUBLIC_KEY");
+  if (!env.CLI_JWT_PUBLIC_KEY && !allowDevCliKeyFallback(env)) {
+    if (env.NODE_ENV === "production") {
+      throw new Error("Missing required env in production: CLI_JWT_PUBLIC_KEY");
+    }
+    throw new Error(
+      "Missing CLI_JWT_PUBLIC_KEY. Configure CLI JWT keys or set CLI_ALLOW_DEV_KEYS=1 for local development only.",
+    );
   }
-  if (env.NODE_ENV === "production" && !env.BUILD_BOT_JWT_ISSUER) {
-    throw new Error("Missing required env in production: BUILD_BOT_JWT_ISSUER");
+  if (env.NODE_ENV === "production" && !env.CLI_JWT_ISSUER) {
+    throw new Error("Missing required env in production: CLI_JWT_ISSUER");
   }
-  if (env.NODE_ENV === "production" && !env.BUILD_BOT_JWT_AUDIENCE) {
-    throw new Error("Missing required env in production: BUILD_BOT_JWT_AUDIENCE");
+  if (env.NODE_ENV === "production" && !env.CLI_JWT_AUDIENCE) {
+    throw new Error("Missing required env in production: CLI_JWT_AUDIENCE");
   }
   return env;
 }
@@ -270,46 +292,56 @@ export function getChatInternalServiceKey(): string | null {
   return env.CHAT_INTERNAL_SERVICE_KEY ?? env.CLI_TOOLS_INTERNAL_KEY ?? null;
 }
 
-export function getBuildBotJwtPrivateKey(): string {
+export function getCliJwtPrivateKey(): string {
   const env = getEnv();
-  const configured = env.BUILD_BOT_JWT_PRIVATE_KEY?.trim();
+  const configured = env.CLI_JWT_PRIVATE_KEY?.trim();
   if (configured) {
     return configured;
   }
-  if (env.NODE_ENV === "production") {
-    throw new Error("Missing required env in production: BUILD_BOT_JWT_PRIVATE_KEY");
+  if (!allowDevCliKeyFallback(env)) {
+    if (env.NODE_ENV === "production") {
+      throw new Error("Missing required env in production: CLI_JWT_PRIVATE_KEY");
+    }
+    throw new Error(
+      "Missing CLI_JWT_PRIVATE_KEY. Configure CLI JWT keys or set CLI_ALLOW_DEV_KEYS=1 for local development only.",
+    );
   }
-  return DEFAULT_DEV_BUILD_BOT_JWT_PRIVATE_KEY;
+  return DEFAULT_DEV_CLI_JWT_PRIVATE_KEY;
 }
 
-export function getBuildBotJwtPublicKey(): string {
+export function getCliJwtPublicKey(): string {
   const env = getEnv();
-  const configured = env.BUILD_BOT_JWT_PUBLIC_KEY?.trim();
+  const configured = env.CLI_JWT_PUBLIC_KEY?.trim();
   if (configured) {
     return configured;
   }
-  if (env.NODE_ENV === "production") {
-    throw new Error("Missing required env in production: BUILD_BOT_JWT_PUBLIC_KEY");
+  if (!allowDevCliKeyFallback(env)) {
+    if (env.NODE_ENV === "production") {
+      throw new Error("Missing required env in production: CLI_JWT_PUBLIC_KEY");
+    }
+    throw new Error(
+      "Missing CLI_JWT_PUBLIC_KEY. Configure CLI JWT keys or set CLI_ALLOW_DEV_KEYS=1 for local development only.",
+    );
   }
-  return DEFAULT_DEV_BUILD_BOT_JWT_PUBLIC_KEY;
+  return DEFAULT_DEV_CLI_JWT_PUBLIC_KEY;
 }
 
-export function getBuildBotJwtIssuer(): string {
+export function getCliJwtIssuer(): string {
   const env = getEnv();
-  const configured = env.BUILD_BOT_JWT_ISSUER?.trim();
+  const configured = env.CLI_JWT_ISSUER?.trim();
   if (configured) {
     return configured;
   }
-  return DEFAULT_BUILD_BOT_JWT_ISSUER;
+  return DEFAULT_CLI_JWT_ISSUER;
 }
 
-export function getBuildBotJwtAudience(): string {
+export function getCliJwtAudience(): string {
   const env = getEnv();
-  const configured = env.BUILD_BOT_JWT_AUDIENCE?.trim();
+  const configured = env.CLI_JWT_AUDIENCE?.trim();
   if (configured) {
     return configured;
   }
-  return DEFAULT_BUILD_BOT_JWT_AUDIENCE;
+  return DEFAULT_CLI_JWT_AUDIENCE;
 }
 
 // Backward-compatible alias. Prefer getChatInternalServiceKey.

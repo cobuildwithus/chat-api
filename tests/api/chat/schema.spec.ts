@@ -11,6 +11,10 @@ describe("chat schemas", () => {
     expect(chatSchema.body.required).toContain("id");
     expect(chatSchema.body.required).toContain("messages");
     expect(chatSchema.body.properties.messages.type).toBe("array");
+    expect(chatSchema.body.properties.messages.items.properties.role.enum).toEqual([
+      "user",
+      "assistant",
+    ]);
   });
 
   it("defines create, get, and list schemas", () => {

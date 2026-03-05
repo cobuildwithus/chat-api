@@ -2,7 +2,7 @@ import { bigint, index, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core
 import { cobuildSchema } from "./shared";
 
 export const cliOauthCodes = cobuildSchema.table(
-  "build_bot_oauth_codes",
+  "cli_oauth_codes",
   {
     id: bigint("id", { mode: "bigint" }).primaryKey().generatedByDefaultAsIdentity(),
     codeHash: text("code_hash").notNull(),
@@ -18,15 +18,15 @@ export const cliOauthCodes = cobuildSchema.table(
     usedAt: timestamp("used_at", { withTimezone: true }),
   },
   (table) => ({
-    cliOauthCodesCodeHashUnique: uniqueIndex("build_bot_oauth_codes_code_hash_uq").on(
+    cliOauthCodesCodeHashUnique: uniqueIndex("cli_oauth_codes_code_hash_uq").on(
       table.codeHash,
     ),
-    cliOauthCodesExpiresAtIdx: index("build_bot_oauth_codes_expires_at_idx").on(table.expiresAt),
+    cliOauthCodesExpiresAtIdx: index("cli_oauth_codes_expires_at_idx").on(table.expiresAt),
   }),
 );
 
 export const cliSessions = cobuildSchema.table(
-  "build_bot_cli_sessions",
+  "cli_cli_sessions",
   {
     id: bigint("id", { mode: "bigint" }).primaryKey().generatedByDefaultAsIdentity(),
     ownerAddress: text("owner_address").notNull(),
@@ -41,12 +41,12 @@ export const cliSessions = cobuildSchema.table(
   },
   (table) => ({
     cliSessionsRefreshTokenHashUnique: uniqueIndex(
-      "build_bot_cli_sessions_refresh_token_hash_uq",
+      "cli_cli_sessions_refresh_token_hash_uq",
     ).on(table.refreshTokenHash),
-    cliSessionsOwnerRevokedIdx: index("build_bot_cli_sessions_owner_revoked_idx").on(
+    cliSessionsOwnerRevokedIdx: index("cli_cli_sessions_owner_revoked_idx").on(
       table.ownerAddress,
       table.revokedAt,
     ),
-    cliSessionsExpiresAtIdx: index("build_bot_cli_sessions_expires_at_idx").on(table.expiresAt),
+    cliSessionsExpiresAtIdx: index("cli_cli_sessions_expires_at_idx").on(table.expiresAt),
   }),
 );

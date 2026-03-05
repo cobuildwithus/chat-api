@@ -69,7 +69,7 @@ CREATE INDEX IF NOT EXISTS casts_last_activity_desc_idx
   ON farcaster.casts (last_activity_at DESC)
   WHERE parent_hash IS NULL;
 
-CREATE TABLE IF NOT EXISTS cobuild.build_bot_oauth_codes (
+CREATE TABLE IF NOT EXISTS cobuild.cli_oauth_codes (
   id BIGSERIAL PRIMARY KEY,
   code_hash TEXT NOT NULL UNIQUE,
   owner_address TEXT NOT NULL,
@@ -84,10 +84,10 @@ CREATE TABLE IF NOT EXISTS cobuild.build_bot_oauth_codes (
   used_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS build_bot_oauth_codes_expires_at_idx
-  ON cobuild.build_bot_oauth_codes (expires_at);
+CREATE INDEX IF NOT EXISTS cli_oauth_codes_expires_at_idx
+  ON cobuild.cli_oauth_codes (expires_at);
 
-CREATE TABLE IF NOT EXISTS cobuild.build_bot_cli_sessions (
+CREATE TABLE IF NOT EXISTS cobuild.cli_cli_sessions (
   id BIGSERIAL PRIMARY KEY,
   owner_address TEXT NOT NULL,
   agent_key TEXT NOT NULL,
@@ -100,11 +100,11 @@ CREATE TABLE IF NOT EXISTS cobuild.build_bot_cli_sessions (
   revoked_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS build_bot_cli_sessions_owner_revoked_idx
-  ON cobuild.build_bot_cli_sessions (owner_address, revoked_at);
+CREATE INDEX IF NOT EXISTS cli_cli_sessions_owner_revoked_idx
+  ON cobuild.cli_cli_sessions (owner_address, revoked_at);
 
-CREATE INDEX IF NOT EXISTS build_bot_cli_sessions_expires_at_idx
-  ON cobuild.build_bot_cli_sessions (expires_at);
+CREATE INDEX IF NOT EXISTS cli_cli_sessions_expires_at_idx
+  ON cobuild.cli_cli_sessions (expires_at);
 
 CREATE TABLE IF NOT EXISTS "cobuild-onchain".project (
   chain_id INTEGER NOT NULL,

@@ -3,7 +3,7 @@ import { and, eq, inArray, isNull, not, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import type { ChatData, ChatUser } from "../ai/types";
 import { chat, chatMessage } from "../infra/db/schema";
-import { cobuildDb, cobuildPrimaryDb } from "../infra/db/cobuildDb";
+import { cobuildPrimaryDb } from "../infra/db/cobuildDb";
 import { generateChatTitle } from "./generate-title";
 import { getFirstUserText } from "./message-text";
 
@@ -30,133 +30,130 @@ export async function storeChatMessages({
 }: StoreChatMessagesArgs) {
   const primaryDb = cobuildPrimaryDb();
   const now = new Date();
-  const serializedData = JSON.stringify(data ?? {});
+  await primaryDb.transaction(async (tx) => {
+    // Serialize writes per chat to avoid delete-not-in races across concurrent requests.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${chatId}))`);
 
-  await cobuildDb
-    .insert(chat)
-    .values({
-      id: chatId,
-      type,
-      data: serializedData,
-      user: user.address,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: chat.id,
-      set: {
+    await tx
+      .insert(chat)
+      .values({
+        id: chatId,
         type,
-        data: serializedData,
+        data: data ?? {},
         user: user.address,
         updatedAt: now,
-      },
-    });
-
-  if (messages.length === 0) {
-    await cobuildDb.delete(chatMessage).where(eq(chatMessage.chatId, chatId));
-    if (generateTitle) {
-      const [storedChat] = await primaryDb
-        .select({ title: chat.title })
-        .from(chat)
-        .where(eq(chat.id, chatId))
-        .limit(1);
-      await maybeSetConversationTitle(chatId, storedChat?.title ?? null, messages);
-    }
-    return;
-  }
-
-  const existing = await cobuildDb
-    .select({
-      id: chatMessage.id,
-      clientId: chatMessage.clientId,
-      createdAt: chatMessage.createdAt,
-    })
-    .from(chatMessage)
-    .where(eq(chatMessage.chatId, chatId));
-  const existingById = new Map<string, { createdAt: Date; clientId: string | null }>();
-  const existingByClientId = new Map<
-    string,
-    { id: string; createdAt: Date; clientId: string | null }
-  >();
-  for (const row of existing) {
-    existingById.set(row.id, { createdAt: row.createdAt, clientId: row.clientId });
-    if (row.clientId) {
-      existingByClientId.set(row.clientId, {
-        id: row.id,
-        createdAt: row.createdAt,
-        clientId: row.clientId,
+      })
+      .onConflictDoUpdate({
+        target: chat.id,
+        set: {
+          data: data ?? {},
+          updatedAt: now,
+        },
       });
-    }
-  }
 
-  const fallbackCreatedAt = new Date();
-  const trustedMessageIdSet = new Set(trustedMessageIds);
-  const lastUserIndex = messages.reduce(
-    (lastIndex, message, index) => (message.role === "user" ? index : lastIndex),
-    -1,
-  );
-  const requestedClientId = clientMessageId?.trim() || null;
-
-  const rows = messages.map((message, index) => {
-    const isUserMessage = message.role === "user";
-    const messageId = message.id ?? null;
-    const incomingClientId =
-      isUserMessage && index === lastUserIndex && requestedClientId ? requestedClientId : null;
-    const existingRowById = messageId ? existingById.get(messageId) : undefined;
-    const clientLookupId = messageId || incomingClientId;
-    const existingRowByClientId = clientLookupId
-      ? existingByClientId.get(clientLookupId)
-      : undefined;
-    let id: string;
-    let resolvedClientId: string | null = null;
-    let createdAt = fallbackCreatedAt;
-
-    if (existingRowById) {
-      id = messageId!;
-      resolvedClientId = isUserMessage ? existingRowById.clientId ?? incomingClientId : null;
-      createdAt = existingRowById.createdAt;
-    } else if (existingRowByClientId) {
-      id = existingRowByClientId.id;
-      resolvedClientId = existingRowByClientId.clientId ?? null;
-      createdAt = existingRowByClientId.createdAt;
-    } else if (isUserMessage) {
-      id = randomUUID();
-      resolvedClientId = incomingClientId ?? messageId;
-    } else {
-      // Non-user message ids are server-authoritative unless already known for this chat,
-      // with an explicit allowlist for trusted server-generated ids.
-      id = messageId && trustedMessageIdSet.has(messageId) ? messageId : randomUUID();
+    if (messages.length === 0) {
+      await tx.delete(chatMessage).where(eq(chatMessage.chatId, chatId));
+      return;
     }
 
-    return {
-      id,
-      chatId,
-      clientId: resolvedClientId,
-      role: message.role,
-      parts: message.parts,
-      metadata: message.metadata ?? null,
-      position: index,
-      createdAt,
-    };
-  });
+    const existing = await tx
+      .select({
+        id: chatMessage.id,
+        clientId: chatMessage.clientId,
+        createdAt: chatMessage.createdAt,
+      })
+      .from(chatMessage)
+      .where(eq(chatMessage.chatId, chatId));
+    const existingById = new Map<string, { createdAt: Date; clientId: string | null }>();
+    const existingByClientId = new Map<
+      string,
+      { id: string; createdAt: Date; clientId: string | null }
+    >();
+    for (const row of existing) {
+      existingById.set(row.id, { createdAt: row.createdAt, clientId: row.clientId });
+      if (row.clientId) {
+        existingByClientId.set(row.clientId, {
+          id: row.id,
+          createdAt: row.createdAt,
+          clientId: row.clientId,
+        });
+      }
+    }
 
-  const ids = rows.map((row) => row.id);
-  await cobuildDb
-    .insert(chatMessage)
-    .values(rows)
-    .onConflictDoUpdate({
-      target: chatMessage.id,
-      set: {
-        clientId: sql`coalesce(excluded."clientId", ${chatMessage.clientId})`,
-        role: sql`excluded.role`,
-        parts: sql`excluded.parts`,
-        metadata: sql`excluded.metadata`,
-        position: sql`excluded.position`,
-      },
+    const fallbackCreatedAt = new Date();
+    const trustedMessageIdSet = new Set(trustedMessageIds);
+    const lastUserIndex = messages.reduce(
+      (lastIndex, message, index) => (message.role === "user" ? index : lastIndex),
+      -1,
+    );
+    const requestedClientId = clientMessageId?.trim() || null;
+
+    const rows = messages.map((message, index) => {
+      const isUserMessage = message.role === "user";
+      const messageId = message.id?.trim();
+      if (!messageId) {
+        throw new Error(`Message at index ${index} is missing an id.`);
+      }
+
+      const incomingClientId =
+        isUserMessage && index === lastUserIndex && requestedClientId ? requestedClientId : null;
+      const existingRowById = existingById.get(messageId);
+      const clientLookupId = incomingClientId ?? messageId;
+      const existingRowByClientId = clientLookupId
+        ? existingByClientId.get(clientLookupId)
+        : undefined;
+      let id: string;
+      let resolvedClientId: string | null = null;
+      let createdAt = fallbackCreatedAt;
+
+      if (existingRowById) {
+        id = messageId;
+        resolvedClientId = isUserMessage ? existingRowById.clientId ?? incomingClientId : null;
+        createdAt = existingRowById.createdAt;
+      } else if (existingRowByClientId) {
+        id = existingRowByClientId.id;
+        resolvedClientId = existingRowByClientId.clientId ?? null;
+        createdAt = existingRowByClientId.createdAt;
+      } else if (isUserMessage) {
+        id = randomUUID();
+        resolvedClientId = incomingClientId ?? messageId;
+      } else {
+        // Non-user message ids are server-authoritative unless already known for this chat,
+        // with an explicit allowlist for trusted server-generated ids.
+        id = trustedMessageIdSet.has(messageId) ? messageId : randomUUID();
+      }
+
+      return {
+        id,
+        chatId,
+        clientId: resolvedClientId,
+        role: message.role,
+        parts: message.parts,
+        metadata: message.metadata ?? null,
+        position: index,
+        createdAt,
+      };
     });
 
-  await cobuildDb
-    .delete(chatMessage)
-    .where(and(eq(chatMessage.chatId, chatId), not(inArray(chatMessage.id, ids))));
+    const ids = rows.map((row) => row.id);
+    await tx
+      .insert(chatMessage)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: chatMessage.id,
+        set: {
+          clientId: sql`coalesce(excluded."clientId", ${chatMessage.clientId})`,
+          role: sql`excluded.role`,
+          parts: sql`excluded.parts`,
+          metadata: sql`excluded.metadata`,
+          position: sql`excluded.position`,
+        },
+      });
+
+    await tx
+      .delete(chatMessage)
+      .where(and(eq(chatMessage.chatId, chatId), not(inArray(chatMessage.id, ids))));
+  });
 
   if (generateTitle) {
     const [storedChat] = await primaryDb
@@ -191,7 +188,7 @@ async function maybeSetConversationTitle(
       return;
     }
 
-    await cobuildDb
+    await cobuildPrimaryDb()
       .update(chat)
       .set({ title })
       .where(and(eq(chat.id, chatId), isNull(chat.title)));

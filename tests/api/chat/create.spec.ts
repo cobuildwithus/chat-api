@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { handleChatCreateRequest } from "../../../src/api/chat/create";
 import { chat } from "../../../src/infra/db/schema";
+import { cobuildDb } from "../../../src/infra/db/cobuildDb";
 import { getChatUserOrThrow } from "../../../src/api/auth/validate-chat-user";
 import { signChatGrant } from "../../../src/chat/grant";
 import { createReply } from "../../utils/fastify";
@@ -52,6 +53,43 @@ describe("handleChatCreateRequest", () => {
     );
 
     expect(reply.send).toHaveBeenCalledWith({ chatId: "chat-1", chatGrant: "chat-grant" });
+  });
+
+  it("stores chat data as JSON object, not stringified text", async () => {
+    randomUUIDMock.mockReturnValue(
+      "chat-data-json" as `${string}-${string}-${string}-${string}-${string}`,
+    );
+    setCobuildDbResponse(chat, [{ id: "chat-data-json" }]);
+
+    let insertedValues: Record<string, unknown> | null = null;
+    const originalInsert = cobuildDb.insert.bind(cobuildDb);
+    type InsertTable = Parameters<typeof originalInsert>[0];
+    const insertSpy = vi.spyOn(cobuildDb, "insert").mockImplementation((table: InsertTable) => {
+      const chain = originalInsert(table);
+      if (table !== chat) return chain;
+      return {
+        values: (vals: Record<string, unknown>) => {
+          insertedValues = vals;
+          return chain.values(vals);
+        },
+      } as typeof chain;
+    });
+
+    const reply = createReply();
+    await handleChatCreateRequest(
+      buildRequest({
+        type: "chat-default",
+        data: { goalAddress: "0xabc0000000000000000000000000000000000000" },
+      }),
+      reply,
+    );
+
+    expect(insertedValues).toEqual(
+      expect.objectContaining({
+        data: { goalAddress: "0xabc0000000000000000000000000000000000000" },
+      }),
+    );
+    insertSpy.mockRestore();
   });
 
   it("returns 500 after failing to create a chat", async () => {

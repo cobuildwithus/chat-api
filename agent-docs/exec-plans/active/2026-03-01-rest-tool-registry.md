@@ -1,12 +1,12 @@
 # REST-First Tool Registry + Shared Execution (2026-03-01)
 
 ## Goal
-Introduce a canonical REST-first tool registry and execution path for buildbot tool routes and docs search, then expose `/v1/tools` and `/v1/tool-executions` while preserving legacy route contracts.
+Introduce a canonical REST-first tool registry and execution path for cli tool routes and docs search, then expose `/v1/tools` and `/v1/tool-executions` while preserving legacy route contracts.
 
 ## Scope
 - Add canonical tool registry metadata + execution module.
 - Add `/v1/tools` and `/v1/tool-executions` route handlers and schemas.
-- Rewire legacy `/api/buildbot/tools/*` and `/api/docs/search` handlers to shared execution logic.
+- Rewire legacy `/api/cli/tools/*` and `/api/docs/search` handlers to shared execution logic.
 - Add chat runtime optimization to skip cobuild context snapshot prompt fetch when request `context` is provided.
 - Update tests for new routes and shared-path behavior.
 

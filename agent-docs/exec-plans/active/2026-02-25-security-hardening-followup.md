@@ -20,7 +20,7 @@ Close outstanding high/medium/low security findings in chat-api for docs-search 
 
 ## Invariants
 - Chat route auth/grant behavior remains compatible.
-- Buildbot tools prehandler ordering remains internal-auth then route limiter.
+- CLI tools prehandler ordering remains internal-auth then route limiter.
 - Docs-search still returns existing payload shape on success.
 - Startup continues to fail fast on invalid production-critical env.
 

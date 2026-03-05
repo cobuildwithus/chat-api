@@ -23,9 +23,10 @@ const requestContextMock = vi.fn();
 const requestContextGetMock = vi.fn();
 const registerRequestLoggingMock = vi.fn();
 const rateLimitMock = vi.fn();
+const fastifyMock = vi.fn(() => serverMock);
 
 vi.mock("fastify", () => ({
-  default: vi.fn(() => serverMock),
+  default: fastifyMock,
 }));
 
 vi.mock("@fastify/cors", () => ({
@@ -60,6 +61,7 @@ describe("setupServer", () => {
     delete process.env.RATE_LIMIT_ENABLED;
     delete process.env.RATE_LIMIT_MAX;
     delete process.env.RATE_LIMIT_WINDOW_MS;
+    delete process.env.CHAT_TRUST_PROXY;
     serverMock = {
       register: vi.fn(),
       post: vi.fn(),
@@ -76,6 +78,33 @@ describe("setupServer", () => {
     } as unknown as ServerMock;
     vi.clearAllMocks();
     vi.resetModules();
+  });
+
+  it("defaults trustProxy to false", async () => {
+    await setupTest();
+
+    expect(fastifyMock).toHaveBeenCalledWith({ trustProxy: false });
+  });
+
+  it("accepts boolean trustProxy from env", async () => {
+    process.env.CHAT_TRUST_PROXY = "yes";
+
+    await setupTest();
+
+    expect(fastifyMock).toHaveBeenCalledWith({ trustProxy: true });
+  });
+
+  it("accepts numeric and allow-list trustProxy env values", async () => {
+    process.env.CHAT_TRUST_PROXY = "2";
+    await setupTest();
+    expect(fastifyMock).toHaveBeenCalledWith({ trustProxy: 2 });
+
+    vi.clearAllMocks();
+    vi.resetModules();
+
+    process.env.CHAT_TRUST_PROXY = "10.0.0.1, 10.0.0.2";
+    await setupTest();
+    expect(fastifyMock).toHaveBeenCalledWith({ trustProxy: ["10.0.0.1", "10.0.0.2"] });
   });
 
   it("uses explicit allowed origins when configured", async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   executeTool,
   listToolMetadata,
+  requiresWriteScopeForMetadata,
   requiresWriteScopeForTool,
   resolveToolMetadata,
 } from "../../../src/tools/registry";
@@ -93,5 +94,32 @@ describe("tool registry", () => {
     expect(requiresWriteScopeForTool("get-user")).toBe(false);
     expect(requiresWriteScopeForTool("docs-search")).toBe(false);
     expect(requiresWriteScopeForTool("missing-tool")).toBe(false);
+  });
+
+  it("requires write scope when explicit write capability is set", () => {
+    expect(
+      requiresWriteScopeForMetadata({
+        writeCapability: "requires-tools-write",
+        sideEffects: "read",
+      }),
+    ).toBe(true);
+  });
+
+  it("requires write scope for network-write side effects even without write capability", () => {
+    expect(
+      requiresWriteScopeForMetadata({
+        writeCapability: "none",
+        sideEffects: "network-write",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not infer write requirements from domain scopes", () => {
+    const domainScopedMetadata = {
+      writeCapability: "none" as const,
+      sideEffects: "read" as const,
+      scopes: ["write"],
+    };
+    expect(requiresWriteScopeForMetadata(domainScopedMetadata)).toBe(false);
   });
 });

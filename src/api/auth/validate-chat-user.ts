@@ -43,26 +43,28 @@ export async function validateChatUser(request: FastifyRequest, reply: FastifyRe
   try {
     if (isSelfHostedMode()) {
       const sharedSecret = getSelfHostedSharedSecret();
-      if (process.env.NODE_ENV === "production" && !sharedSecret) {
+      if (!sharedSecret) {
         return reply.code(503).send({ error: "Self-hosted auth is misconfigured." });
       }
-      if (sharedSecret) {
-        const authHeader = request.headers["x-chat-auth"];
-        if (!authHeader || typeof authHeader !== "string") {
-          return reply.code(401).send({ error: "Missing chat auth" });
-        }
-        if (!isValidSharedSecret(authHeader, sharedSecret)) {
-          return reply.code(401).send({ error: "Invalid chat auth" });
-        }
+      const authHeader = request.headers["x-chat-auth"];
+      if (!authHeader || typeof authHeader !== "string") {
+        return reply.code(401).send({ error: "Missing chat auth" });
+      }
+      if (!isValidSharedSecret(authHeader, sharedSecret)) {
+        return reply.code(401).send({ error: "Invalid chat auth" });
       }
 
       const headerAddress = request.headers["x-chat-user"];
       const rawAddress =
         (typeof headerAddress === "string" ? headerAddress : null) ??
-        getSelfHostedDefaultAddress();
-      const normalizedAddress = normalizeAddress(rawAddress ?? "");
-      if (!normalizedAddress) {
+        getSelfHostedDefaultAddress() ??
+        null;
+      if (!rawAddress) {
         return reply.code(401).send({ error: "Missing chat user" });
+      }
+      const normalizedAddress = normalizeAddress(rawAddress);
+      if (!normalizedAddress) {
+        return reply.code(401).send({ error: "Invalid chat user" });
       }
 
       setRequestUserFromHeaders(normalizedAddress, request);

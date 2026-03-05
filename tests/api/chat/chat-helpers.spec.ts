@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LanguageModelUsage, ModelMessage, SystemModelMessage } from "ai";
 import {
   CHAT_PERSIST_ERROR,
+  CHAT_STREAM_ERROR_MESSAGE,
   buildStreamMessages,
   createReasoningTracker,
+  fireAndForget,
   recordUsageIfPresent,
   resolveIsMobileRequest,
   streamErrorMessage,
@@ -20,8 +22,8 @@ beforeEach(() => {
 
 describe("chat helpers", () => {
   it("formats stream error messages", () => {
-    expect(streamErrorMessage(new Error("boom"))).toBe("boom");
-    expect(streamErrorMessage("oops")).toBe("Chat failed to send. Please try again.");
+    expect(streamErrorMessage(new Error("boom"))).toBe(CHAT_STREAM_ERROR_MESSAGE);
+    expect(streamErrorMessage("oops")).toBe(CHAT_STREAM_ERROR_MESSAGE);
     expect(CHAT_PERSIST_ERROR).toContain("save");
   });
 
@@ -58,9 +60,9 @@ describe("chat helpers", () => {
     const result = buildStreamMessages(system, modelMessages, "  context  ");
 
     const contextMessage = result.find(
-      (message) => message.role === "system" &&
+      (message) => message.role === "user" &&
         typeof message.content === "string" &&
-        message.content.includes("Additional context: context"),
+        message.content.includes("Additional context from the user"),
     );
     expect(contextMessage).toBeTruthy();
 
@@ -71,7 +73,9 @@ describe("chat helpers", () => {
     );
     expect(attachmentsMessage).toBeTruthy();
 
-    const userMessage = result.find((message) => message.role === "user");
+    const userMessage = result.find(
+      (message) => message.role === "user" && Array.isArray(message.content),
+    );
     expect(userMessage).toBeTruthy();
     const parts = userMessage?.content as Array<{ type: string; mediaType?: string }>;
     expect(parts.find((part) => part.mediaType?.startsWith("video/"))).toBeUndefined();
@@ -92,5 +96,18 @@ describe("chat helpers", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("swallows fire-and-forget promise rejections", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    fireAndForget(Promise.reject(new Error("boom")), "bg-op");
+    await Promise.resolve();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      "bg-op failed",
+      expect.objectContaining({ message: "boom" }),
+    );
+    warnSpy.mockRestore();
   });
 });

@@ -25,7 +25,7 @@ describe("oauth security helpers", () => {
   it("digests oauth secrets with configured pepper", () => {
     process.env = {
       ...originalEnv,
-      BUILD_BOT_TOKEN_PEPPER: "pepper-1",
+      CLI_TOKEN_PEPPER: "pepper-1",
       NODE_ENV: "development",
     };
     const digestA = digestOAuthSecret("secret");
@@ -42,8 +42,8 @@ describe("oauth security helpers", () => {
       ...originalEnv,
       NODE_ENV: "production",
     };
-    delete process.env.BUILD_BOT_TOKEN_PEPPER;
-    expect(() => digestOAuthSecret("secret")).toThrow("Missing BUILD_BOT_TOKEN_PEPPER");
+    delete process.env.CLI_TOKEN_PEPPER;
+    expect(() => digestOAuthSecret("secret")).toThrow("Missing CLI_TOKEN_PEPPER");
   });
 
   it("creates random oauth secrets/codes/tokens", () => {

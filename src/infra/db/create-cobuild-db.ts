@@ -53,7 +53,12 @@ const createPool = (
   if (readOnly) {
     pool.on("connect", (client) => {
       applySessionSettings(label, client);
-      void client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+      void Promise.resolve(
+        client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"),
+      )
+        .catch((error) => {
+          console.warn(`[db] ${label} read-only session setting failed`, error);
+        });
     });
   } else {
     pool.on("connect", (client) => {

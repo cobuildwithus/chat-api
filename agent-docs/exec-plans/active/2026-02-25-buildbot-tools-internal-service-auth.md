@@ -1,11 +1,11 @@
-# Buildbot Tools Internal Service Auth (2026-02-25)
+# CLI Tools Internal Service Auth (2026-02-25)
 
 ## Goal
-Restrict `/api/buildbot/tools/*` routes to internal callers that present a shared service header, without changing successful response contracts.
+Restrict `/api/cli/tools/*` routes to internal callers that present a shared service header, without changing successful response contracts.
 
 ## Scope
-- Add internal auth prehandler for all buildbot tool routes.
-- Add `BUILD_BOT_TOOLS_INTERNAL_KEY` env support with helper getter.
+- Add internal auth prehandler for all cli tool routes.
+- Add `CLI_TOOLS_INTERNAL_KEY` env support with helper getter.
 - Enforce production env validation for internal key configuration.
 - Wire prehandler order as internal-auth first, then route-local rate limiting.
 - Add tests for auth prehandler behavior, route wiring order, and env behavior.
@@ -18,8 +18,8 @@ Restrict `/api/buildbot/tools/*` routes to internal callers that present a share
 
 ## Plan
 1. Add env schema/getter/validation changes for internal key support.
-2. Implement buildbot tools internal auth prehandler in route module.
-3. Wire all four buildbot routes to `[internal auth, rate limit]`.
+2. Implement cli tools internal auth prehandler in route module.
+3. Wire all four cli routes to `[internal auth, rate limit]`.
 4. Add regression tests for prehandler outcomes and route prehandler ordering.
 5. Update required docs and run completion workflow + required checks.
 

@@ -83,6 +83,7 @@ type DiscussionSortDirection = "asc" | "desc";
 type WalletBalanceNetwork = "base" | "base-sepolia";
 
 export type ToolSideEffects = "none" | "read" | "network-read" | "network-write";
+export type ToolWriteCapability = "none" | "requires-tools-write";
 
 export type ToolMetadata = {
   name: string;
@@ -94,6 +95,10 @@ export type ToolMetadata = {
   version: string;
   deprecated: boolean;
   aliases?: string[];
+};
+
+type ToolCapabilityMetadata = {
+  writeCapability: ToolWriteCapability;
 };
 
 export type ToolExecutionSuccess = {
@@ -114,13 +119,19 @@ export type ToolExecutionResult = ToolExecutionSuccess | ToolExecutionFailure;
 
 type ToolExecute = (input: any) => Promise<ToolExecutionResult>;
 
-type RegisteredTool = ToolMetadata & {
+type RegisteredTool = ToolMetadata & ToolCapabilityMetadata & {
   input: z.ZodTypeAny;
   aliases: string[];
   execute: ToolExecute;
 };
 
 type RawRegisteredTool = Omit<RegisteredTool, "inputSchema">;
+
+export function requiresWriteScopeForMetadata(
+  tool: Pick<ToolCapabilityMetadata, "writeCapability"> & Pick<ToolMetadata, "sideEffects">,
+): boolean {
+  return tool.writeCapability === "requires-tools-write" || tool.sideEffects === "network-write";
+}
 
 type DocsSearchResult = {
   fileId: string | null;
@@ -1348,6 +1359,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
     },
     scopes: ["cli-tools", "farcaster"],
     sideEffects: "read",
+    writeCapability: "none",
     version: "1.0.0",
     deprecated: false,
     execute: executeGetUser,
@@ -1363,6 +1375,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
     },
     scopes: ["cli-tools", "farcaster"],
     sideEffects: "read",
+    writeCapability: "none",
     version: "1.0.0",
     deprecated: false,
     execute: executeGetCast,
@@ -1384,6 +1397,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
     },
     scopes: ["cli-tools"],
     sideEffects: "none",
+    writeCapability: "none",
     version: "1.0.0",
     deprecated: false,
     execute: executeCastPreview,
@@ -1408,6 +1422,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
     },
     scopes: ["cli-tools", "farcaster", "discussion"],
     sideEffects: "read",
+    writeCapability: "none",
     version: "1.0.0",
     deprecated: false,
     execute: executeListDiscussions,
@@ -1435,6 +1450,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
     },
     scopes: ["cli-tools", "farcaster", "discussion"],
     sideEffects: "read",
+    writeCapability: "none",
     version: "1.0.0",
     deprecated: false,
     execute: executeGetDiscussionThread,
@@ -1457,6 +1473,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
     },
     scopes: ["cli-tools", "farcaster", "discussion", "semantic-search"],
     sideEffects: "network-read",
+    writeCapability: "none",
     version: "1.0.0",
     deprecated: false,
     execute: executeSemanticSearchCasts,
@@ -1505,6 +1522,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
     },
     scopes: ["cli-tools", "wallet"],
     sideEffects: "network-read",
+    writeCapability: "none",
     version: "1.0.0",
     deprecated: false,
     execute: executeGetWalletBalances,
@@ -1520,6 +1538,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
     },
     scopes: ["cli-tools", "cobuild-context"],
     sideEffects: "network-read",
+    writeCapability: "none",
     version: "1.0.0",
     deprecated: false,
     execute: executeCobuildAiContext,
@@ -1541,6 +1560,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
     },
     scopes: ["docs"],
     sideEffects: "network-read",
+    writeCapability: "none",
     version: "1.0.0",
     deprecated: false,
     execute: executeDocsSearch,
@@ -1597,7 +1617,7 @@ export function resolveToolMetadata(name: string): ToolMetadata | null {
 export function requiresWriteScopeForTool(name: string): boolean {
   const tool = TOOL_LOOKUP.get(normalizeToolLookupKey(name));
   if (!tool) return false;
-  return tool.scopes.includes("write") || tool.sideEffects === "network-write";
+  return requiresWriteScopeForMetadata(tool);
 }
 
 export async function executeTool(name: string, input: unknown): Promise<ToolExecutionResult> {

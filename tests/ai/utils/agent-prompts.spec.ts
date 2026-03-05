@@ -46,7 +46,7 @@ describe("getAgentPrompts", () => {
     expect(combined).toContain("persona");
     expect(combined).toContain("tool prompt");
     expect(combined).toContain("context");
-    expect(combined).toContain("# Additional data");
+    expect(combined).toContain("# Additional user-provided data");
     expect(combined).toContain("extra");
   });
 

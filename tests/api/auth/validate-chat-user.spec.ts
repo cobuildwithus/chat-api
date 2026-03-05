@@ -164,6 +164,7 @@ describe("validateChatUser", () => {
 
   it("uses x-chat-user when self-hosted mode is enabled", async () => {
     process.env.SELF_HOSTED_MODE = "true";
+    process.env.SELF_HOSTED_SHARED_SECRET = "secret";
     const setSpy = vi.spyOn(requestContext, "set");
     const reply = createReply();
 
@@ -171,6 +172,7 @@ describe("validateChatUser", () => {
       {
         headers: {
           "x-chat-user": "0xAbC0000000000000000000000000000000000000",
+          "x-chat-auth": "secret",
         },
       } as unknown as FastifyRequest,
       reply,
@@ -185,8 +187,7 @@ describe("validateChatUser", () => {
     expect(getUserAddressFromTokenMock).not.toHaveBeenCalled();
   });
 
-  it("returns 503 in production when self-hosted mode has no shared secret", async () => {
-    process.env.NODE_ENV = "production";
+  it("returns 503 when self-hosted mode has no shared secret", async () => {
     process.env.SELF_HOSTED_MODE = "true";
     delete process.env.SELF_HOSTED_SHARED_SECRET;
     const reply = createReply();
@@ -267,12 +268,16 @@ describe("validateChatUser", () => {
 
   it("falls back to default address in self-hosted mode", async () => {
     process.env.SELF_HOSTED_MODE = "true";
+    process.env.SELF_HOSTED_SHARED_SECRET = "secret";
     process.env.SELF_HOSTED_DEFAULT_ADDRESS =
       "0xAbC0000000000000000000000000000000000000";
     const setSpy = vi.spyOn(requestContext, "set");
     const reply = createReply();
 
-    await validateChatUser({ headers: {} } as FastifyRequest, reply);
+    await validateChatUser(
+      { headers: { "x-chat-auth": "secret" } } as unknown as FastifyRequest,
+      reply,
+    );
 
     expect(setSpy).toHaveBeenCalledWith(
       "user",
@@ -284,12 +289,35 @@ describe("validateChatUser", () => {
 
   it("returns 401 when self-hosted mode is enabled without a user", async () => {
     process.env.SELF_HOSTED_MODE = "true";
+    process.env.SELF_HOSTED_SHARED_SECRET = "secret";
     const reply = createReply();
 
-    await validateChatUser({ headers: {} } as FastifyRequest, reply);
+    await validateChatUser(
+      { headers: { "x-chat-auth": "secret" } } as unknown as FastifyRequest,
+      reply,
+    );
 
     expect(reply.code).toHaveBeenCalledWith(401);
     expect(reply.send).toHaveBeenCalledWith({ error: "Missing chat user" });
+  });
+
+  it("returns 401 when self-hosted user address is invalid", async () => {
+    process.env.SELF_HOSTED_MODE = "true";
+    process.env.SELF_HOSTED_SHARED_SECRET = "secret";
+    const reply = createReply();
+
+    await validateChatUser(
+      {
+        headers: {
+          "x-chat-user": "not-an-address",
+          "x-chat-auth": "secret",
+        },
+      } as unknown as FastifyRequest,
+      reply,
+    );
+
+    expect(reply.code).toHaveBeenCalledWith(401);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Invalid chat user" });
   });
 });
 

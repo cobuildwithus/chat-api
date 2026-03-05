@@ -1,12 +1,12 @@
-# Buildbot Tools Routes (2026-02-25)
+# CLI Tools Routes (2026-02-25)
 
 ## Goal
-Expose buildbot tools 1-4 via chat-api routes with schema validation, route-level rate limiting, and caching headers/behavior aligned to endpoint semantics.
+Expose cli tools 1-4 via chat-api routes with schema validation, route-level rate limiting, and caching headers/behavior aligned to endpoint semantics.
 
 ## Scope
-- Add `/api/buildbot/tools/get-user`
-- Add `/api/buildbot/tools/get-cast`
-- Add `/api/buildbot/tools/get-treasury-stats`
+- Add `/api/cli/tools/get-user`
+- Add `/api/cli/tools/get-cast`
+- Add `/api/cli/tools/get-treasury-stats`
 - Wire routes in server setup and add validation schemas
 - Add and update tests for route behavior and registration
 - Update architecture and API contract docs

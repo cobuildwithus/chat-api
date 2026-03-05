@@ -65,5 +65,9 @@ function getDataPrompt(data: ChatData) {
   ]);
   const safeEntries = Object.entries(data).filter(([key]) => !hiddenKeys.has(key));
   if (safeEntries.length === 0) return "";
-  return `\n\n# Additional data:\n${JSON.stringify(Object.fromEntries(safeEntries))}`;
+  return `\n\n# Additional user-provided data (untrusted metadata):\n\`\`\`json\n${JSON.stringify(
+    Object.fromEntries(safeEntries),
+    null,
+    2,
+  )}\n\`\`\``;
 }

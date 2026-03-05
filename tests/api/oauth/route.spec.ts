@@ -55,7 +55,7 @@ describe("oauth route handlers", () => {
     await handleOauthAuthorizeCodeRequest(
       {
         body: {
-          client_id: "buildbot_cli",
+          client_id: "cli",
           redirect_uri: "http://127.0.0.1:4545/auth/callback",
           scope: "tools:read tools:write wallet:read wallet:execute offline_access",
           code_challenge: "1".repeat(43),
@@ -96,7 +96,7 @@ describe("oauth route handlers", () => {
       {
         body: {
           grant_type: "authorization_code",
-          client_id: "buildbot_cli",
+          client_id: "cli",
           code: "code",
           redirect_uri: "http://127.0.0.1:4545/auth/callback",
           code_verifier: "A".repeat(43),
@@ -146,7 +146,7 @@ describe("oauth route handlers", () => {
       {
         body: {
           grant_type: "refresh_token",
-          client_id: "buildbot_cli",
+          client_id: "cli",
           refresh_token: "refresh-old",
         },
       } as FastifyRequest,
@@ -176,7 +176,7 @@ describe("oauth route handlers", () => {
       {
         body: {
           grant_type: "authorization_code",
-          client_id: "buildbot_cli",
+          client_id: "cli",
           code: "bad-code",
           redirect_uri: "http://127.0.0.1:4545/auth/callback",
           code_verifier: "A".repeat(43),
@@ -224,7 +224,7 @@ describe("oauth route handlers", () => {
       {
         body: {
           grant_type: "authorization_code",
-          client_id: "buildbot_cli",
+          client_id: "cli",
         },
       } as FastifyRequest,
       reply,
@@ -245,7 +245,7 @@ describe("oauth route handlers", () => {
       {
         body: {
           grant_type: "refresh_token",
-          client_id: "buildbot_cli",
+          client_id: "cli",
         },
       } as FastifyRequest,
       reply,
@@ -268,7 +268,7 @@ describe("oauth route handlers", () => {
       {
         body: {
           grant_type: "refresh_token",
-          client_id: "buildbot_cli",
+          client_id: "cli",
           refresh_token: "rfr_missing",
         },
       } as FastifyRequest,
@@ -291,7 +291,7 @@ describe("oauth route handlers", () => {
       {
         body: {
           grant_type: "client_credentials",
-          client_id: "buildbot_cli",
+          client_id: "cli",
         },
       } as FastifyRequest,
       reply,
@@ -315,7 +315,7 @@ describe("oauth route handlers", () => {
     await handleOauthAuthorizeCodeRequest(
       {
         body: {
-          client_id: "buildbot_cli",
+          client_id: "cli",
           redirect_uri: "https://127.0.0.1:4545/auth/callback",
           scope: "tools:read wallet:read offline_access",
           code_challenge: "1".repeat(43),
@@ -346,7 +346,7 @@ describe("oauth route handlers", () => {
     await handleOauthAuthorizeCodeRequest(
       {
         body: {
-          client_id: "buildbot_cli",
+          client_id: "cli",
           redirect_uri: "http://127.0.0.1:4545/auth/callback",
           scope: "tools:read wallet:read offline_access",
           code_challenge: "1".repeat(43),
@@ -377,7 +377,7 @@ describe("oauth route handlers", () => {
     await handleOauthAuthorizeCodeRequest(
       {
         body: {
-          client_id: "buildbot_cli",
+          client_id: "cli",
           redirect_uri: "http://127.0.0.1:4545/auth/callback",
           scope: "tools:read wallet:read offline_access",
           code_challenge: "1".repeat(43),
@@ -408,7 +408,7 @@ describe("oauth route handlers", () => {
     await handleOauthAuthorizeCodeRequest(
       {
         body: {
-          client_id: "buildbot_cli",
+          client_id: "cli",
           redirect_uri: "http://127.0.0.1:4545/auth/callback",
           scope: "tools:read wallet:read offline_access",
           code_challenge: "1".repeat(43),
@@ -439,7 +439,7 @@ describe("oauth route handlers", () => {
     await handleOauthAuthorizeCodeRequest(
       {
         body: {
-          client_id: "buildbot_cli",
+          client_id: "cli",
           redirect_uri: "http://127.0.0.1:4545/auth/callback",
           scope: "tools:read wallet:read offline_access",
           code_challenge: "1".repeat(43),

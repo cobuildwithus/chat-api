@@ -1,5 +1,5 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { chat } from "../../infra/db/schema";
 import { cobuildDb } from "../../infra/db/cobuildDb";
 import { normalizeAddress } from "../../chat/address";
@@ -26,6 +26,12 @@ export async function handleChatListRequest(
       MAX_LIMIT,
     );
     const normalizedGoal = normalizeAddress(goalAddress);
+    const whereClause = normalizedGoal
+      ? and(
+          eq(chat.user, user.address),
+          sql`lower(${chat.data} ->> 'goalAddress') = ${normalizedGoal.toLowerCase()}`,
+        )
+      : eq(chat.user, user.address);
 
     const chats = await cobuildDb
       .select({
@@ -37,7 +43,7 @@ export async function handleChatListRequest(
         createdAt: chat.createdAt,
       })
       .from(chat)
-      .where(eq(chat.user, user.address))
+      .where(whereClause)
       .orderBy(desc(chat.updatedAt))
       .limit(resolvedLimit);
 

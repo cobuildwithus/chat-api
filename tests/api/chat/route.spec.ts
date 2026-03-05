@@ -21,6 +21,7 @@ import {
   markAssistantMessageFailed,
 } from "../../../src/chat/message-status";
 import { chat } from "../../../src/infra/db/schema";
+import { cobuildDb } from "../../../src/infra/db/cobuildDb";
 import type { ChatBody } from "../../../src/ai/types";
 import { signChatGrant, verifyChatGrant } from "../../../src/chat/grant";
 import { isChatDebugEnabled } from "../../../src/config/env";
@@ -151,7 +152,9 @@ beforeEach(() => {
     tools: {},
     defaultModel: mockModel,
   });
-  setCobuildDbResponse(chat, [{ user: "0xabc0000000000000000000000000000000000000" }]);
+  setCobuildDbResponse(chat, [
+    { user: "0xabc0000000000000000000000000000000000000", type: "chat-default" },
+  ]);
   signChatGrantMock.mockResolvedValue("chat-grant");
   verifyChatGrantMock.mockResolvedValue(null);
 });
@@ -219,9 +222,9 @@ describe("handleChatPostRequest", () => {
     const messages = streamCall?.messages as ModelMessage[];
     const contextMessage = messages.find(
       (message) =>
-        message.role === "system" &&
+        message.role === "user" &&
         typeof message.content === "string" &&
-        message.content.includes("Additional context: trimmed context"),
+        message.content.includes("Additional context from the user"),
     );
     expect(contextMessage).toBeTruthy();
 
@@ -233,7 +236,9 @@ describe("handleChatPostRequest", () => {
     );
     expect(attachmentsMessage).toBeTruthy();
 
-    const userMessage = messages.find((message) => message.role === "user");
+    const userMessage = messages.find(
+      (message) => message.role === "user" && Array.isArray(message.content),
+    );
     expect(userMessage).toBeTruthy();
     const parts = userMessage?.content as Array<{ type: string; mediaType?: string }>;
     expect(parts.find((part) => part.type === "file" && part.mediaType?.startsWith("video/"))).toBe(
@@ -324,6 +329,27 @@ describe("handleChatPostRequest", () => {
       "0xabc0000000000000000000000000000000000000",
       123,
     );
+  });
+
+  it("swallows usage-recording failures without failing the request", async () => {
+    isAiUsageAvailableMock.mockResolvedValue(true);
+    convertToModelMessagesMock.mockResolvedValue([]);
+    const { result } = buildStreamResult({
+      usage: Promise.reject(new Error("usage failed")),
+    });
+    streamTextMock.mockReturnValue(result);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const reply = createReply();
+    const response = await handleChatPostRequest(buildRequest(baseBody), reply);
+
+    await Promise.resolve();
+    expect(response).toBeInstanceOf(Response);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Failed to record AI usage",
+      expect.objectContaining({ message: "usage failed" }),
+    );
+    warnSpy.mockRestore();
   });
 
   it("persists conversation on finish", async () => {
@@ -452,6 +478,27 @@ describe("handleChatPostRequest", () => {
     options?.generateMessageId?.();
   });
 
+  it("swallows consumeStream failures without failing the response", async () => {
+    isAiUsageAvailableMock.mockResolvedValue(true);
+    convertToModelMessagesMock.mockResolvedValue([]);
+    const { result } = buildStreamResult({
+      consumeStream: vi.fn(() => Promise.reject(new Error("consume failed"))),
+    });
+    streamTextMock.mockReturnValue(result);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const reply = createReply();
+    const response = await handleChatPostRequest(buildRequest(baseBody), reply);
+
+    await Promise.resolve();
+    expect(response).toBeInstanceOf(Response);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "consume stream failed",
+      expect.objectContaining({ message: "consume failed" }),
+    );
+    warnSpy.mockRestore();
+  });
+
   it("uses the pending assistant id before generating a new id", async () => {
     isAiUsageAvailableMock.mockResolvedValue(true);
     convertToModelMessagesMock.mockResolvedValue([]);
@@ -484,8 +531,53 @@ describe("handleChatPostRequest", () => {
     expect(result).toBeUndefined();
   });
 
+  it("uses primary DB for chat ownership lookup", async () => {
+    isAiUsageAvailableMock.mockResolvedValue(true);
+    convertToModelMessagesMock.mockResolvedValue([]);
+    streamTextMock.mockReturnValue(buildStreamResult().result);
+
+    const originalPrimary = cobuildDb.$primary as any;
+    const selectFromPrimary = vi.fn(() => {
+      const chain = {
+        limit: (_n?: number) => chain,
+        orderBy: (_o?: unknown) => chain,
+        groupBy: (_cols?: unknown) => Promise.resolve([]),
+        then: (resolve: (rows: unknown[]) => unknown) =>
+          resolve([{ user: "0xabc0000000000000000000000000000000000000", type: "chat-default" }]),
+      };
+      return {
+        from: (_table: unknown) => ({
+          where: (_cond?: unknown) => chain,
+        }),
+      };
+    });
+    const primaryDb = {
+      ...cobuildDb,
+      select: selectFromPrimary,
+    };
+    cobuildDb.$primary = primaryDb as any;
+
+    const replicaSelectSpy = vi.spyOn(cobuildDb, "select").mockImplementation(() => {
+      throw new Error("Replica lookup should not be used for chat ownership checks");
+    });
+
+    try {
+      const reply = createReply();
+      const response = await handleChatPostRequest(buildRequest(baseBody), reply);
+
+      expect(response).toBeInstanceOf(Response);
+      expect(selectFromPrimary).toHaveBeenCalled();
+      expect(replicaSelectSpy).not.toHaveBeenCalled();
+    } finally {
+      replicaSelectSpy.mockRestore();
+      cobuildDb.$primary = originalPrimary;
+    }
+  });
+
   it("returns 404 when chat belongs to another user", async () => {
-    setCobuildDbResponse(chat, [{ user: "0xdef0000000000000000000000000000000000000" }]);
+    setCobuildDbResponse(chat, [
+      { user: "0xdef0000000000000000000000000000000000000", type: "chat-default" },
+    ]);
     isAiUsageAvailableMock.mockResolvedValue(true);
 
     const reply = createReply();
@@ -497,7 +589,7 @@ describe("handleChatPostRequest", () => {
     expect(result).toBeUndefined();
   });
 
-  it("skips db lookup when a valid grant matches the chat", async () => {
+  it("avoids issuing a new grant when a valid grant matches the chat", async () => {
     isAiUsageAvailableMock.mockResolvedValue(true);
     verifyChatGrantMock.mockResolvedValue({
       cid: baseBody.id,
@@ -510,8 +602,23 @@ describe("handleChatPostRequest", () => {
     const reply = createReply();
     await handleChatPostRequest(buildRequest(baseBody, { "x-chat-grant": "grant" }), reply);
 
-    expect(getDbCallCount(chat)).toBe(0);
+    expect(getDbCallCount(chat)).toBe(1);
     expect(signChatGrantMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when request type does not match stored chat type", async () => {
+    setCobuildDbResponse(chat, [
+      { user: "0xabc0000000000000000000000000000000000000", type: "chat-special" },
+    ]);
+    isAiUsageAvailableMock.mockResolvedValue(true);
+
+    const reply = createReply();
+    const result = await handleChatPostRequest(buildRequest(baseBody), reply);
+
+    expect(reply.status).toHaveBeenCalledWith(400);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Chat type mismatch" });
+    expect(streamTextMock).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
   });
 
   it("issues a chat grant header when a grant is missing", async () => {
@@ -580,8 +687,31 @@ describe("handleChatPostRequest", () => {
     if (!options?.onError) throw new Error("Expected onError to be captured");
 
     const message = options.onError(new Error("boom"));
-    expect(message).toBe("boom");
+    expect(message).toBe("Something went wrong generating a response. Please retry.");
     expect(markAssistantMessageFailedMock).toHaveBeenCalled();
+  });
+
+  it("swallows mark-assistant-message failures", async () => {
+    isAiUsageAvailableMock.mockResolvedValue(true);
+    convertToModelMessagesMock.mockResolvedValue([]);
+    const { result, toUIMessageStream } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
+    markAssistantMessageFailedMock.mockRejectedValueOnce(new Error("write failed"));
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const reply = createReply();
+    await handleChatPostRequest(buildRequest(baseBody), reply);
+
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    if (!options?.onError) throw new Error("Expected onError to be captured");
+    options.onError(new Error("boom"));
+
+    await Promise.resolve();
+    expect(warnSpy).toHaveBeenCalledWith(
+      "mark assistant message failed",
+      expect.objectContaining({ message: "write failed" }),
+    );
+    warnSpy.mockRestore();
   });
 
   it("logs debug info when chat debug is enabled", async () => {

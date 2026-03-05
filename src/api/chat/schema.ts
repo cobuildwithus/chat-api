@@ -12,7 +12,7 @@ export const chatSchema = {
           required: ["id", "role", "parts"],
           properties: {
             id: { type: "string" },
-            role: { enum: ["system", "user", "assistant"] },
+            role: { enum: ["user", "assistant"] },
             metadata: {
               type: "object",
               additionalProperties: true,

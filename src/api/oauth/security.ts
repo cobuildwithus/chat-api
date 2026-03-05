@@ -11,7 +11,7 @@ import {
   verifyPkceS256 as verifyPkceS256FromWire,
 } from "@cobuild/wire";
 
-const DEFAULT_DEV_TOKEN_PEPPER = "dev-build-bot-token-pepper";
+const DEFAULT_DEV_TOKEN_PEPPER = "dev-cli-token-pepper";
 
 export const OAUTH_AUTH_CODE_TTL_MS = 5 * 60_000;
 export const OAUTH_ACCESS_TOKEN_TTL_SECONDS = 10 * 60;
@@ -19,21 +19,21 @@ export const OAUTH_REFRESH_TOKEN_TTL_READ_ONLY_MS = 90 * 24 * 60 * 60_000;
 export const OAUTH_REFRESH_TOKEN_TTL_WRITE_MS = 30 * 24 * 60 * 60_000;
 export { CLI_OAUTH_PUBLIC_CLIENT_ID, CLI_OAUTH_REDIRECT_PATH };
 
-function getBuildBotTokenPepper(): string {
-  const configured = process.env.BUILD_BOT_TOKEN_PEPPER?.trim();
+function getCliTokenPepper(): string {
+  const configured = process.env.CLI_TOKEN_PEPPER?.trim();
   if (configured) {
     return configured;
   }
 
   if (process.env.NODE_ENV === "production") {
-    throw new Error("Missing BUILD_BOT_TOKEN_PEPPER");
+    throw new Error("Missing CLI_TOKEN_PEPPER");
   }
 
   return DEFAULT_DEV_TOKEN_PEPPER;
 }
 
 export function digestOAuthSecret(rawSecret: string): string {
-  return createHmac("sha256", getBuildBotTokenPepper()).update(rawSecret).digest("hex");
+  return createHmac("sha256", getCliTokenPepper()).update(rawSecret).digest("hex");
 }
 
 export function createOAuthSecret(bytes = 32): string {

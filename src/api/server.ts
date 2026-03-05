@@ -42,6 +42,7 @@ import { digestOAuthSecret } from "./oauth/security";
 
 const DEFAULT_PROD_ORIGINS = ["https://co.build", "https://www.co.build"];
 const DEFAULT_SOURCE_URL = "https://github.com/cobuildwithus/chat-api";
+type TrustProxySetting = boolean | number | string | string[];
 const SERVER_TIMEOUTS = {
   headersTimeoutMs: 60_000,
   requestTimeoutMs: 120_000,
@@ -97,8 +98,45 @@ const getSourceUrl = () => {
   return DEFAULT_SOURCE_URL;
 };
 
+const getTrustProxySetting = (): TrustProxySetting => {
+  const raw = process.env.CHAT_TRUST_PROXY?.trim();
+  if (!raw) {
+    return false;
+  }
+
+  const normalized = raw.toLowerCase();
+  if (normalized === "1" || normalized === "true" || normalized === "yes") {
+    return true;
+  }
+  if (normalized === "0" || normalized === "false" || normalized === "no") {
+    return false;
+  }
+
+  if (/^\d+$/.test(raw)) {
+    return Number(raw);
+  }
+
+  if (raw.includes(",")) {
+    const trusted = raw
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+    if (trusted.length > 1) {
+      return trusted;
+    }
+    if (trusted.length === 1) {
+      return trusted[0];
+    }
+    return false;
+  }
+
+  return raw;
+};
+
 export const setupServer = async () => {
-  const server = fastify();
+  const server = fastify({
+    trustProxy: getTrustProxySetting(),
+  });
   applyServerTimeouts(server.server);
   server.register(fastifyRequestContext);
   registerRequestLogging(server);

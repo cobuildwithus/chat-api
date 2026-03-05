@@ -51,6 +51,39 @@ describe("storeChatMessages", () => {
     expect(generateChatTitleMock).not.toHaveBeenCalled();
   });
 
+  it("persists message replacement inside one transaction", async () => {
+    setCobuildDbResponse(chatMessage, []);
+    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
+    const txSpy = vi.spyOn(cobuildDb, "transaction");
+
+    await storeChatMessages({
+      chatId: "chat-tx",
+      messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }],
+      type: "chat-default",
+      data: {},
+      user: baseUser,
+    });
+
+    expect(txSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("acquires a per-chat advisory lock before replacing messages", async () => {
+    setCobuildDbResponse(chatMessage, []);
+    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
+    const executeSpy = vi.spyOn(cobuildDb, "execute");
+
+    await storeChatMessages({
+      chatId: "chat-lock",
+      messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }],
+      type: "chat-default",
+      data: {},
+      user: baseUser,
+      generateTitle: false,
+    });
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("generates and stores a title when missing", async () => {
     setCobuildDbResponse(chat, [{ title: null }]);
     setCobuildDbResponse(chatMessage, []);
@@ -121,7 +154,96 @@ describe("storeChatMessages", () => {
     expect(generateChatTitleMock).not.toHaveBeenCalled();
   });
 
-  it("assigns ids for new messages without ids", async () => {
+  it("keeps chat owner and type immutable on upsert", async () => {
+    setCobuildDbResponse(chatMessage, []);
+    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
+
+    let onConflictSet: Record<string, unknown> | null = null;
+    const originalInsert = cobuildDb.insert.bind(cobuildDb);
+    type InsertTable = Parameters<typeof originalInsert>[0];
+    const insertSpy = vi.spyOn(cobuildDb, "insert").mockImplementation((table: InsertTable) => {
+      const chain = originalInsert(table) as any;
+      if (table !== chat) return chain;
+      return {
+        values: (vals: any) => {
+          const valuesChain = chain.values(vals);
+          const originalOnConflictDoUpdate = valuesChain.onConflictDoUpdate?.bind(valuesChain);
+          return {
+            ...valuesChain,
+            onConflictDoUpdate: (opts: any) => {
+              onConflictSet = opts?.set ?? null;
+              if (!originalOnConflictDoUpdate) return Promise.resolve([]);
+              return originalOnConflictDoUpdate(opts);
+            },
+          };
+        },
+      } as any;
+    });
+
+    await storeChatMessages({
+      chatId: "chat-immutable",
+      messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }],
+      type: "chat-default",
+      data: { goalAddress: "0xabc0000000000000000000000000000000000000" },
+      user: baseUser,
+    });
+
+    expect(onConflictSet).toBeTruthy();
+    expect(onConflictSet).toEqual(
+      expect.objectContaining({
+        data: { goalAddress: "0xabc0000000000000000000000000000000000000" },
+      }),
+    );
+    expect(onConflictSet).toHaveProperty("updatedAt");
+    expect(onConflictSet).not.toHaveProperty("user");
+    expect(onConflictSet).not.toHaveProperty("type");
+    insertSpy.mockRestore();
+  });
+
+  it("uses primary transaction reads for existing-message mapping", async () => {
+    const originalPrimary = cobuildDb.$primary as any;
+    const selectFromPrimary = vi.fn(() => {
+      const chain = {
+        limit: (_n?: number) => chain,
+        orderBy: (_o?: unknown) => chain,
+        groupBy: (_cols?: unknown) => Promise.resolve([]),
+        then: (resolve: (rows: unknown[]) => unknown) => resolve([]),
+      };
+      return {
+        from: (_table: unknown) => ({
+          where: (_cond?: unknown) => chain,
+        }),
+      };
+    });
+    const primaryDb = {
+      ...cobuildDb,
+      select: selectFromPrimary,
+      transaction: async <T>(fn: (tx: any) => Promise<T>) => fn(primaryDb),
+    };
+    cobuildDb.$primary = primaryDb as any;
+
+    const replicaSelectSpy = vi.spyOn(cobuildDb, "select").mockImplementation(() => {
+      throw new Error("Replica read path should not be used in storeChatMessages");
+    });
+
+    try {
+      await storeChatMessages({
+        chatId: "chat-primary-only",
+        messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }],
+        type: "chat-default",
+        data: {},
+        user: baseUser,
+        generateTitle: false,
+      });
+      expect(selectFromPrimary).toHaveBeenCalled();
+      expect(replicaSelectSpy).not.toHaveBeenCalled();
+    } finally {
+      replicaSelectSpy.mockRestore();
+      cobuildDb.$primary = originalPrimary;
+    }
+  });
+
+  it("assigns server ids for new messages", async () => {
     setCobuildDbResponse(chatMessage, []);
     setCobuildDbResponse(chat, [{ title: "Existing title" }]);
 
@@ -235,7 +357,7 @@ describe("storeChatMessages", () => {
 
     await storeChatMessages({
       chatId: "chat-4c",
-      messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] } as UIMessage],
+      messages: [{ id: "retry-user-id", role: "user", parts: [{ type: "text", text: "hi" }] }],
       type: "chat-default",
       data: {},
       user: baseUser,
@@ -248,6 +370,21 @@ describe("storeChatMessages", () => {
     );
     expect(insertedRows[0]?.createdAt).toBe(createdAt);
     insertSpy.mockRestore();
+  });
+
+  it("throws when a message id is missing", async () => {
+    setCobuildDbResponse(chatMessage, []);
+    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
+
+    await expect(
+      storeChatMessages({
+        chatId: "chat-missing-id",
+        messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] } as UIMessage],
+        type: "chat-default",
+        data: {},
+        user: baseUser,
+      }),
+    ).rejects.toThrow("Message at index 0 is missing an id.");
   });
 
   it("skips title generation when no user message exists", async () => {

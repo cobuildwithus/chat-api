@@ -29,7 +29,7 @@ describe("handleChatListRequest", () => {
       {
         id: "chat-1",
         title: "Goal One",
-        data: "{\"goalAddress\":\"0xAbC0000000000000000000000000000000000000\"}",
+        data: { goalAddress: "0xAbC0000000000000000000000000000000000000" },
         type: "chat-default",
         updatedAt: now,
         createdAt: now,
@@ -37,7 +37,7 @@ describe("handleChatListRequest", () => {
       {
         id: "chat-2",
         title: "Goal Two",
-        data: "{\"goalAddress\":\"0xdef0000000000000000000000000000000000000\"}",
+        data: { goalAddress: "0xdef0000000000000000000000000000000000000" },
         type: "chat-default",
         updatedAt: now,
         createdAt: now,
@@ -77,7 +77,7 @@ describe("handleChatListRequest", () => {
       {
         id: "chat-1",
         title: null,
-        data: "{}",
+        data: {},
         type: "chat-default",
         updatedAt: now,
         createdAt: now,

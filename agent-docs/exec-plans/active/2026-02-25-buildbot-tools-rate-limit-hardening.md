@@ -1,7 +1,7 @@
-# Buildbot Tools Rate-Limit Hardening (2026-02-25)
+# CLI Tools Rate-Limit Hardening (2026-02-25)
 
 ## Goal
-Fix high-severity buildbot tools limiter issues so rate limiting is enforceable and not trivially bypassed.
+Fix high-severity cli tools limiter issues so rate limiting is enforceable and not trivially bypassed.
 
 ## Scope
 - Correct usage event recording so repeated requests accumulate reliably.
@@ -15,7 +15,7 @@ Fix high-severity buildbot tools limiter issues so rate limiting is enforceable 
 
 ## Plan
 1. Patch rate-limit storage encoding to avoid ZSET member collisions.
-2. Patch buildbot tools limiter keying and retry handling internals.
+2. Patch cli tools limiter keying and retry handling internals.
 3. Add regression tests for keying and usage-event encoding.
 4. Run completion workflow audits and required verification gates.
 

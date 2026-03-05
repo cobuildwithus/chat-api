@@ -6,10 +6,10 @@ import {
   type CliJwtVerifiedClaims,
 } from "@cobuild/wire";
 import {
-  getBuildBotJwtAudience,
-  getBuildBotJwtIssuer,
-  getBuildBotJwtPrivateKey,
-  getBuildBotJwtPublicKey,
+  getCliJwtAudience,
+  getCliJwtIssuer,
+  getCliJwtPrivateKey,
+  getCliJwtPublicKey,
 } from "../../config/env";
 import { OAUTH_ACCESS_TOKEN_TTL_SECONDS } from "./security";
 
@@ -27,8 +27,8 @@ export type { CliAccessTokenClaims };
 type VerifiedCliAccessTokenClaims = CliJwtVerifiedClaims;
 
 async function getSigningKeys(): Promise<CachedKeys> {
-  const privateKeyPem = getBuildBotJwtPrivateKey();
-  const publicKeyPem = getBuildBotJwtPublicKey();
+  const privateKeyPem = getCliJwtPrivateKey();
+  const publicKeyPem = getCliJwtPublicKey();
 
   if (
     cachedKeys &&
@@ -57,8 +57,8 @@ async function getSigningKeys(): Promise<CachedKeys> {
 
 export async function signCliAccessToken(claims: CliAccessTokenClaims): Promise<string> {
   const { privateKey } = await getSigningKeys();
-  const issuer = getBuildBotJwtIssuer();
-  const audience = getBuildBotJwtAudience();
+  const issuer = getCliJwtIssuer();
+  const audience = getCliJwtAudience();
 
   return await new jose.SignJWT({
     sid: claims.sid,
@@ -83,8 +83,8 @@ export async function verifyCliAccessToken(
   token: string
 ): Promise<VerifiedCliAccessTokenClaims | null> {
   const { publicKey } = await getSigningKeys();
-  const issuer = getBuildBotJwtIssuer();
-  const audience = getBuildBotJwtAudience();
+  const issuer = getCliJwtIssuer();
+  const audience = getCliJwtAudience();
 
   try {
     const { payload } = await jose.jwtVerify(token, publicKey, {
