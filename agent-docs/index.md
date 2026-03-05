@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-05 (oauth/tool auth dedup to wire; tools read-scope enforcement; oauth token/session transactional flow hardening; db schema domain split; canonical schema migration baseline; review-gpt direct package entry)
+Last verified: 2026-03-05 (oauth/tool auth dedup to wire; tools read-scope enforcement; oauth token/session transactional flow hardening; db schema domain split; canonical schema migration baseline; review-gpt direct package entry; docs-drift simplification)
 
 ## Purpose
 
