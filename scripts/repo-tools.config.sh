@@ -50,3 +50,27 @@ export COBUILD_DRIFT_CHANGED_COUNT_EXCLUDE_PATTERN='^agent-docs/generated/|^agen
 export COBUILD_DRIFT_ALLOW_RELEASE_ARTIFACTS_ONLY='0'
 export COBUILD_COMMITTER_EXAMPLE='fix(chat-api): guard request context drift'
 export COBUILD_DOC_GARDENING_EXTRA_TRACKED_PATHS=ARCHITECTURE.md$'\n'
+export COBUILD_AUDIT_CONTEXT_PREFIX='cobuild-chat-api-audit'
+export COBUILD_AUDIT_CONTEXT_TITLE='Cobuild Chat API Audit Bundle'
+export COBUILD_AUDIT_CONTEXT_REPO_LABEL='chat-api'
+repo_tools_join_lines COBUILD_AUDIT_CONTEXT_ALWAYS_PATHS \
+  "AGENTS.md" \
+  "ARCHITECTURE.md" \
+  "README.md" \
+  "package.json" \
+  "pnpm-lock.yaml" \
+  "tsconfig.json" \
+  "tsconfig.build.json" \
+  "vitest.config.ts"
+repo_tools_join_lines COBUILD_AUDIT_CONTEXT_SCAN_SPECS \
+  "src" \
+  "scripts" \
+  "migrations" \
+  "docs"
+repo_tools_join_lines COBUILD_AUDIT_CONTEXT_TEST_SCAN_SPECS \
+  "tests" \
+  "test"
+repo_tools_join_lines COBUILD_AUDIT_CONTEXT_DOC_SCAN_SPECS \
+  "agent-docs:*.md"
+repo_tools_join_lines COBUILD_AUDIT_CONTEXT_CI_SCAN_SPECS \
+  ".github/workflows"
