@@ -32,7 +32,7 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "@cobuild/repo-tools": "^0.1.7",
+    "@cobuild/repo-tools": "^0.1.6",
     "@cobuild/review-gpt": "^0.2.13",
     "@tsconfig/recommended": "^1.0.1",
     "@types/node": "^22.14.1",
