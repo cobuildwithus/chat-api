@@ -2,6 +2,7 @@
 
 ## Local Verification Baseline
 
+- `pnpm wire:ensure-published`
 - `pnpm typecheck`
 - `pnpm test`
 - `pnpm test:coverage`
@@ -18,6 +19,7 @@
 - Local pre-commit runs doc gardening only when docs/governance files are staged.
 - Plan lifecycle: `scripts/open-exec-plan.sh`, `scripts/close-exec-plan.sh`
 - Selective commits: `scripts/committer`
+- Published dependency guard: `scripts/wire-ensure-published.sh` (must resolve the installed repo-tools binary and reject committed local-link `@cobuild/wire` specs)
 - Oracle review + packaged audit context: `pnpm review:gpt`
 
 ## CI Posture
@@ -31,6 +33,7 @@ CI gates enforce docs/process checks plus TypeScript verification:
 
 - `bash scripts/check-agent-docs-drift.sh`
 - `bash scripts/doc-gardening.sh --fail-on-issues`
+- `pnpm wire:ensure-published`
 - `pnpm typecheck`
 - `pnpm test`
 - `pnpm test:coverage`
