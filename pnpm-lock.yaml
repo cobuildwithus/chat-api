@@ -52,8 +52,8 @@ importers:
         version: 4.3.5
     devDependencies:
       '@cobuild/repo-tools':
-        specifier: ^0.1.6
-        version: 0.1.6
+        specifier: ^0.1.8
+        version: 0.1.8
       '@cobuild/review-gpt':
         specifier: ^0.2.13
         version: 0.2.13
@@ -136,8 +136,8 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
-  '@cobuild/repo-tools@0.1.6':
-    resolution: {integrity: sha512-gp+zbbsupxYzqTId1sTJuBL1NzirCbo41SdRJeeaYwh1LzdubawikNEy5qWi4SNCplxQZ/OF73fFIn2Bu7Ovew==}
+  '@cobuild/repo-tools@0.1.8':
+    resolution: {integrity: sha512-Z/0PFzwL0pckp6fh/axd++ltcbme9TIdH1hIJXkOH49rrbOJdOjlWTkSv5NqbWrRiAU3tBBtbeIAteLKz8lGZg==}
     hasBin: true
 
   '@cobuild/review-gpt@0.2.13':
@@ -1708,7 +1708,7 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@cobuild/repo-tools@0.1.6': {}
+  '@cobuild/repo-tools@0.1.8': {}
 
   '@cobuild/review-gpt@0.2.13': {}
 
