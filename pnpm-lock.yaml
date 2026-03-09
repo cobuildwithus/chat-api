@@ -12,8 +12,8 @@ importers:
         specifier: ^3.0.9
         version: 3.0.14(zod@4.3.5)
       '@cobuild/wire':
-        specifier: ^0.1.3
-        version: 0.1.3(typescript@5.9.3)(zod@4.3.5)
+        specifier: ^0.1.6
+        version: 0.1.6(typescript@5.9.3)(zod@4.3.5)
       '@fastify/cors':
         specifier: ^10.0.2
         version: 10.1.0
@@ -144,8 +144,8 @@ packages:
     resolution: {integrity: sha512-wxpb5fwLya/DjNlBS1YOzqrccPk73OoEFxViMpMVDmIfI+UjcA16qSzO+hLndwpGAY3Xnzbk2yMvlZvtrlkDbw==}
     hasBin: true
 
-  '@cobuild/wire@0.1.3':
-    resolution: {integrity: sha512-A1ou+4+i/BCwpvEG+iVRB4FiKQUB1ai4ytlh4SurvpOSfcnSts/rma+Kn0TAb5NoZFMHS97BcZHaLmkGpe/FWA==}
+  '@cobuild/wire@0.1.6':
+    resolution: {integrity: sha512-6cuKwJNqQ1xNjHK2kaS/wS9ZhNlPJXvpT8shaXaDzZ+f7Zt1n6QL0Eom+nrSsL9B5USPPo8ljE1qs88sM/xMeQ==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -1712,7 +1712,7 @@ snapshots:
 
   '@cobuild/review-gpt@0.2.15': {}
 
-  '@cobuild/wire@0.1.3(typescript@5.9.3)(zod@4.3.5)':
+  '@cobuild/wire@0.1.6(typescript@5.9.3)(zod@4.3.5)':
     dependencies:
       viem: 2.46.3(typescript@5.9.3)(zod@4.3.5)
     transitivePeerDependencies:

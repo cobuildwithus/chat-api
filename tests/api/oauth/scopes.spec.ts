@@ -25,7 +25,7 @@ describe("oauth scope helpers", () => {
     expect(() => validateScope("tools:read")).toThrow("scope must include offline_access");
     expect(() => validateScope("admin:all offline_access")).toThrow("Unsupported scope: admin:all");
     expect(() => validateScope("tools:read offline_access")).toThrow(
-      "scope must match either the default read bundle or the full write bundle"
+      "scope must match one of the supported read/write bundles, with or without notifications:read"
     );
   });
 
