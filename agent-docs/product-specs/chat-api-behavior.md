@@ -82,6 +82,7 @@ Request body:
 Behavior:
 - require bearer token `Authorization: Bearer <bbt_...>`
 - if header is missing or invalid, return `401`
+- if the resolved tool declares additional required scopes and the token does not include them, return `403`
 - executes canonical tool registry entry and returns `{ ok, name, output }`
 
 Error behavior:

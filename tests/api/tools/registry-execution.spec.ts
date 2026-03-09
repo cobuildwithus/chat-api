@@ -25,6 +25,9 @@ vi.mock("../../../src/infra/db/cobuildDb", () => ({
     select: mocks.select,
     execute: mocks.execute,
   },
+  cobuildPrimaryDb: () => ({
+    execute: mocks.execute,
+  }),
 }));
 
 vi.mock("../../../src/infra/http/timeout", () => ({
@@ -309,6 +312,118 @@ describe("tool registry execution", () => {
       functionName: "balanceOf",
       args: ["0x00000000000000000000000000000000000000aa"],
     });
+  });
+
+  it("executes list-wallet-notifications with cursor pagination and unread state", async () => {
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x00000000000000000000000000000000000000aA",
+      agentKey: "default",
+    });
+    mocks.execute
+      .mockResolvedValueOnce({
+        rows: [{ count: "2", watermark: "1741435200000001" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: "11",
+            kind: "discussion",
+            reason: "mention",
+            eventAt: "2026-03-08T12:00:00.000Z",
+            createdAt: "2026-03-08T12:00:03.000Z",
+            isUnread: true,
+            sourceType: "farcaster_cast",
+            sourceId: "0xabc123",
+            sourceHashHex: "a".repeat(40),
+            rootHashHex: "b".repeat(40),
+            targetHashHex: "c".repeat(40),
+            actorFid: 99,
+            actorWalletAddress: null,
+            actorUsername: "alice",
+            actorDisplayName: "Alice",
+            actorAvatarUrl: "https://example.com/a.png",
+            sourceText: "Alice mentioned you in a reply",
+            rootText: "Root post title",
+            payload: { foo: "bar" },
+          },
+          {
+            id: "10",
+            kind: "payment",
+            reason: "received",
+            eventAt: "2026-03-08T11:00:00.000Z",
+            createdAt: "2026-03-08T11:00:01.000Z",
+            isUnread: false,
+            sourceType: "payment",
+            sourceId: "payment_1",
+            sourceHashHex: null,
+            rootHashHex: null,
+            targetHashHex: null,
+            actorFid: null,
+            actorWalletAddress: "0x0000000000000000000000000000000000000002",
+            actorUsername: null,
+            actorDisplayName: null,
+            actorAvatarUrl: null,
+            sourceText: null,
+            rootText: null,
+            payload: { amount: "5" },
+          },
+        ],
+      });
+
+    const result = await executeTool("list-wallet-notifications", {
+      limit: 1,
+      unreadOnly: true,
+      kinds: ["discussion", "payment"],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      name: "list-wallet-notifications",
+      output: {
+        subjectWalletAddress: "0x00000000000000000000000000000000000000aa",
+        items: [
+          {
+            id: "11",
+            kind: "discussion",
+            reason: "mention",
+            eventAt: "2026-03-08T12:00:00.000Z",
+            createdAt: "2026-03-08T12:00:03.000Z",
+            isUnread: true,
+            actor: {
+              fid: 99,
+              walletAddress: null,
+              name: "Alice",
+              username: "alice",
+              avatarUrl: "https://example.com/a.png",
+            },
+            summary: {
+              title: "Root post title",
+              excerpt: "Alice mentioned you in a reply",
+            },
+            resource: {
+              sourceType: "farcaster_cast",
+              sourceId: "0xabc123",
+              sourceHash: `0x${"a".repeat(40)}`,
+              rootHash: `0x${"b".repeat(40)}`,
+              targetHash: `0x${"c".repeat(40)}`,
+              appPath: `/cast/0x${"b".repeat(40)}?post=0x${"a".repeat(40)}`,
+            },
+            payload: { foo: "bar" },
+          },
+        ],
+        pageInfo: {
+          limit: 1,
+          nextCursor: expect.any(String),
+          hasMore: true,
+        },
+        unread: {
+          count: 2,
+          watermark: "1741435200000001",
+        },
+      },
+      cacheControl: "no-store",
+    });
+    expect(mocks.execute).toHaveBeenCalledTimes(2);
   });
 
   it("returns request-scoped agentKey even when wallet balances are cached", async () => {
@@ -894,6 +1009,65 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("covers list-wallet-notifications validation and auth branches", async () => {
+    expect(await executeTool("list-wallet-notifications", { limit: 0 })).toEqual({
+      ok: false,
+      name: "list-wallet-notifications",
+      statusCode: 400,
+      error: "limit must be between 1 and 50.",
+    });
+
+    expect(await executeTool("list-wallet-notifications", { unreadOnly: "yes" })).toEqual({
+      ok: false,
+      name: "list-wallet-notifications",
+      statusCode: 400,
+      error: "unreadOnly must be a boolean.",
+    });
+
+    expect(await executeTool("list-wallet-notifications", { kinds: ["unknown"] })).toEqual({
+      ok: false,
+      name: "list-wallet-notifications",
+      statusCode: 400,
+      error: 'kinds may only include "discussion", "payment", or "protocol".',
+    });
+
+    const unexpectedFieldResult = await executeTool("list-wallet-notifications", {
+      walletAddress: "0x0000000000000000000000000000000000000001",
+    });
+    expect(unexpectedFieldResult.ok).toBe(false);
+    if (!unexpectedFieldResult.ok) {
+      expect(unexpectedFieldResult.statusCode).toBe(400);
+      expect(unexpectedFieldResult.error).toContain("walletAddress");
+    }
+
+    mocks.requestContextGet.mockReturnValue(undefined);
+    expect(await executeTool("list-wallet-notifications", {})).toEqual({
+      ok: false,
+      name: "list-wallet-notifications",
+      statusCode: 401,
+      error: "Authenticated subject wallet is required to list wallet notifications.",
+    });
+
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+    });
+    expect(await executeTool("list-wallet-notifications", { cursor: "bad-cursor" })).toEqual({
+      ok: false,
+      name: "list-wallet-notifications",
+      statusCode: 400,
+      error: "cursor must be a valid notifications cursor.",
+    });
+
+    mocks.execute.mockRejectedValueOnce(new Error("db unavailable"));
+    expect(await executeTool("list-wallet-notifications", {})).toEqual({
+      ok: false,
+      name: "list-wallet-notifications",
+      statusCode: 502,
+      error: "list-wallet-notifications request failed: db unavailable",
+    });
+  });
+
   it("executes get-wallet-balances on base-sepolia and accepts matching explicit agent", async () => {
     const getBalance = vi.fn().mockResolvedValue(10000000000000000n);
     const readContract = vi.fn().mockResolvedValue(500000n);
@@ -927,7 +1101,7 @@ describe("tool registry execution", () => {
     });
   });
 
-  it("returns 500 when tools principal owner address is invalid", async () => {
+  it("returns 401 when tools principal owner address is invalid", async () => {
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "not-an-address",
       agentKey: "default",
@@ -936,8 +1110,8 @@ describe("tool registry execution", () => {
     expect(await executeTool("get-wallet-balances", {})).toEqual({
       ok: false,
       name: "get-wallet-balances",
-      statusCode: 500,
-      error: "Authenticated tools principal has an invalid owner address.",
+      statusCode: 401,
+      error: "Authenticated tools principal is required to fetch wallet balances.",
     });
   });
 

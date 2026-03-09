@@ -10,16 +10,16 @@ import { createReply } from "../../utils/fastify";
 const mocks = vi.hoisted(() => ({
   listToolMetadata: vi.fn(),
   resolveToolMetadata: vi.fn(),
+  resolveToolAuthPolicy: vi.fn(),
   executeTool: vi.fn(),
-  requiresWriteScopeForTool: vi.fn(),
   requestContextGet: vi.fn(),
 }));
 
 vi.mock("../../../src/tools/registry", () => ({
   listToolMetadata: mocks.listToolMetadata,
   resolveToolMetadata: mocks.resolveToolMetadata,
+  resolveToolAuthPolicy: mocks.resolveToolAuthPolicy,
   executeTool: mocks.executeTool,
-  requiresWriteScopeForTool: mocks.requiresWriteScopeForTool,
 }));
 
 vi.mock("@fastify/request-context", () => ({
@@ -40,6 +40,7 @@ describe("tools v1 handlers", () => {
         description: "desc",
         inputSchema: { type: "object" },
         scopes: ["cli-tools"],
+        authPolicy: { requiredScopes: ["tools:read"], walletBinding: "none" },
         sideEffects: "read",
         version: "1.0.0",
         deprecated: false,
@@ -56,6 +57,7 @@ describe("tools v1 handlers", () => {
           description: "desc",
           inputSchema: { type: "object" },
           scopes: ["cli-tools"],
+          authPolicy: { requiredScopes: ["tools:read"], walletBinding: "none" },
           sideEffects: "read",
           version: "1.0.0",
           deprecated: false,
@@ -70,6 +72,7 @@ describe("tools v1 handlers", () => {
       description: "desc",
       inputSchema: { type: "object" },
       scopes: ["docs"],
+      authPolicy: { requiredScopes: ["tools:read"], walletBinding: "none" },
       sideEffects: "network-read",
       version: "1.0.0",
       deprecated: false,
@@ -91,6 +94,7 @@ describe("tools v1 handlers", () => {
         description: "desc",
         inputSchema: { type: "object" },
         scopes: ["docs"],
+        authPolicy: { requiredScopes: ["tools:read"], walletBinding: "none" },
         sideEffects: "network-read",
         version: "1.0.0",
         deprecated: false,
@@ -117,7 +121,10 @@ describe("tools v1 handlers", () => {
   });
 
   it("returns execution output and applies cache control", async () => {
-    mocks.requiresWriteScopeForTool.mockReturnValueOnce(false);
+    mocks.resolveToolAuthPolicy.mockReturnValueOnce({
+      requiredScopes: ["tools:read"],
+      walletBinding: "none",
+    });
     mocks.requestContextGet.mockReturnValueOnce(undefined);
     mocks.executeTool.mockResolvedValueOnce({
       ok: true,
@@ -147,7 +154,10 @@ describe("tools v1 handlers", () => {
   });
 
   it("returns execution errors with propagated status code", async () => {
-    mocks.requiresWriteScopeForTool.mockReturnValueOnce(false);
+    mocks.resolveToolAuthPolicy.mockReturnValueOnce({
+      requiredScopes: ["tools:read"],
+      walletBinding: "none",
+    });
     mocks.requestContextGet.mockReturnValueOnce(undefined);
     mocks.executeTool.mockResolvedValueOnce({
       ok: false,
@@ -175,7 +185,10 @@ describe("tools v1 handlers", () => {
   });
 
   it("defaults missing input to an empty object", async () => {
-    mocks.requiresWriteScopeForTool.mockReturnValueOnce(false);
+    mocks.resolveToolAuthPolicy.mockReturnValueOnce({
+      requiredScopes: ["tools:read"],
+      walletBinding: "none",
+    });
     mocks.requestContextGet.mockReturnValueOnce(undefined);
     mocks.executeTool.mockResolvedValueOnce({
       ok: true,
@@ -200,8 +213,11 @@ describe("tools v1 handlers", () => {
     });
   });
 
-  it("rejects write tools when principal lacks write scope", async () => {
-    mocks.requiresWriteScopeForTool.mockReturnValueOnce(true);
+  it("rejects tools when the token is missing a required scope", async () => {
+    mocks.resolveToolAuthPolicy.mockReturnValueOnce({
+      requiredScopes: ["tools:read", "notifications:read"],
+      walletBinding: "subject-wallet",
+    });
     mocks.requestContextGet.mockReturnValueOnce({
       sessionId: "42",
       ownerAddress: "0x0000000000000000000000000000000000000001",
@@ -214,7 +230,7 @@ describe("tools v1 handlers", () => {
     });
     const request = {
       body: {
-        name: "network-write-tool",
+        name: "list-wallet-notifications",
         input: {},
       },
     } as FastifyRequest;
@@ -226,27 +242,36 @@ describe("tools v1 handlers", () => {
     expect(reply.status).toHaveBeenCalledWith(403);
     expect(reply.send).toHaveBeenCalledWith({
       ok: false,
-      name: "network-write-tool",
+      name: "list-wallet-notifications",
       statusCode: 403,
-      error: "This token does not have tools:write scope for the requested tool.",
+      error: "This token does not have notifications:read scope for the requested tool.",
     });
   });
 
-  it("rejects write tools when principal lacks wallet:execute scope", async () => {
-    mocks.requiresWriteScopeForTool.mockReturnValueOnce(true);
+  it("allows execution when the token satisfies all required scopes", async () => {
+    mocks.resolveToolAuthPolicy.mockReturnValueOnce({
+      requiredScopes: ["tools:read", "notifications:read"],
+      walletBinding: "subject-wallet",
+    });
     mocks.requestContextGet.mockReturnValueOnce({
       sessionId: "42",
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
-      scope: "tools:read tools:write wallet:read offline_access",
-      scopes: ["tools:read", "tools:write", "wallet:read", "offline_access"],
-      hasToolsWrite: true,
+      scope: "tools:read notifications:read wallet:read offline_access",
+      scopes: ["tools:read", "notifications:read", "wallet:read", "offline_access"],
+      hasToolsWrite: false,
       hasWalletExecute: false,
-      hasAnyWriteScope: true,
+      hasAnyWriteScope: false,
+    });
+    mocks.executeTool.mockResolvedValueOnce({
+      ok: true,
+      name: "list-wallet-notifications",
+      output: { items: [] },
+      cacheControl: "no-store",
     });
     const request = {
       body: {
-        name: "network-write-tool",
+        name: "list-wallet-notifications",
         input: {},
       },
     } as FastifyRequest;
@@ -254,13 +279,12 @@ describe("tools v1 handlers", () => {
 
     await handleToolExecutionRequest(request, reply);
 
-    expect(mocks.executeTool).not.toHaveBeenCalled();
-    expect(reply.status).toHaveBeenCalledWith(403);
+    expect(mocks.executeTool).toHaveBeenCalledWith("list-wallet-notifications", {});
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(reply.send).toHaveBeenCalledWith({
-      ok: false,
-      name: "network-write-tool",
-      statusCode: 403,
-      error: "This token does not have wallet:execute scope for the requested tool.",
+      ok: true,
+      name: "list-wallet-notifications",
+      output: { items: [] },
     });
   });
 });

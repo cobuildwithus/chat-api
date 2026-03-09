@@ -17,6 +17,8 @@ describe("tool registry", () => {
       expect(tool.name.length).toBeGreaterThan(0);
       expect(typeof tool.description).toBe("string");
       expect(Array.isArray(tool.scopes)).toBe(true);
+      expect(Array.isArray(tool.authPolicy.requiredScopes)).toBe(true);
+      expect(typeof tool.authPolicy.walletBinding).toBe("string");
       expect(tool.version).toBeTruthy();
       expect(typeof tool.deprecated).toBe("boolean");
       expect(tool.inputSchema).toBeTruthy();
@@ -33,6 +35,19 @@ describe("tool registry", () => {
     expect(resolveToolMetadata("listDiscussions")?.name).toBe("list-discussions");
     expect(resolveToolMetadata("getDiscussionThread")?.name).toBe("get-discussion-thread");
     expect(resolveToolMetadata("semanticSearchCasts")?.name).toBe("semantic-search-casts");
+    expect(resolveToolMetadata("listWalletNotifications")?.name).toBe("list-wallet-notifications");
+    expect(resolveToolMetadata("walletNotifications")?.name).toBe("list-wallet-notifications");
+  });
+
+  it("wires exact auth policies for subject-wallet tools", () => {
+    expect(resolveToolMetadata("get-wallet-balances")?.authPolicy).toEqual({
+      requiredScopes: ["tools:read"],
+      walletBinding: "subject-wallet",
+    });
+    expect(resolveToolMetadata("list-wallet-notifications")?.authPolicy).toEqual({
+      requiredScopes: ["tools:read", "notifications:read"],
+      walletBinding: "subject-wallet",
+    });
   });
 
   it("does not resolve removed treasury compatibility aliases", () => {

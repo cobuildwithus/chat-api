@@ -42,6 +42,7 @@ Keep the order stable unless behavior explicitly needs to change.
 
 Example canonical-only CLI tool:
 - `get-wallet-balances` (aliases: `getWalletBalances`, `walletBalances`) is exposed via `/v1/tool-executions` for CLI balance reads and is not registered as a model wrapper.
+- `list-wallet-notifications` (aliases: `listWalletNotifications`, `walletNotifications`) is exposed via `/v1/tool-executions` for subject-wallet inbox reads and is not registered as a model wrapper.
 
 ## Prompt guidance
 

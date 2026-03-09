@@ -1,6 +1,12 @@
 import { eq, sql } from "drizzle-orm";
-import { requestContext } from "@fastify/request-context";
 import { base, baseSepolia } from "viem/chains";
+import {
+  InvalidWalletNotificationsCursorError,
+  WalletNotificationsSubjectRequiredError,
+  listWalletNotifications,
+} from "../domains/notifications/service";
+import { NOTIFICATION_KINDS } from "../domains/notifications/types";
+import { getToolsPrincipalFromContext } from "../domains/notifications/wallet-subject";
 import {
   createPublicClient,
   erc20Abi,
@@ -84,6 +90,11 @@ type WalletBalanceNetwork = "base" | "base-sepolia";
 
 export type ToolSideEffects = "none" | "read" | "network-read" | "network-write";
 export type ToolWriteCapability = "none" | "requires-tools-write";
+export type ToolWalletBinding = "none" | "subject-wallet";
+export type ToolAuthPolicy = {
+  requiredScopes: string[];
+  walletBinding: ToolWalletBinding;
+};
 
 export type ToolMetadata = {
   name: string;
@@ -91,6 +102,7 @@ export type ToolMetadata = {
   inputSchema: JsonSchema;
   outputSchema?: JsonSchema;
   scopes: string[];
+  authPolicy: ToolAuthPolicy;
   sideEffects: ToolSideEffects;
   version: string;
   deprecated: boolean;
@@ -125,7 +137,24 @@ type RegisteredTool = ToolMetadata & ToolCapabilityMetadata & {
   execute: ToolExecute;
 };
 
-type RawRegisteredTool = Omit<RegisteredTool, "inputSchema">;
+type RawRegisteredTool = Omit<RegisteredTool, "inputSchema" | "authPolicy"> & {
+  authPolicy?: ToolAuthPolicy;
+};
+
+const DEFAULT_TOOL_AUTH_POLICY: ToolAuthPolicy = {
+  requiredScopes: ["tools:read"],
+  walletBinding: "none",
+};
+
+const SUBJECT_WALLET_READ_TOOL_AUTH_POLICY: ToolAuthPolicy = {
+  requiredScopes: ["tools:read"],
+  walletBinding: "subject-wallet",
+};
+
+const SUBJECT_WALLET_NOTIFICATIONS_READ_TOOL_AUTH_POLICY: ToolAuthPolicy = {
+  requiredScopes: ["tools:read", "notifications:read"],
+  walletBinding: "subject-wallet",
+};
 
 export function requiresWriteScopeForMetadata(
   tool: Pick<ToolCapabilityMetadata, "writeCapability"> & Pick<ToolMetadata, "sideEffects">,
@@ -467,6 +496,18 @@ function formatToolInputError(toolName: string, error: z.ZodError): string {
     if (field === "network") return 'network must be either "base" or "base-sepolia".';
   }
 
+  if (toolName === "list-wallet-notifications") {
+    if (field === "limit" && issue.code === "invalid_type") return "limit must be an integer.";
+    if (field === "limit" && (issue.code === "too_small" || issue.code === "too_big")) {
+      return "limit must be between 1 and 50.";
+    }
+    if (field === "cursor" && issue.code === "invalid_type") return "cursor must be a string.";
+    if (field === "cursor" && issue.code === "too_small") return "cursor must not be empty.";
+    if (field === "unreadOnly" && issue.code === "invalid_type") return "unreadOnly must be a boolean.";
+    if (field === "kinds" && issue.code === "invalid_type") return "kinds must be an array.";
+    if (field === "kinds") return 'kinds may only include "discussion", "payment", or "protocol".';
+  }
+
   if (toolName === "docs-search") {
     if (field === "query" && issue.code === "invalid_type") return "Query must be a string.";
     if (field === "query" && issue.code === "too_small") return "Query must not be empty.";
@@ -554,6 +595,12 @@ const getWalletBalancesInputSchema = z.object({
   agentKey: z.string().trim().min(1).max(128).optional(),
   network: z.enum(["base", "base-sepolia"]).default("base"),
 }).strict();
+const listWalletNotificationsInputSchema = z.object({
+  limit: z.number().int().min(1).max(50).default(20),
+  cursor: z.string().trim().min(1).max(512).optional(),
+  unreadOnly: z.boolean().default(false),
+  kinds: z.array(z.enum(NOTIFICATION_KINDS)).min(1).max(NOTIFICATION_KINDS.length).optional(),
+}).strict();
 const getTreasuryStatsInputSchema = z.object({}).strict();
 const docsSearchInputSchema = z.object({
   query: z.string().trim().min(1).max(DOCS_SEARCH_QUERY_MAX),
@@ -579,19 +626,6 @@ function getWalletBalanceNetworkConfig(network: WalletBalanceNetwork) {
     rpcUrl: getWalletBalanceRpcUrl(network),
     usdcAddress: BASE_USDC_CONTRACT,
   };
-}
-
-function getToolsPrincipalFromContext(): { ownerAddress: string; agentKey: string } | null {
-  try {
-    const raw = requestContext.get("toolsPrincipal");
-    if (!isRecord(raw)) return null;
-    const ownerAddress = asString(raw.ownerAddress);
-    const agentKey = asString(raw.agentKey);
-    if (!ownerAddress || !agentKey) return null;
-    return { ownerAddress, agentKey };
-  } catch {
-    return null;
-  }
 }
 
 async function executeGetWalletBalances(
@@ -675,6 +709,39 @@ async function executeGetWalletBalances(
     );
   } catch (error) {
     return failure(name, 502, `get-wallet-balances request failed: ${formatErrorMessage(error)}`);
+  }
+}
+
+async function executeListWalletNotifications(
+  input: z.infer<typeof listWalletNotificationsInputSchema>,
+): Promise<ToolExecutionResult> {
+  const name = "list-wallet-notifications";
+
+  try {
+    const output = await listWalletNotifications({
+      limit: input.limit,
+      cursor: input.cursor,
+      unreadOnly: input.unreadOnly,
+      kinds: input.kinds,
+    });
+
+    return success(name, output, NO_STORE_CACHE_CONTROL);
+  } catch (error) {
+    if (error instanceof WalletNotificationsSubjectRequiredError) {
+      return failure(
+        name,
+        401,
+        "Authenticated subject wallet is required to list wallet notifications.",
+      );
+    }
+    if (error instanceof InvalidWalletNotificationsCursorError) {
+      return failure(name, 400, "cursor must be a valid notifications cursor.");
+    }
+    return failure(
+      name,
+      502,
+      `list-wallet-notifications request failed: ${formatErrorMessage(error)}`,
+    );
   }
 }
 
@@ -1521,11 +1588,53 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
       additionalProperties: false,
     },
     scopes: ["cli-tools", "wallet"],
+    authPolicy: SUBJECT_WALLET_READ_TOOL_AUTH_POLICY,
     sideEffects: "network-read",
     writeCapability: "none",
     version: "1.0.0",
     deprecated: false,
     execute: executeGetWalletBalances,
+  },
+  {
+    name: "list-wallet-notifications",
+    aliases: ["listWalletNotifications", "walletNotifications"],
+    description: "List notifications for the authenticated subject wallet inbox.",
+    input: listWalletNotificationsInputSchema,
+    outputSchema: {
+      type: "object",
+      required: ["subjectWalletAddress", "items", "pageInfo", "unread"],
+      properties: {
+        subjectWalletAddress: { type: "string" },
+        items: { type: "array", items: { type: "object" } },
+        pageInfo: {
+          type: "object",
+          required: ["limit", "nextCursor", "hasMore"],
+          properties: {
+            limit: { type: "number" },
+            nextCursor: { anyOf: [{ type: "string" }, { type: "null" }] },
+            hasMore: { type: "boolean" },
+          },
+          additionalProperties: false,
+        },
+        unread: {
+          type: "object",
+          required: ["count", "watermark"],
+          properties: {
+            count: { type: "number" },
+            watermark: { type: "string" },
+          },
+          additionalProperties: false,
+        },
+      },
+      additionalProperties: false,
+    },
+    scopes: ["cli-tools", "wallet", "notifications"],
+    authPolicy: SUBJECT_WALLET_NOTIFICATIONS_READ_TOOL_AUTH_POLICY,
+    sideEffects: "read",
+    writeCapability: "none",
+    version: "1.0.0",
+    deprecated: false,
+    execute: executeListWalletNotifications,
   },
   {
     name: "get-treasury-stats",
@@ -1569,6 +1678,7 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
 
 const TOOL_DEFINITIONS: RegisteredTool[] = RAW_TOOL_DEFINITIONS.map((tool) => ({
   ...tool,
+  authPolicy: tool.authPolicy ?? DEFAULT_TOOL_AUTH_POLICY,
   inputSchema: toToolInputSchema(tool.input),
 }));
 
@@ -1595,6 +1705,7 @@ function toMetadata(tool: RegisteredTool): ToolMetadata {
     inputSchema: tool.inputSchema,
     ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
     scopes: tool.scopes,
+    authPolicy: tool.authPolicy,
     sideEffects: tool.sideEffects,
     version: tool.version,
     deprecated: tool.deprecated,
@@ -1612,6 +1723,11 @@ export function resolveToolMetadata(name: string): ToolMetadata | null {
     return null;
   }
   return toMetadata(tool);
+}
+
+export function resolveToolAuthPolicy(name: string): ToolAuthPolicy | null {
+  const tool = TOOL_LOOKUP.get(normalizeToolLookupKey(name));
+  return tool?.authPolicy ?? null;
 }
 
 export function requiresWriteScopeForTool(name: string): boolean {

@@ -4,5 +4,6 @@ import { resolveToolMetadata } from "../../../src/api/tools/registry";
 describe("api tools registry export", () => {
   it("re-exports tool metadata helpers", () => {
     expect(resolveToolMetadata("get-user")?.name).toBe("get-user");
+    expect(resolveToolMetadata("list-wallet-notifications")?.name).toBe("list-wallet-notifications");
   });
 });

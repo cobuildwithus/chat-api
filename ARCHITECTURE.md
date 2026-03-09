@@ -101,7 +101,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 
 1. Verify bearer token authorization (`Authorization: Bearer <bbt_...>`).
 2. Parse execution request (`name`, optional `input`).
-3. Resolve tool from canonical registry and execute shared tool executor.
+3. Resolve tool auth policy from the canonical registry, enforce any required scopes, and execute the shared tool executor.
 4. Return normalized success (`{ ok, name, output }`) or structured error.
 
 ## AI Layer
@@ -112,6 +112,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 - Stream preparation: `src/api/chat/chat-helpers.ts`.
 - Tool registry: `src/ai/tools/index.ts` and `src/ai/tools/tool.ts`.
 - Canonical REST tool execution: `src/api/tools/registry.ts` (includes Farcaster discussion list/thread/semantic search and guarded reply publishing).
+- Wallet notifications domain: `src/domains/notifications/**` (subject-wallet resolution, cursor pagination, unread state, and notification visibility for canonical tools).
 
 ## Data + Infra Layer
 

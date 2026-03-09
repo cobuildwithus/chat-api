@@ -3,7 +3,7 @@ import { requestContext } from "@fastify/request-context";
 import {
   executeTool,
   listToolMetadata,
-  requiresWriteScopeForTool,
+  resolveToolAuthPolicy,
   resolveToolMetadata,
 } from "../../tools/registry";
 
@@ -49,24 +49,18 @@ export async function handleToolExecutionRequest(
 ) {
   const body = request.body as ToolExecutionBody;
   const toolsPrincipal = requestContext.get("toolsPrincipal");
-  const requiresWriteScope = requiresWriteScopeForTool(body.name);
-  const hasToolsWriteScope = toolsPrincipal?.hasToolsWrite === true;
-  const hasWalletExecuteScope = toolsPrincipal?.hasWalletExecute === true;
-  if (requiresWriteScope && !hasToolsWriteScope) {
-    return reply.status(403).send({
-      ok: false,
-      name: body.name,
-      statusCode: 403,
-      error: "This token does not have tools:write scope for the requested tool.",
-    });
-  }
-  if (requiresWriteScope && !hasWalletExecuteScope) {
-    return reply.status(403).send({
-      ok: false,
-      name: body.name,
-      statusCode: 403,
-      error: "This token does not have wallet:execute scope for the requested tool.",
-    });
+  const authPolicy = resolveToolAuthPolicy(body.name);
+  if (authPolicy && toolsPrincipal) {
+    for (const requiredScope of authPolicy.requiredScopes) {
+      if (!toolsPrincipal.scopes.includes(requiredScope)) {
+        return reply.status(403).send({
+          ok: false,
+          name: body.name,
+          statusCode: 403,
+          error: `This token does not have ${requiredScope} scope for the requested tool.`,
+        });
+      }
+    }
   }
 
   const result = await executeTool(body.name, body.input ?? {});

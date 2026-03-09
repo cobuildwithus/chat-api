@@ -94,6 +94,7 @@ Source: `src/api/chat/schema.ts`.
 - Auth pre-validation returns `401` for invalid/missing auth.
 - Usage limiter returns `429` for token-budget overage.
 - Canonical tools auth returns `401` for missing/invalid bearer token.
+- Canonical tool execution returns `403` when the bearer token is missing a tool-specific required scope.
 - `GET /v1/tools/:name` returns `404` with `{ error: "Unknown tool \"...\"." }` when name/alias is not registered.
 - `semantic-search-casts` returns `503` for missing OpenAI config and `502` for upstream embedding failures.
 

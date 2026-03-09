@@ -61,6 +61,14 @@ Source registries:
 - Dependencies: Base/Base Sepolia JSON-RPC + USDC ERC-20 `balanceOf`.
 - Cache: lock-backed Redis cache (30s TTL), keyed by `<network>:<wallet>`.
 
+## `list-wallet-notifications`
+
+- Canonical name: `list-wallet-notifications`
+- Canonical aliases: `listWalletNotifications`, `walletNotifications`
+- Purpose: list notification inbox items for the authenticated subject wallet with cursor pagination and wallet-wide unread metadata.
+- Dependencies: `cobuild.notifications`, `cobuild.notification_state`, `farcaster.casts`, `farcaster.profiles`.
+- Cache: none (`Cache-Control: no-store`) because unread/read freshness matters.
+
 ## `file_search` (conditional)
 
 - Canonical alias: `docs.search` / `file_search`

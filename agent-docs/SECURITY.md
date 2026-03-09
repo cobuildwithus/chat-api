@@ -14,6 +14,7 @@
 - Header auth handling
 2. Interface backend -> canonical tools boundary (`/v1/tools`, `/v1/tools/:name`, `/v1/tool-executions`)
 - Bearer PAT gate via `Authorization: Bearer <bbt_...>`
+- Per-tool required-scope enforcement after bearer auth succeeds
 - Invalid or missing bearer token returns `401`
 3. API -> Auth boundary (`src/api/auth/**`)
 - Privy JWT verification mode
@@ -57,6 +58,7 @@
 3. Are new external calls added? If yes, set explicit timeout and bounded error behavior.
 4. Are ownership checks preserved on all chat read/write paths?
 5. If tool auth handling changes, are bearer tokens validated and redacted?
+6. If a wallet-scoped tool reads private inbox state, is the wallet derived only from authenticated context?
 
 ## Escalation
 
