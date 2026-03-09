@@ -10,29 +10,48 @@ function asString(value: unknown): string | null {
 export type ToolsPrincipalContext = {
   ownerAddress: string;
   agentKey: string;
+  scopes: string[];
 };
 
-export function getToolsPrincipalFromContext(): ToolsPrincipalContext | null {
+function getRawToolsPrincipalFromContext(): Record<string, unknown> | undefined {
   try {
-    const raw = requestContext.get("toolsPrincipal") as Record<string, unknown> | undefined;
-    const ownerAddress = normalizeAddress(raw?.ownerAddress);
-    const agentKey = asString(raw?.agentKey);
-    if (!ownerAddress || !agentKey) {
-      return null;
-    }
-    return {
-      ownerAddress,
-      agentKey,
-    };
+    return requestContext.get("toolsPrincipal") as Record<string, unknown> | undefined;
   } catch {
-    return null;
+    return undefined;
   }
 }
 
-export function resolveSubjectWalletFromContext(): string | null {
+export function getToolsPrincipalFromContext(): ToolsPrincipalContext | null {
+  const raw = getRawToolsPrincipalFromContext();
+  const ownerAddress = normalizeAddress(raw?.ownerAddress);
+  const agentKey = asString(raw?.agentKey);
+  if (!ownerAddress || !agentKey) {
+    return null;
+  }
+  const scopes = Array.isArray(raw?.scopes)
+    ? raw.scopes.filter((value): value is string => typeof value === "string")
+    : [];
+  return {
+    ownerAddress,
+    agentKey,
+    scopes,
+  };
+}
+
+export function resolveSubjectWalletFromContext(options?: {
+  allowUserFallback?: boolean;
+}): string | null {
   const toolsPrincipal = getToolsPrincipalFromContext();
   if (toolsPrincipal) {
     return toolsPrincipal.ownerAddress;
+  }
+
+  if (getRawToolsPrincipalFromContext()) {
+    return null;
+  }
+
+  if (!options?.allowUserFallback) {
+    return null;
   }
 
   try {

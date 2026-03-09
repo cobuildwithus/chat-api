@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { encodeWalletNotificationsCursor } from "../../../src/domains/notifications/cursor";
 import {
   InvalidWalletNotificationsCursorError,
@@ -10,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   requestContextGet: vi.fn(),
 }));
+
+const dialect = new PgDialect();
 
 vi.mock("../../../src/infra/db/cobuildDb", () => ({
   cobuildPrimaryDb: () => ({
@@ -40,8 +43,11 @@ describe("wallet notifications service", () => {
 
   it("rejects invalid cursors before querying the database", async () => {
     mocks.requestContextGet.mockImplementation((key: string) => {
-      if (key === "user") {
-        return { address: "0x0000000000000000000000000000000000000001" };
+      if (key === "toolsPrincipal") {
+        return {
+          ownerAddress: "0x0000000000000000000000000000000000000001",
+          agentKey: "forecast-bot",
+        };
       }
       return undefined;
     });
@@ -59,8 +65,8 @@ describe("wallet notifications service", () => {
   it("lists subject-wallet notifications with unread state, cursor pagination, and mapped summaries", async () => {
     const subjectWalletAddress = "0x0000000000000000000000000000000000000001";
     const nextCursorSource = {
-      eventAt: "2026-03-08T12:00:01.000Z",
-      createdAt: "2026-03-08T12:00:04.000Z",
+      eventAt: null,
+      createdAt: "2026-03-08T12:00:04.654321Z",
       id: "99",
     };
 
@@ -83,8 +89,10 @@ describe("wallet notifications service", () => {
             id: 101n,
             kind: "discussion",
             reason: "mention",
-            eventAt: "2026-03-08T12:00:03.000Z",
-            createdAt: "2026-03-08T12:00:06.000Z",
+            eventAt: "2026-03-08T12:00:03.123456Z",
+            eventAtCursor: "2026-03-08T12:00:03.123456Z",
+            createdAt: "2026-03-08T12:00:06.123456Z",
+            createdAtCursor: "2026-03-08T12:00:06.123456Z",
             isUnread: true,
             sourceType: "farcaster_cast",
             sourceId: "cast-101",
@@ -104,8 +112,10 @@ describe("wallet notifications service", () => {
             id: 100n,
             kind: "discussion",
             reason: "reply",
-            eventAt: "2026-03-08T12:00:02.000Z",
-            createdAt: "2026-03-08T12:00:05.000Z",
+            eventAt: "2026-03-08T12:00:02.999999Z",
+            eventAtCursor: "2026-03-08T12:00:02.999999Z",
+            createdAt: "2026-03-08T12:00:05.000001Z",
+            createdAtCursor: "2026-03-08T12:00:05.000001Z",
             isUnread: false,
             sourceType: "farcaster_cast",
             sourceId: "cast-100",
@@ -125,8 +135,10 @@ describe("wallet notifications service", () => {
             id: 99n,
             kind: "discussion",
             reason: "reply_to_reply",
-            eventAt: nextCursorSource.eventAt,
+            eventAt: null,
+            eventAtCursor: nextCursorSource.eventAt,
             createdAt: nextCursorSource.createdAt,
+            createdAtCursor: nextCursorSource.createdAt,
             isUnread: true,
             sourceType: "farcaster_cast",
             sourceId: "cast-99",
@@ -146,8 +158,10 @@ describe("wallet notifications service", () => {
             id: 98n,
             kind: "payment",
             reason: "received",
-            eventAt: "2026-03-08T12:00:00.000Z",
-            createdAt: "2026-03-08T12:00:03.000Z",
+            eventAt: "2026-03-08T12:00:00.000001Z",
+            eventAtCursor: "2026-03-08T12:00:00.000001Z",
+            createdAt: "2026-03-08T12:00:03.000001Z",
+            createdAtCursor: "2026-03-08T12:00:03.000001Z",
             isUnread: true,
             sourceType: "payment",
             sourceId: "payment-98",
@@ -170,8 +184,8 @@ describe("wallet notifications service", () => {
       limit: 3,
       unreadOnly: true,
       cursor: encodeWalletNotificationsCursor({
-        eventAt: "2026-03-08T12:00:10.000Z",
-        createdAt: "2026-03-08T12:00:11.000Z",
+        eventAt: "2026-03-08T12:00:10.111111Z",
+        createdAt: "2026-03-08T12:00:11.222222Z",
         id: "500",
       }),
       kinds: ["discussion", "payment"],
@@ -193,6 +207,8 @@ describe("wallet notifications service", () => {
       id: "101",
       kind: "discussion",
       reason: "mention",
+      eventAt: "2026-03-08T12:00:03.123456Z",
+      createdAt: "2026-03-08T12:00:06.123456Z",
       isUnread: true,
       actor: {
         fid: 99,
@@ -216,6 +232,8 @@ describe("wallet notifications service", () => {
     expect(result.items[1]).toMatchObject({
       id: "100",
       kind: "discussion",
+      eventAt: "2026-03-08T12:00:02.999999Z",
+      createdAt: "2026-03-08T12:00:05.000001Z",
       actor: null,
       summary: {
         title: null,
@@ -229,6 +247,8 @@ describe("wallet notifications service", () => {
     expect(result.items[2]).toMatchObject({
       id: "99",
       kind: "discussion",
+      eventAt: null,
+      createdAt: "2026-03-08T12:00:04.654321Z",
       actor: {
         fid: null,
         walletAddress: "0x0000000000000000000000000000000000000002",
@@ -246,10 +266,13 @@ describe("wallet notifications service", () => {
     });
   });
 
-  it("supports user-context fallback and default unread metadata", async () => {
+  it("preserves unknown kinds instead of coercing them", async () => {
     mocks.requestContextGet.mockImplementation((key: string) => {
-      if (key === "user") {
-        return { address: "0x0000000000000000000000000000000000000001" };
+      if (key === "toolsPrincipal") {
+        return {
+          ownerAddress: "0x0000000000000000000000000000000000000001",
+          agentKey: "forecast-bot",
+        };
       }
       return undefined;
     });
@@ -263,8 +286,10 @@ describe("wallet notifications service", () => {
             id: "12",
             kind: "payment",
             reason: "received",
-            eventAt: "2026-03-08T10:00:00.000Z",
-            createdAt: "2026-03-08T10:00:01.000Z",
+            eventAt: null,
+            eventAtCursor: null,
+            createdAt: "2026-03-08T10:00:01.000001Z",
+            createdAtCursor: "2026-03-08T10:00:01.000001Z",
             isUnread: false,
             sourceType: "payment",
             sourceId: "pay-12",
@@ -284,8 +309,10 @@ describe("wallet notifications service", () => {
             id: "11",
             kind: "mystery",
             reason: "other",
-            eventAt: "2026-03-08T09:00:00.000Z",
-            createdAt: "2026-03-08T09:00:01.000Z",
+            eventAt: "2026-03-08T09:00:00.777777Z",
+            eventAtCursor: "2026-03-08T09:00:00.777777Z",
+            createdAt: "2026-03-08T09:00:01.888888Z",
+            createdAtCursor: "2026-03-08T09:00:01.888888Z",
             isUnread: false,
             sourceType: "protocol",
             sourceId: "proto-11",
@@ -320,13 +347,14 @@ describe("wallet notifications service", () => {
     });
     expect(result.items[0]).toMatchObject({
       kind: "payment",
+      eventAt: null,
       resource: {
         appPath: null,
       },
       payload: null,
     });
     expect(result.items[1]).toMatchObject({
-      kind: "discussion",
+      kind: "mystery",
       resource: {
         sourceType: "protocol",
         appPath: null,
@@ -335,12 +363,57 @@ describe("wallet notifications service", () => {
     });
   });
 
-  it("prefers the tools principal owner address over request user fallback", async () => {
+  it("pins the SQL shape for kinds-filtered unread state and null-event cursors", async () => {
+    mocks.requestContextGet.mockImplementation((key: string) => {
+      if (key === "toolsPrincipal") {
+        return {
+          ownerAddress: "0x0000000000000000000000000000000000000001",
+          agentKey: "forecast-bot",
+        };
+      }
+      return undefined;
+    });
+    mocks.execute
+      .mockResolvedValueOnce({
+        rows: [{ count: "1", watermark: "1741435200000001" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [],
+      });
+
+    await listWalletNotifications({
+      limit: 5,
+      unreadOnly: true,
+      cursor: encodeWalletNotificationsCursor({
+        eventAt: null,
+        createdAt: "2026-03-08T12:00:04.654321Z",
+        id: "99",
+      }),
+      kinds: ["payment"],
+    });
+
+    const unreadQuery = dialect.sqlToQuery(mocks.execute.mock.calls[0]?.[0]);
+    const listQuery = dialect.sqlToQuery(mocks.execute.mock.calls[1]?.[0]);
+
+    expect(unreadQuery.sql).toContain("notification.kind IN (");
+    expect(unreadQuery.sql).toContain("notification.created_at > state.last_read_at");
+    expect(unreadQuery.sql).not.toContain("notification.event_at IS NULL");
+    expect(unreadQuery.params).toContain("payment");
+
+    expect(listQuery.sql).toContain("notification.kind IN (");
+    expect(listQuery.sql).toContain("notification.event_at IS NULL");
+    expect(listQuery.sql).not.toContain("notification.event_at <");
+    expect(listQuery.sql).toContain(
+      "ORDER BY notification.event_at DESC NULLS LAST, notification.created_at DESC, notification.id DESC",
+    );
+    expect(listQuery.params).toContain("payment");
+  });
+
+  it("does not fall back to the request user when the tools principal is partial", async () => {
     mocks.requestContextGet.mockImplementation((key: string) => {
       if (key === "toolsPrincipal") {
         return {
           ownerAddress: "0x00000000000000000000000000000000000000aa",
-          agentKey: "forecast-bot",
         };
       }
       if (key === "user") {
@@ -348,19 +421,13 @@ describe("wallet notifications service", () => {
       }
       return undefined;
     });
-    mocks.execute
-      .mockResolvedValueOnce({
-        rows: [{ count: 0, watermark: "0" }],
-      })
-      .mockResolvedValueOnce({
-        rows: [],
-      });
 
-    const result = await listWalletNotifications({
-      limit: 1,
-      unreadOnly: false,
-    });
-
-    expect(result.subjectWalletAddress).toBe("0x00000000000000000000000000000000000000aa");
+    await expect(
+      listWalletNotifications({
+        limit: 1,
+        unreadOnly: false,
+      }),
+    ).rejects.toBeInstanceOf(WalletNotificationsSubjectRequiredError);
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
 });

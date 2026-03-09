@@ -3,7 +3,7 @@ export const NOTIFICATION_KINDS = ["discussion", "payment", "protocol"] as const
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export type WalletNotificationsCursor = {
-  eventAt: string;
+  eventAt: string | null;
   createdAt: string;
   id: string;
 };
@@ -39,9 +39,9 @@ export type WalletNotificationResource = {
 
 export type WalletNotificationItem = {
   id: string;
-  kind: NotificationKind;
+  kind: string;
   reason: string;
-  eventAt: string;
+  eventAt: string | null;
   createdAt: string;
   isUnread: boolean;
   actor: WalletNotificationActor | null;

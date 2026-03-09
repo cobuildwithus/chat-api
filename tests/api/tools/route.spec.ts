@@ -10,22 +10,13 @@ import { createReply } from "../../utils/fastify";
 const mocks = vi.hoisted(() => ({
   listToolMetadata: vi.fn(),
   resolveToolMetadata: vi.fn(),
-  resolveToolAuthPolicy: vi.fn(),
   executeTool: vi.fn(),
-  requestContextGet: vi.fn(),
 }));
 
 vi.mock("../../../src/tools/registry", () => ({
   listToolMetadata: mocks.listToolMetadata,
   resolveToolMetadata: mocks.resolveToolMetadata,
-  resolveToolAuthPolicy: mocks.resolveToolAuthPolicy,
   executeTool: mocks.executeTool,
-}));
-
-vi.mock("@fastify/request-context", () => ({
-  requestContext: {
-    get: (...args: unknown[]) => mocks.requestContextGet(...args),
-  },
 }));
 
 describe("tools v1 handlers", () => {
@@ -121,11 +112,6 @@ describe("tools v1 handlers", () => {
   });
 
   it("returns execution output and applies cache control", async () => {
-    mocks.resolveToolAuthPolicy.mockReturnValueOnce({
-      requiredScopes: ["tools:read"],
-      walletBinding: "none",
-    });
-    mocks.requestContextGet.mockReturnValueOnce(undefined);
     mocks.executeTool.mockResolvedValueOnce({
       ok: true,
       name: "get-user",
@@ -154,11 +140,6 @@ describe("tools v1 handlers", () => {
   });
 
   it("returns execution errors with propagated status code", async () => {
-    mocks.resolveToolAuthPolicy.mockReturnValueOnce({
-      requiredScopes: ["tools:read"],
-      walletBinding: "none",
-    });
-    mocks.requestContextGet.mockReturnValueOnce(undefined);
     mocks.executeTool.mockResolvedValueOnce({
       ok: false,
       name: "unknown-tool",
@@ -185,11 +166,6 @@ describe("tools v1 handlers", () => {
   });
 
   it("defaults missing input to an empty object", async () => {
-    mocks.resolveToolAuthPolicy.mockReturnValueOnce({
-      requiredScopes: ["tools:read"],
-      walletBinding: "none",
-    });
-    mocks.requestContextGet.mockReturnValueOnce(undefined);
     mocks.executeTool.mockResolvedValueOnce({
       ok: true,
       name: "get-treasury-stats",
@@ -213,20 +189,12 @@ describe("tools v1 handlers", () => {
     });
   });
 
-  it("rejects tools when the token is missing a required scope", async () => {
-    mocks.resolveToolAuthPolicy.mockReturnValueOnce({
-      requiredScopes: ["tools:read", "notifications:read"],
-      walletBinding: "subject-wallet",
-    });
-    mocks.requestContextGet.mockReturnValueOnce({
-      sessionId: "42",
-      ownerAddress: "0x0000000000000000000000000000000000000001",
-      agentKey: "default",
-      scope: "tools:read wallet:read offline_access",
-      scopes: ["tools:read", "wallet:read", "offline_access"],
-      hasToolsWrite: false,
-      hasWalletExecute: false,
-      hasAnyWriteScope: false,
+  it("propagates tool authorization failures", async () => {
+    mocks.executeTool.mockResolvedValueOnce({
+      ok: false,
+      name: "list-wallet-notifications",
+      statusCode: 403,
+      error: "This token does not have notifications:read scope for the requested tool.",
     });
     const request = {
       body: {
@@ -238,7 +206,6 @@ describe("tools v1 handlers", () => {
 
     await handleToolExecutionRequest(request, reply);
 
-    expect(mocks.executeTool).not.toHaveBeenCalled();
     expect(reply.status).toHaveBeenCalledWith(403);
     expect(reply.send).toHaveBeenCalledWith({
       ok: false,
@@ -248,21 +215,7 @@ describe("tools v1 handlers", () => {
     });
   });
 
-  it("allows execution when the token satisfies all required scopes", async () => {
-    mocks.resolveToolAuthPolicy.mockReturnValueOnce({
-      requiredScopes: ["tools:read", "notifications:read"],
-      walletBinding: "subject-wallet",
-    });
-    mocks.requestContextGet.mockReturnValueOnce({
-      sessionId: "42",
-      ownerAddress: "0x0000000000000000000000000000000000000001",
-      agentKey: "default",
-      scope: "tools:read notifications:read wallet:read offline_access",
-      scopes: ["tools:read", "notifications:read", "wallet:read", "offline_access"],
-      hasToolsWrite: false,
-      hasWalletExecute: false,
-      hasAnyWriteScope: false,
-    });
+  it("passes through subject-wallet tool success responses", async () => {
     mocks.executeTool.mockResolvedValueOnce({
       ok: true,
       name: "list-wallet-notifications",

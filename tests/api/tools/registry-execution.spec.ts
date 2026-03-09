@@ -267,6 +267,7 @@ describe("tool registry execution", () => {
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x00000000000000000000000000000000000000aA",
       agentKey: "default",
+      scopes: ["tools:read"],
     });
     mocks.createPublicClient.mockReturnValue({
       getBalance,
@@ -318,6 +319,7 @@ describe("tool registry execution", () => {
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x00000000000000000000000000000000000000aA",
       agentKey: "default",
+      scopes: ["tools:read", "notifications:read"],
     });
     mocks.execute
       .mockResolvedValueOnce({
@@ -329,8 +331,10 @@ describe("tool registry execution", () => {
             id: "11",
             kind: "discussion",
             reason: "mention",
-            eventAt: "2026-03-08T12:00:00.000Z",
-            createdAt: "2026-03-08T12:00:03.000Z",
+            eventAt: "2026-03-08T12:00:00.123456Z",
+            eventAtCursor: "2026-03-08T12:00:00.123456Z",
+            createdAt: "2026-03-08T12:00:03.654321Z",
+            createdAtCursor: "2026-03-08T12:00:03.654321Z",
             isUnread: true,
             sourceType: "farcaster_cast",
             sourceId: "0xabc123",
@@ -350,8 +354,10 @@ describe("tool registry execution", () => {
             id: "10",
             kind: "payment",
             reason: "received",
-            eventAt: "2026-03-08T11:00:00.000Z",
-            createdAt: "2026-03-08T11:00:01.000Z",
+            eventAt: null,
+            eventAtCursor: null,
+            createdAt: "2026-03-08T11:00:01.000001Z",
+            createdAtCursor: "2026-03-08T11:00:01.000001Z",
             isUnread: false,
             sourceType: "payment",
             sourceId: "payment_1",
@@ -386,8 +392,8 @@ describe("tool registry execution", () => {
             id: "11",
             kind: "discussion",
             reason: "mention",
-            eventAt: "2026-03-08T12:00:00.000Z",
-            createdAt: "2026-03-08T12:00:03.000Z",
+            eventAt: "2026-03-08T12:00:00.123456Z",
+            createdAt: "2026-03-08T12:00:03.654321Z",
             isUnread: true,
             actor: {
               fid: 99,
@@ -448,10 +454,22 @@ describe("tool registry execution", () => {
       .mockReturnValueOnce({
         ownerAddress: "0x00000000000000000000000000000000000000aA",
         agentKey: "default",
+        scopes: ["tools:read"],
+      })
+      .mockReturnValueOnce({
+        ownerAddress: "0x00000000000000000000000000000000000000aA",
+        agentKey: "default",
+        scopes: ["tools:read"],
       })
       .mockReturnValueOnce({
         ownerAddress: "0x00000000000000000000000000000000000000aA",
         agentKey: "ops",
+        scopes: ["tools:read"],
+      })
+      .mockReturnValueOnce({
+        ownerAddress: "0x00000000000000000000000000000000000000aA",
+        agentKey: "ops",
+        scopes: ["tools:read"],
       });
 
     const first = await executeTool("get-wallet-balances", { network: "base" });
@@ -975,6 +993,11 @@ describe("tool registry execution", () => {
   });
 
   it("covers get-wallet-balances validation and auth branches", async () => {
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+      scopes: ["tools:read"],
+    });
     expect(await executeTool("get-wallet-balances", { network: "mainnet" })).toEqual({
       ok: false,
       name: "get-wallet-balances",
@@ -994,12 +1017,13 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-wallet-balances",
       statusCode: 401,
-      error: "Authenticated tools principal is required to fetch wallet balances.",
+      error: "Authenticated tools principal is required for this tool.",
     });
 
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
+      scopes: ["tools:read"],
     });
     expect(await executeTool("get-wallet-balances", { agentKey: "ops" })).toEqual({
       ok: false,
@@ -1010,6 +1034,11 @@ describe("tool registry execution", () => {
   });
 
   it("covers list-wallet-notifications validation and auth branches", async () => {
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+      scopes: ["tools:read", "notifications:read"],
+    });
     expect(await executeTool("list-wallet-notifications", { limit: 0 })).toEqual({
       ok: false,
       name: "list-wallet-notifications",
@@ -1045,12 +1074,13 @@ describe("tool registry execution", () => {
       ok: false,
       name: "list-wallet-notifications",
       statusCode: 401,
-      error: "Authenticated subject wallet is required to list wallet notifications.",
+      error: "Authenticated tools principal is required for this tool.",
     });
 
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
+      scopes: ["tools:read", "notifications:read"],
     });
     expect(await executeTool("list-wallet-notifications", { cursor: "bad-cursor" })).toEqual({
       ok: false,
@@ -1059,7 +1089,24 @@ describe("tool registry execution", () => {
       error: "cursor must be a valid notifications cursor.",
     });
 
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+      scopes: ["tools:read"],
+    });
+    expect(await executeTool("list-wallet-notifications", {})).toEqual({
+      ok: false,
+      name: "list-wallet-notifications",
+      statusCode: 403,
+      error: "This token does not have notifications:read scope for the requested tool.",
+    });
+
     mocks.execute.mockRejectedValueOnce(new Error("db unavailable"));
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+      scopes: ["tools:read", "notifications:read"],
+    });
     expect(await executeTool("list-wallet-notifications", {})).toEqual({
       ok: false,
       name: "list-wallet-notifications",
@@ -1074,6 +1121,7 @@ describe("tool registry execution", () => {
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "ops",
+      scopes: ["tools:read"],
     });
     mocks.createPublicClient.mockReturnValue({
       getBalance,
@@ -1105,13 +1153,14 @@ describe("tool registry execution", () => {
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "not-an-address",
       agentKey: "default",
+      scopes: ["tools:read"],
     });
 
     expect(await executeTool("get-wallet-balances", {})).toEqual({
       ok: false,
       name: "get-wallet-balances",
       statusCode: 401,
-      error: "Authenticated tools principal is required to fetch wallet balances.",
+      error: "Authenticated tools principal is required for this tool.",
     });
   });
 
@@ -1124,7 +1173,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-wallet-balances",
       statusCode: 401,
-      error: "Authenticated tools principal is required to fetch wallet balances.",
+      error: "Authenticated tools principal is required for this tool.",
     });
   });
 
@@ -1132,6 +1181,7 @@ describe("tool registry execution", () => {
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
+      scopes: ["tools:read"],
     });
     mocks.getOrSetCachedResultWithLock.mockRejectedValueOnce(new Error("rpc unavailable"));
 

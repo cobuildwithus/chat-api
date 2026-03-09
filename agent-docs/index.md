@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-09 (wallet notifications tooling + tool auth policy)
+Last verified: 2026-03-09 (wallet notifications tooling + review-fix follow-up)
 
 ## Purpose
 

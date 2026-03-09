@@ -1605,7 +1605,88 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
       required: ["subjectWalletAddress", "items", "pageInfo", "unread"],
       properties: {
         subjectWalletAddress: { type: "string" },
-        items: { type: "array", items: { type: "object" } },
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            required: [
+              "id",
+              "kind",
+              "reason",
+              "eventAt",
+              "createdAt",
+              "isUnread",
+              "actor",
+              "summary",
+              "resource",
+              "payload",
+            ],
+            properties: {
+              id: { type: "string" },
+              kind: { type: "string" },
+              reason: { type: "string" },
+              eventAt: { anyOf: [{ type: "string" }, { type: "null" }] },
+              createdAt: { type: "string" },
+              isUnread: { type: "boolean" },
+              actor: {
+                anyOf: [
+                  {
+                    type: "object",
+                    required: ["fid", "walletAddress", "name", "username", "avatarUrl"],
+                    properties: {
+                      fid: { anyOf: [{ type: "number" }, { type: "null" }] },
+                      walletAddress: { anyOf: [{ type: "string" }, { type: "null" }] },
+                      name: { anyOf: [{ type: "string" }, { type: "null" }] },
+                      username: { anyOf: [{ type: "string" }, { type: "null" }] },
+                      avatarUrl: { anyOf: [{ type: "string" }, { type: "null" }] },
+                    },
+                    additionalProperties: false,
+                  },
+                  { type: "null" },
+                ],
+              },
+              summary: {
+                type: "object",
+                required: ["title", "excerpt"],
+                properties: {
+                  title: { anyOf: [{ type: "string" }, { type: "null" }] },
+                  excerpt: { anyOf: [{ type: "string" }, { type: "null" }] },
+                },
+                additionalProperties: false,
+              },
+              resource: {
+                type: "object",
+                required: [
+                  "sourceType",
+                  "sourceId",
+                  "sourceHash",
+                  "rootHash",
+                  "targetHash",
+                  "appPath",
+                ],
+                properties: {
+                  sourceType: { type: "string" },
+                  sourceId: { type: "string" },
+                  sourceHash: { anyOf: [{ type: "string" }, { type: "null" }] },
+                  rootHash: { anyOf: [{ type: "string" }, { type: "null" }] },
+                  targetHash: { anyOf: [{ type: "string" }, { type: "null" }] },
+                  appPath: { anyOf: [{ type: "string" }, { type: "null" }] },
+                },
+                additionalProperties: false,
+              },
+              payload: {
+                anyOf: [
+                  {
+                    type: "object",
+                    additionalProperties: true,
+                  },
+                  { type: "null" },
+                ],
+              },
+            },
+            additionalProperties: false,
+          },
+        },
         pageInfo: {
           type: "object",
           required: ["limit", "nextCursor", "hasMore"],
@@ -1736,6 +1817,34 @@ export function requiresWriteScopeForTool(name: string): boolean {
   return requiresWriteScopeForMetadata(tool);
 }
 
+function requiresToolsPrincipal(policy: ToolAuthPolicy): boolean {
+  return (
+    policy.walletBinding === "subject-wallet" ||
+    policy.requiredScopes.some((scope) => scope !== "tools:read")
+  );
+}
+
+function authorizeToolExecution(tool: RegisteredTool): ToolExecutionFailure | null {
+  const toolsPrincipal = getToolsPrincipalFromContext();
+  if (requiresToolsPrincipal(tool.authPolicy) && !toolsPrincipal) {
+    return failure(tool.name, 401, "Authenticated tools principal is required for this tool.");
+  }
+
+  if (toolsPrincipal) {
+    for (const requiredScope of tool.authPolicy.requiredScopes) {
+      if (!toolsPrincipal.scopes.includes(requiredScope)) {
+        return failure(
+          tool.name,
+          403,
+          `This token does not have ${requiredScope} scope for the requested tool.`,
+        );
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function executeTool(name: string, input: unknown): Promise<ToolExecutionResult> {
   const normalizedName = name.trim();
   if (!normalizedName) {
@@ -1747,9 +1856,23 @@ export async function executeTool(name: string, input: unknown): Promise<ToolExe
     return failure(normalizedName, 404, `Unknown tool "${normalizedName}".`);
   }
 
+  if (requiresToolsPrincipal(tool.authPolicy)) {
+    const accessFailure = authorizeToolExecution(tool);
+    if (accessFailure) {
+      return accessFailure;
+    }
+  }
+
   const parsed = tool.input.safeParse(input);
   if (!parsed.success) {
     return failure(tool.name, 400, formatToolInputError(tool.name, parsed.error));
+  }
+
+  if (!requiresToolsPrincipal(tool.authPolicy)) {
+    const accessFailure = authorizeToolExecution(tool);
+    if (accessFailure) {
+      return accessFailure;
+    }
   }
 
   const result = await tool.execute(parsed.data);

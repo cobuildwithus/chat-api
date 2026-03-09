@@ -1,9 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { requestContext } from "@fastify/request-context";
 import {
   executeTool,
   listToolMetadata,
-  resolveToolAuthPolicy,
   resolveToolMetadata,
 } from "../../tools/registry";
 
@@ -48,21 +46,6 @@ export async function handleToolExecutionRequest(
   reply: FastifyReply,
 ) {
   const body = request.body as ToolExecutionBody;
-  const toolsPrincipal = requestContext.get("toolsPrincipal");
-  const authPolicy = resolveToolAuthPolicy(body.name);
-  if (authPolicy && toolsPrincipal) {
-    for (const requiredScope of authPolicy.requiredScopes) {
-      if (!toolsPrincipal.scopes.includes(requiredScope)) {
-        return reply.status(403).send({
-          ok: false,
-          name: body.name,
-          statusCode: 403,
-          error: `This token does not have ${requiredScope} scope for the requested tool.`,
-        });
-      }
-    }
-  }
-
   const result = await executeTool(body.name, body.input ?? {});
 
   if (!result.ok) {

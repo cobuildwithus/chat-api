@@ -5,7 +5,6 @@ import {
   encodeWalletNotificationsCursor,
 } from "./cursor";
 import {
-  NOTIFICATION_KINDS,
   type ListWalletNotificationsInput,
   type ListWalletNotificationsOutput,
   type NotificationKind,
@@ -16,13 +15,14 @@ import {
 import { resolveSubjectWalletFromContext } from "./wallet-subject";
 
 const NEYNAR_SCORE_THRESHOLD = 0.55;
+const ISO_UTC_MICROS_TEMPLATE = `YYYY-MM-DD"T"HH24:MI:SS.US"Z"`;
 
 type NotificationRow = {
   id: bigint | number | string;
   kind: string;
   reason: string;
-  eventAt: Date | string;
-  createdAt: Date | string;
+  eventAtCursor: string | null;
+  createdAtCursor: string;
   isUnread: boolean;
   sourceType: string;
   sourceId: string;
@@ -134,31 +134,24 @@ function buildVisibleNotificationFilters(subjectWalletAddress: string) {
   ];
 }
 
-function buildCursorFilter(cursor: WalletNotificationsCursor) {
-  const eventAt = new Date(cursor.eventAt);
-  const createdAt = new Date(cursor.createdAt);
-  const id = BigInt(cursor.id);
-
-  return sql`(
-    notification.event_at < ${eventAt}
-    OR (
-      notification.event_at = ${eventAt}
-      AND notification.created_at < ${createdAt}
-    )
-    OR (
-      notification.event_at = ${eventAt}
-      AND notification.created_at = ${createdAt}
-      AND notification.id < ${id}
-    )
-  )`;
-}
-
 function joinFilters(filters: ReturnType<typeof buildVisibleNotificationFilters>) {
   return sql.join(filters, sql` AND `);
 }
 
-function toIsoString(value: Date | string): string {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+function buildIsoTimestampSql(alias: string, column: string) {
+  const value = columnRef(alias, column);
+  return sql`to_char(${value} AT TIME ZONE 'UTC', ${ISO_UTC_MICROS_TEMPLATE})`;
+}
+
+function buildTimestampMicrosSql(alias: string, column: string) {
+  const value = columnRef(alias, column);
+  return sql`(
+    (
+      floor(extract(epoch from ${value}))::bigint * 1000000
+    ) + (
+      floor(extract(microseconds from ${value}))::bigint % 1000000
+    )
+  )`;
 }
 
 function toHash(value: string | null): string | null {
@@ -205,10 +198,6 @@ function toPayload(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function toNotificationKind(value: string): NotificationKind {
-  return (NOTIFICATION_KINDS.includes(value as NotificationKind) ? value : "discussion") as NotificationKind;
-}
-
 function buildDiscussionAppPath(row: NotificationRow): string | null {
   if (row.kind !== "discussion") {
     return null;
@@ -233,10 +222,10 @@ function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
 
   return {
     id: toNumericString(row.id),
-    kind: toNotificationKind(row.kind),
+    kind: row.kind,
     reason: row.reason,
-    eventAt: toIsoString(row.eventAt),
-    createdAt: toIsoString(row.createdAt),
+    eventAt: row.eventAtCursor,
+    createdAt: row.createdAtCursor,
     isUnread: row.isUnread,
     actor:
       row.actorFid != null ||
@@ -268,8 +257,15 @@ function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
   };
 }
 
-async function getUnreadState(subjectWalletAddress: string): Promise<WalletNotificationsUnreadState> {
+async function getUnreadState(
+  subjectWalletAddress: string,
+  kinds: NotificationKind[] | undefined,
+): Promise<WalletNotificationsUnreadState> {
   const filters = buildVisibleNotificationFilters(subjectWalletAddress);
+  const kindsFilter = resolveKindsFilter(kinds);
+  if (kindsFilter) {
+    filters.push(kindsFilter);
+  }
   filters.push(sql`(
     state.last_read_at IS NULL
     OR notification.created_at > state.last_read_at
@@ -279,7 +275,7 @@ async function getUnreadState(subjectWalletAddress: string): Promise<WalletNotif
     SELECT
       COUNT(*)::bigint AS count,
       COALESCE(
-        (EXTRACT(EPOCH FROM MAX(notification.created_at)) * 1000000)::bigint::text,
+        (MAX(${buildTimestampMicrosSql("notification", "created_at")}))::bigint::text,
         '0'
       ) AS watermark
     ${NOTIFICATION_FROM_SQL}
@@ -313,6 +309,39 @@ function resolveKindsFilter(kinds: NotificationKind[] | undefined) {
   return sql`notification.kind IN (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})`;
 }
 
+function buildCursorFilter(cursor: WalletNotificationsCursor) {
+  const createdAt = sql`${cursor.createdAt}::timestamptz`;
+  const id = BigInt(cursor.id);
+
+  if (cursor.eventAt === null) {
+    return sql`(
+      notification.event_at IS NULL
+      AND (
+        notification.created_at < ${createdAt}
+        OR (
+          notification.created_at = ${createdAt}
+          AND notification.id < ${id}
+        )
+      )
+    )`;
+  }
+
+  const eventAt = sql`${cursor.eventAt}::timestamptz`;
+  return sql`(
+    notification.event_at IS NULL
+    OR notification.event_at < ${eventAt}
+    OR (
+      notification.event_at = ${eventAt}
+      AND notification.created_at < ${createdAt}
+    )
+    OR (
+      notification.event_at = ${eventAt}
+      AND notification.created_at = ${createdAt}
+      AND notification.id < ${id}
+    )
+  )`;
+}
+
 export async function listWalletNotifications(
   input: ListWalletNotificationsInput,
 ): Promise<ListWalletNotificationsOutput> {
@@ -322,7 +351,7 @@ export async function listWalletNotifications(
   }
 
   const cursor = resolveCursor(input);
-  const unread = await getUnreadState(subjectWalletAddress);
+  const unread = await getUnreadState(subjectWalletAddress, input.kinds);
   const filters = buildVisibleNotificationFilters(subjectWalletAddress);
   const kindsFilter = resolveKindsFilter(input.kinds);
   if (kindsFilter) {
@@ -344,8 +373,8 @@ export async function listWalletNotifications(
       notification.id,
       notification.kind,
       notification.reason,
-      notification.event_at AS "eventAt",
-      notification.created_at AS "createdAt",
+      ${buildIsoTimestampSql("notification", "event_at")} AS "eventAtCursor",
+      ${buildIsoTimestampSql("notification", "created_at")} AS "createdAtCursor",
       (
         state.last_read_at IS NULL
         OR notification.created_at > state.last_read_at
@@ -373,7 +402,7 @@ export async function listWalletNotifications(
   const hasMore = rows.length > input.limit;
   const pageRows = hasMore ? rows.slice(0, input.limit) : rows;
   const items = pageRows.map(mapNotificationRow);
-  const last = items.at(-1);
+  const last = pageRows.at(-1);
 
   return {
     subjectWalletAddress,
@@ -383,9 +412,9 @@ export async function listWalletNotifications(
       nextCursor:
         hasMore && last
           ? encodeWalletNotificationsCursor({
-              eventAt: last.eventAt,
-              createdAt: last.createdAt,
-              id: last.id,
+              eventAt: last.eventAtCursor,
+              createdAt: last.createdAtCursor,
+              id: toNumericString(last.id),
             })
           : null,
       hasMore,

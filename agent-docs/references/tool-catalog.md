@@ -65,7 +65,7 @@ Source registries:
 
 - Canonical name: `list-wallet-notifications`
 - Canonical aliases: `listWalletNotifications`, `walletNotifications`
-- Purpose: list notification inbox items for the authenticated subject wallet with cursor pagination and wallet-wide unread metadata.
+- Purpose: list notification inbox items for the authenticated subject wallet with cursor pagination and unread metadata scoped to the selected `kinds` filter (and wallet-wide when no filter is provided).
 - Dependencies: `cobuild.notifications`, `cobuild.notification_state`, `farcaster.casts`, `farcaster.profiles`.
 - Cache: none (`Cache-Control: no-store`) because unread/read freshness matters.
 
