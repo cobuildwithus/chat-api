@@ -71,6 +71,42 @@ Source registries:
 - Output: concise DB-derived budget summary including `budgetAddress`, `recipientId`, parent `goalAddress`, `budgetTcr`, lifecycle state/finalization, treasury summary, flow linkage, and governance/premium linkage.
 - Dependencies: `cobuild-onchain.budget_treasury`, `goal_context_by_budget_treasury`, `goal_treasury`, `goal_factory_deployment`, `flow_recipient`, `premium_escrow`.
 
+## `getTcrRequest`
+
+- Canonical name: `get-tcr-request`
+- Canonical aliases: `getTcrRequest`, `tcr.request`, `cli.get-tcr-request`
+- AI wrapper: `getTcrRequest`
+- Purpose: inspect indexed TCR request state by canonical composite request id (`<tcrAddress>:<itemId>:<requestIndex>`).
+- Output: concise DB-derived request summary including TCR kind/address, item status, request actors/timing, related goal/budget context, and linked dispute summary when present.
+- Dependencies: `cobuild-onchain.tcr_request`, `tcr_item`, `arbitrator_dispute`, `goal_treasury`, `goal_context_by_budget_tcr`, `budget_treasury`, `budget_treasury_by_recipient`.
+
+## `getDispute`
+
+- Canonical name: `get-dispute`
+- Canonical aliases: `getDispute`, `dispute.inspect`, `cli.get-dispute`
+- AI wrapper: `getDispute`
+- Purpose: inspect indexed arbitrator dispute state by canonical composite dispute id (`<arbitrator>:<disputeId>`).
+- Output: concise DB-derived dispute summary including dispute phase/ruling fields, related TCR request/budget/goal context, and optional per-juror membership + vote receipt detail when `juror` is provided.
+- Dependencies: `cobuild-onchain.arbitrator_dispute`, `tcr_request`, `goal_treasury`, `budget_treasury`, `juror_dispute_member`, `juror_vote_receipt`, `juror`.
+
+## `getStakePosition`
+
+- Canonical name: `get-stake-position`
+- Canonical aliases: `getStakePosition`, `stake.inspect`, `cli.get-stake-position`
+- AI wrapper: `getStakePosition`
+- Purpose: inspect indexed stake-vault account state by goal route/address, budget address/recipient id, or stake-vault address plus account address.
+- Output: concise DB-derived stake summary including resolved vault identity, aggregate vault totals, zero-tolerant goal/cobuild account balances, and current juror state when present.
+- Dependencies: `cobuild-onchain.goal_treasury`, `goal_context_by_budget_treasury`, `budget_treasury`, `stake_vault`, `stake_position`, `juror`.
+
+## `getPremiumEscrow`
+
+- Canonical name: `get-premium-escrow`
+- Canonical aliases: `getPremiumEscrow`, `premiumEscrow.inspect`, `cli.get-premium-escrow`
+- AI wrapper: `getPremiumEscrow`
+- Purpose: inspect indexed premium escrow state by escrow address, budget treasury address, or budget stack id, with optional account detail.
+- Output: concise DB-derived premium summary including escrow aggregate state, linked budget/budget-stack/goal context, timing fields, and optional per-account coverage/claimable/slash state.
+- Dependencies: `cobuild-onchain.premium_escrow`, `premium_account`, `budget_treasury`, `budget_stack`, `goal_context_by_budget_treasury`, `goal_treasury`.
+
 ## `get-wallet-balances`
 
 - Canonical name: `get-wallet-balances`

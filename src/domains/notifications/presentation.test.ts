@@ -91,6 +91,48 @@ describe("protocol notification presentation", () => {
 
   it.each([
     [
+      "underwriter_withdrawal_prep_required",
+      "Withdrawal prep required in Alpha.",
+      "The goal resolved with open underwriting exposure, so your withdrawal must be prepared before funds can exit.",
+    ],
+    [
+      "underwriter_withdrawal_prep_complete",
+      "Withdrawal prep completed in Alpha.",
+      "Your underwriting withdrawal is prepared and ready for the next exit step.",
+    ],
+    [
+      "premium_claimable",
+      "Premium ready to claim in Alpha.",
+      "Premium is now claimable on this underwriting position.",
+    ],
+    [
+      "premium_claimed",
+      "Premium claimed in Alpha.",
+      "A premium claim was completed for this underwriting position.",
+    ],
+  ])("builds actionable financial copy for %s", (reason, title, excerpt) => {
+    expect(
+      buildProtocolNotificationPresentation({
+        reason,
+        actorWalletAddress: null,
+        payload: {
+          role: "budget_underwriter",
+          labels: { goalName: "Alpha" },
+          resource: {
+            goalTreasury,
+          },
+        },
+      })
+    ).toEqual({
+      title,
+      excerpt,
+      appPath: `/${goalTreasury}/events`,
+      actorName: null,
+    });
+  });
+
+  it.each([
+    [
       "requester",
       "budget_accepted",
       "Your budget proposal was accepted.",
@@ -245,9 +287,30 @@ describe("protocol notification presentation", () => {
       "   ",
     ],
     [
+      "mechanism_proposed",
+      "You proposed a new allocation mechanism in Alpha.",
+      "Your allocation mechanism request entered governance.",
+      actorWalletAddress,
+      "Alpha",
+    ],
+    [
       "mechanism_challenged",
       "Your allocation mechanism request was challenged.",
       "Your allocation mechanism request moved into dispute.",
+      null,
+      "   ",
+    ],
+    [
+      "mechanism_challenged",
+      "Your allocation mechanism request was challenged in Alpha.",
+      "0x0000...00cc challenged your allocation mechanism request.",
+      actorWalletAddress,
+      "Alpha",
+    ],
+    [
+      "mechanism_accepted",
+      "Your allocation mechanism request was accepted.",
+      "Governance accepted your allocation mechanism request and queued activation.",
       null,
       "   ",
     ],
@@ -264,6 +327,13 @@ describe("protocol notification presentation", () => {
       "A removal request was submitted for your allocation mechanism.",
       null,
       "   ",
+    ],
+    [
+      "mechanism_removal_requested",
+      "Removal requested for your allocation mechanism in Alpha.",
+      "0x0000...00cc requested removal of your allocation mechanism.",
+      actorWalletAddress,
+      "Alpha",
     ],
     [
       "mechanism_removal_accepted",

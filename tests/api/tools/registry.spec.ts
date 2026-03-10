@@ -34,6 +34,14 @@ describe("tool registry", () => {
     expect(resolveToolMetadata("goal.inspect")?.name).toBe("get-goal");
     expect(resolveToolMetadata("getBudget")?.name).toBe("get-budget");
     expect(resolveToolMetadata("budget.inspect")?.name).toBe("get-budget");
+    expect(resolveToolMetadata("getTcrRequest")?.name).toBe("get-tcr-request");
+    expect(resolveToolMetadata("tcr.request")?.name).toBe("get-tcr-request");
+    expect(resolveToolMetadata("getDispute")?.name).toBe("get-dispute");
+    expect(resolveToolMetadata("dispute.inspect")?.name).toBe("get-dispute");
+    expect(resolveToolMetadata("getStakePosition")?.name).toBe("get-stake-position");
+    expect(resolveToolMetadata("stake.inspect")?.name).toBe("get-stake-position");
+    expect(resolveToolMetadata("getPremiumEscrow")?.name).toBe("get-premium-escrow");
+    expect(resolveToolMetadata("premiumEscrow.inspect")?.name).toBe("get-premium-escrow");
     expect(resolveToolMetadata("docs.search")?.name).toBe("docs-search");
     expect(resolveToolMetadata("getWalletBalances")?.name).toBe("get-wallet-balances");
     expect(resolveToolMetadata("walletBalances")?.name).toBe("get-wallet-balances");
@@ -61,6 +69,22 @@ describe("tool registry", () => {
       walletBinding: "none",
     });
     expect(resolveToolAuthPolicy("get-budget")).toEqual({
+      requiredScopes: ["tools:read"],
+      walletBinding: "none",
+    });
+    expect(resolveToolAuthPolicy("get-tcr-request")).toEqual({
+      requiredScopes: ["tools:read"],
+      walletBinding: "none",
+    });
+    expect(resolveToolAuthPolicy("get-dispute")).toEqual({
+      requiredScopes: ["tools:read"],
+      walletBinding: "none",
+    });
+    expect(resolveToolAuthPolicy("get-stake-position")).toEqual({
+      requiredScopes: ["tools:read"],
+      walletBinding: "none",
+    });
+    expect(resolveToolAuthPolicy("get-premium-escrow")).toEqual({
       requiredScopes: ["tools:read"],
       walletBinding: "none",
     });

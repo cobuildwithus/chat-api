@@ -681,6 +681,571 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("executes get-tcr-request from indexed scaffold tables", async () => {
+    queueSelectRows(
+      [
+        {
+          id: "0xtcr:0xitem:2",
+          tcrAddress: "0xtcr",
+          tcrKind: "budget",
+          itemId: "0xitem",
+          requestIndex: "2",
+          goalTreasury: "0xgoal",
+          budgetTreasury: "0xbudget",
+          requestType: "registration",
+          requester: "0xrequester",
+          challenger: "0xchallenger",
+          disputeId: "7",
+          submittedAt: "1713000000",
+          challengedAt: "1713000300",
+          txHash: "0xtx",
+          updatedAtTimestamp: "1713000400",
+        },
+      ],
+      [
+        {
+          id: "0xtcr:0xitem",
+          currentStatus: 3,
+          evidenceGroupId: "9",
+          submitter: "0xsubmitter",
+          latestRequestIndex: "2",
+          tcrKind: "budget",
+        },
+      ],
+      [
+        {
+          id: "0xbudget",
+          recipientId: "0xitem",
+          childFlow: "0xchild",
+          premiumEscrow: "0xescrow",
+          state: 1,
+          finalized: false,
+        },
+      ],
+      [
+        {
+          id: "0xgoal",
+          goalRevnetId: "42",
+          state: 1,
+          finalized: false,
+          canonicalRouteSlug: "alpha",
+          canonicalRouteDomain: "alpha.cobuild.eth",
+          stakeVault: "0xvault",
+        },
+      ],
+      [
+        {
+          id: "0xarbitrator:7",
+          arbitrator: "0xarbitrator",
+          disputeId: "7",
+          currentRound: "1",
+          ruling: 2,
+          executedAt: "1713000500",
+          stakeVault: "0xvault",
+        },
+      ],
+    );
+
+    const result = await executeTool("get-tcr-request", { identifier: "0xTcr:0xItem:2" });
+
+    expect(result).toEqual({
+      ok: true,
+      name: "get-tcr-request",
+      output: {
+        identifier: "0xTcr:0xItem:2",
+        requestId: "0xtcr:0xitem:2",
+        requestIndex: "2",
+        requestType: "registration",
+        tcr: {
+          address: "0xtcr",
+          kind: "budget",
+        },
+        goal: {
+          goalAddress: "0xgoal",
+          goalRevnetId: "42",
+          state: "Active",
+          stateCode: 1,
+          finalized: false,
+          route: {
+            slug: "alpha",
+            domain: "alpha.cobuild.eth",
+          },
+          stakeVault: "0xvault",
+        },
+        budget: {
+          budgetAddress: "0xbudget",
+          recipientId: "0xitem",
+          state: "Active",
+          stateCode: 1,
+          finalized: false,
+          childFlow: "0xchild",
+          premiumEscrow: "0xescrow",
+        },
+        item: {
+          itemId: "0xitem",
+          currentStatus: 3,
+          evidenceGroupId: "9",
+          submitter: "0xsubmitter",
+          latestRequestIndex: "2",
+          latestRequest: true,
+        },
+        actors: {
+          requester: "0xrequester",
+          challenger: "0xchallenger",
+        },
+        dispute: {
+          identifier: "0xarbitrator:7",
+          arbitrator: "0xarbitrator",
+          disputeId: "7",
+          currentRound: "1",
+          ruling: 2,
+          executedAt: "2024-04-13T09:28:20.000Z",
+        },
+        timing: {
+          submittedAt: "2024-04-13T09:20:00.000Z",
+          challengedAt: "2024-04-13T09:25:00.000Z",
+          updatedAt: "2024-04-13T09:26:40.000Z",
+        },
+        txHash: "0xtx",
+      },
+      cacheControl: "private, max-age=60",
+    });
+  });
+
+  it("executes get-dispute from indexed scaffold tables", async () => {
+    queueSelectRows(
+      [
+        {
+          id: "0xarbitrator:7",
+          arbitrator: "0xarbitrator",
+          tcrAddress: "0xtcr",
+          tcrKind: "budget",
+          itemId: "0xitem",
+          requestIndex: "2",
+          disputeId: "7",
+          currentRound: "1",
+          jurorAddresses: ["0xjuror"],
+          budgetTreasury: "0xbudget",
+          goalTreasury: "0xgoal",
+          stakeVault: "0xvault",
+          ruling: 2,
+          choices: "2",
+          arbitrationCost: "100",
+          extraData: "0xextra",
+          creationBlock: "123",
+          votingStartTime: "1713000000",
+          votingEndTime: "1713000600",
+          revealPeriodEndTime: "1713001200",
+          executedAt: "1713001800",
+          updatedAtTimestamp: "1713002000",
+        },
+      ],
+      [
+        {
+          id: "0xtcr:0xitem:2",
+          tcrAddress: "0xtcr",
+          tcrKind: "budget",
+          itemId: "0xitem",
+          requestIndex: "2",
+          requestType: "registration",
+          requester: "0xrequester",
+          challenger: "0xchallenger",
+          submittedAt: "1712999000",
+          challengedAt: "1712999500",
+        },
+      ],
+      [
+        {
+          id: "0xbudget",
+          recipientId: "0xitem",
+          childFlow: "0xchild",
+          premiumEscrow: "0xescrow",
+          state: 2,
+          finalized: false,
+        },
+      ],
+      [
+        {
+          id: "0xgoal",
+          goalRevnetId: "42",
+          state: 1,
+          finalized: false,
+          canonicalRouteSlug: "alpha",
+          canonicalRouteDomain: "alpha.cobuild.eth",
+          stakeVault: "0xvault",
+        },
+      ],
+      [
+        {
+          id: "0xarbitrator:7:0x00000000000000000000000000000000000000aa",
+          snapshotWeight: "11",
+          createdAtTimestamp: "1713000100",
+        },
+      ],
+      [
+        {
+          id: "0xvault:0x00000000000000000000000000000000000000aa",
+          optedIn: true,
+          currentJurorWeight: "13",
+          lockedGoalAmount: "21",
+          exitTime: "1713100000",
+          delegate: "0xdelegate",
+          slasher: "0xslasher",
+          slashedTotal: "1",
+          updatedAtTimestamp: "1713003000",
+        },
+      ],
+      [
+        {
+          round: "0",
+          hasCommitted: true,
+          hasRevealed: true,
+          choice: "1",
+          reasonText: "ship it",
+          votes: "13",
+          committedAt: "1713000200",
+          revealedAt: "1713000800",
+          rewardAmount: "2",
+          rewardWithdrawnAt: null,
+          slashRewardGoalAmount: null,
+          slashRewardCobuildAmount: null,
+          slashRewardsWithdrawnAt: null,
+          snapshotVotes: "13",
+          slashWeight: null,
+          missedReveal: false,
+          slashRecipient: null,
+          slashedAt: null,
+        },
+      ],
+    );
+
+    const result = await executeTool("get-dispute", {
+      identifier: "0xArbitrator:7",
+      juror: "0x00000000000000000000000000000000000000Aa",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      name: "get-dispute",
+      output: {
+        identifier: "0xArbitrator:7",
+        disputeId: "7",
+        arbitrator: "0xarbitrator",
+        currentRound: "1",
+        jurorCount: 1,
+        ruling: 2,
+        choices: "2",
+        arbitrationCost: "100",
+        extraData: "0xextra",
+        creationBlock: "123",
+        goal: {
+          goalAddress: "0xgoal",
+          goalRevnetId: "42",
+          state: "Active",
+          stateCode: 1,
+          finalized: false,
+          route: {
+            slug: "alpha",
+            domain: "alpha.cobuild.eth",
+          },
+          stakeVault: "0xvault",
+        },
+        budget: {
+          budgetAddress: "0xbudget",
+          recipientId: "0xitem",
+          state: "Succeeded",
+          stateCode: 2,
+          finalized: false,
+          childFlow: "0xchild",
+          premiumEscrow: "0xescrow",
+        },
+        tcr: {
+          address: "0xtcr",
+          kind: "budget",
+          itemId: "0xitem",
+        },
+        request: {
+          requestId: "0xtcr:0xitem:2",
+          requestIndex: "2",
+          requestType: "registration",
+          requester: "0xrequester",
+          challenger: "0xchallenger",
+          submittedAt: "2024-04-13T09:03:20.000Z",
+          challengedAt: "2024-04-13T09:11:40.000Z",
+        },
+        timing: {
+          votingStartAt: "2024-04-13T09:20:00.000Z",
+          votingEndAt: "2024-04-13T09:30:00.000Z",
+          revealEndAt: "2024-04-13T09:40:00.000Z",
+          executedAt: "2024-04-13T09:50:00.000Z",
+          updatedAt: "2024-04-13T09:53:20.000Z",
+        },
+        juror: {
+          address: "0x00000000000000000000000000000000000000aa",
+          isAssigned: true,
+          snapshotWeight: "11",
+          createdAt: "2024-04-13T09:21:40.000Z",
+          current: {
+            optedIn: true,
+            currentWeight: "13",
+            lockedGoalAmount: "21",
+            exitTime: "2024-04-14T13:06:40.000Z",
+            delegate: "0xdelegate",
+            slasher: "0xslasher",
+            slashedTotal: "1",
+            updatedAt: "2024-04-13T10:10:00.000Z",
+          },
+          receipts: [
+            {
+              round: "0",
+              hasCommitted: true,
+              hasRevealed: true,
+              choice: "1",
+              reasonText: "ship it",
+              votes: "13",
+              committedAt: "2024-04-13T09:23:20.000Z",
+              revealedAt: "2024-04-13T09:33:20.000Z",
+              rewardAmount: "2",
+              rewardWithdrawnAt: null,
+              slashRewardGoalAmount: null,
+              slashRewardCobuildAmount: null,
+              slashRewardsWithdrawnAt: null,
+              snapshotVotes: "13",
+              slashWeight: null,
+              missedReveal: false,
+              slashRecipient: null,
+              slashedAt: null,
+            },
+          ],
+        },
+      },
+      cacheControl: "private, max-age=60",
+    });
+  });
+
+  it("executes get-stake-position and returns zeroed account state when stake rows are absent", async () => {
+    queueSelectRows(
+      [
+        {
+          id: "0x00000000000000000000000000000000000000aa",
+          goalRevnetId: "42",
+          state: 1,
+          finalized: false,
+          canonicalRouteSlug: "alpha",
+          canonicalRouteDomain: "alpha.cobuild.eth",
+          stakeVault: "0xstakevault",
+        },
+      ],
+      [],
+      [],
+      [],
+      [],
+    );
+
+    const result = await executeTool("get-stake-position", {
+      identifier: "0x00000000000000000000000000000000000000Aa",
+      account: "0x00000000000000000000000000000000000000Bb",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      name: "get-stake-position",
+      output: {
+        identifier: "0x00000000000000000000000000000000000000Aa",
+        account: "0x00000000000000000000000000000000000000bb",
+        vaultAddress: "0xstakevault",
+        goal: {
+          goalAddress: "0x00000000000000000000000000000000000000aa",
+          goalRevnetId: "42",
+          state: "Active",
+          stateCode: 1,
+          finalized: false,
+          route: {
+            slug: "alpha",
+            domain: "alpha.cobuild.eth",
+          },
+          stakeVault: "0xstakevault",
+        },
+        budget: null,
+        vault: {
+          kind: "goal",
+          treasury: "0x00000000000000000000000000000000000000aa",
+          resolved: null,
+          goalTotalStaked: "0",
+          goalTotalWithdrawn: "0",
+          cobuildTotalStaked: "0",
+          cobuildTotalWithdrawn: "0",
+          updatedAt: null,
+          address: "0xstakevault",
+        },
+        accountState: {
+          goal: {
+            hasPosition: false,
+            staked: "0",
+            withdrawn: "0",
+            netStaked: "0",
+            updatedAt: null,
+          },
+          cobuild: {
+            hasPosition: false,
+            staked: "0",
+            withdrawn: "0",
+            netStaked: "0",
+            updatedAt: null,
+          },
+        },
+        juror: null,
+      },
+      cacheControl: "private, max-age=60",
+    });
+  });
+
+  it("executes get-premium-escrow with optional account state", async () => {
+    queueSelectRows(
+      [
+        {
+          id: "0xstack",
+          budgetTreasury: "0xbudget",
+          premiumEscrow: "0xescrow",
+          childFlow: "0xchild",
+          status: "ACTIVE",
+          strategy: "0xstrategy",
+        },
+      ],
+      [
+        {
+          id: "0xbudget",
+          recipientId: "0xstack",
+          childFlow: "0xchild",
+          premiumEscrow: "0xescrow",
+          state: 1,
+          finalized: false,
+        },
+      ],
+      [
+        {
+          id: "0xescrow",
+          budgetTreasury: "0xbudget",
+          budgetStackId: "0xstack",
+          childFlow: "0xchild",
+          managerRewardPool: "0xpool",
+          baselineReceived: "100",
+          latestDistributedPremium: "12",
+          latestTotalCoverage: "300",
+          latestPremiumIndex: "8",
+          closed: false,
+          finalState: 1,
+          activatedAt: "1714000000",
+          closedAt: null,
+          lastIndexedAtTimestamp: "1714000500",
+          updatedAtTimestamp: "1714000600",
+        },
+      ],
+      [
+        {
+          id: "0xbudget",
+          goalTreasury: "0xgoal",
+        },
+      ],
+      [
+        {
+          id: "0xgoal",
+          goalRevnetId: "42",
+          state: 1,
+          finalized: false,
+          canonicalRouteSlug: "alpha",
+          canonicalRouteDomain: "alpha.cobuild.eth",
+          stakeVault: "0xvault",
+        },
+      ],
+      [
+        {
+          id: "0xescrow:0x00000000000000000000000000000000000000cc",
+          currentCoverage: "25",
+          claimableAmount: "3",
+          exposureIntegral: "9",
+          slashed: false,
+          lastSlashWeight: "1",
+          lastSlashDuration: "60",
+          lastCheckpointTimestamp: "1714000400",
+          updatedAtTimestamp: "1714000600",
+        },
+      ],
+    );
+
+    const result = await executeTool("get-premium-escrow", {
+      identifier: "0xstack",
+      account: "0x00000000000000000000000000000000000000Cc",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      name: "get-premium-escrow",
+      output: {
+        identifier: "0xstack",
+        escrowAddress: "0xescrow",
+        goal: {
+          goalAddress: "0xgoal",
+          goalRevnetId: "42",
+          state: "Active",
+          stateCode: 1,
+          finalized: false,
+          route: {
+            slug: "alpha",
+            domain: "alpha.cobuild.eth",
+          },
+          stakeVault: "0xvault",
+        },
+        budget: {
+          budgetAddress: "0xbudget",
+          recipientId: "0xstack",
+          state: "Active",
+          stateCode: 1,
+          finalized: false,
+          childFlow: "0xchild",
+          premiumEscrow: "0xescrow",
+        },
+        budgetStack: {
+          id: "0xstack",
+          status: "ACTIVE",
+          childFlow: "0xchild",
+          strategy: "0xstrategy",
+          budgetAddress: "0xbudget",
+        },
+        state: {
+          budgetTreasury: "0xbudget",
+          childFlow: "0xchild",
+          managerRewardPool: "0xpool",
+          baselineReceived: "100",
+          latestDistributedPremium: "12",
+          latestTotalCoverage: "300",
+          latestPremiumIndex: "8",
+          closed: false,
+          finalState: 1,
+        },
+        timing: {
+          activatedAt: "2024-04-24T23:06:40.000Z",
+          closedAt: null,
+          lastIndexedAt: "2024-04-24T23:15:00.000Z",
+          updatedAt: "2024-04-24T23:16:40.000Z",
+        },
+        account: {
+          address: "0x00000000000000000000000000000000000000cc",
+          hasAccountState: true,
+          currentCoverage: "25",
+          claimableAmount: "3",
+          exposureIntegral: "9",
+          slashed: false,
+          lastSlashWeight: "1",
+          lastSlashDuration: "60",
+          lastCheckpointAt: "2024-04-24T23:13:20.000Z",
+          updatedAt: "2024-04-24T23:16:40.000Z",
+        },
+      },
+      cacheControl: "private, max-age=60",
+    });
+  });
+
   it("returns 404 for missing indexed protocol inspect rows", async () => {
     queueSelectRows([], []);
 
@@ -696,6 +1261,43 @@ describe("tool registry execution", () => {
       name: "get-budget",
       statusCode: 404,
       error: "Budget not found.",
+    });
+
+    queueSelectRows([]);
+    expect(await executeTool("get-tcr-request", { identifier: "0xtcr:0xitem:1" })).toEqual({
+      ok: false,
+      name: "get-tcr-request",
+      statusCode: 404,
+      error: "TCR request not found.",
+    });
+
+    queueSelectRows([]);
+    expect(await executeTool("get-dispute", { identifier: "0xarbitrator:1" })).toEqual({
+      ok: false,
+      name: "get-dispute",
+      statusCode: 404,
+      error: "Dispute not found.",
+    });
+
+    queueSelectRows([]);
+    expect(
+      await executeTool("get-stake-position", {
+        identifier: "missing-goal",
+        account: "0x00000000000000000000000000000000000000aa",
+      }),
+    ).toEqual({
+      ok: false,
+      name: "get-stake-position",
+      statusCode: 404,
+      error: "Stake position not found.",
+    });
+
+    queueSelectRows([], []);
+    expect(await executeTool("get-premium-escrow", { identifier: "0xstack" })).toEqual({
+      ok: false,
+      name: "get-premium-escrow",
+      statusCode: 404,
+      error: "Premium escrow not found.",
     });
   });
 
@@ -727,6 +1329,52 @@ describe("tool registry execution", () => {
       statusCode: 400,
       error: "identifier must not be empty.",
     });
+
+    expect(await executeTool("get-tcr-request", {})).toEqual({
+      ok: false,
+      name: "get-tcr-request",
+      statusCode: 400,
+      error: "identifier must be a string.",
+    });
+
+    expect(await executeTool("get-dispute", { identifier: "   " })).toEqual({
+      ok: false,
+      name: "get-dispute",
+      statusCode: 400,
+      error: "identifier must not be empty.",
+    });
+
+    expect(await executeTool("get-dispute", { identifier: "0xarbitrator:1", juror: "bad" })).toEqual({
+      ok: false,
+      name: "get-dispute",
+      statusCode: 400,
+      error: "juror must be a valid EVM address.",
+    });
+
+    expect(await executeTool("get-stake-position", { identifier: "alpha" })).toEqual({
+      ok: false,
+      name: "get-stake-position",
+      statusCode: 400,
+      error: "account must be a string.",
+    });
+
+    expect(
+      await executeTool("get-stake-position", { identifier: "alpha", account: "bad" }),
+    ).toEqual({
+      ok: false,
+      name: "get-stake-position",
+      statusCode: 400,
+      error: "account must be a valid EVM address.",
+    });
+
+    expect(
+      await executeTool("get-premium-escrow", { identifier: "0xstack", account: "bad" }),
+    ).toEqual({
+      ok: false,
+      name: "get-premium-escrow",
+      statusCode: 400,
+      error: "account must be a valid EVM address.",
+    });
   });
 
   it("returns 502 when indexed protocol inspect queries throw", async () => {
@@ -750,6 +1398,39 @@ describe("tool registry execution", () => {
       name: "get-budget",
       statusCode: 502,
       error: "get-budget request failed: db unavailable",
+    });
+
+    await expect(executeTool("get-tcr-request", { identifier: "0xtcr:0xitem:1" })).resolves.toEqual({
+      ok: false,
+      name: "get-tcr-request",
+      statusCode: 502,
+      error: "get-tcr-request request failed: db unavailable",
+    });
+
+    await expect(executeTool("get-dispute", { identifier: "0xarbitrator:1" })).resolves.toEqual({
+      ok: false,
+      name: "get-dispute",
+      statusCode: 502,
+      error: "get-dispute request failed: db unavailable",
+    });
+
+    await expect(
+      executeTool("get-stake-position", {
+        identifier: "alpha",
+        account: "0x00000000000000000000000000000000000000aa",
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      name: "get-stake-position",
+      statusCode: 502,
+      error: "get-stake-position request failed: db unavailable",
+    });
+
+    await expect(executeTool("get-premium-escrow", { identifier: "0xstack" })).resolves.toEqual({
+      ok: false,
+      name: "get-premium-escrow",
+      statusCode: 502,
+      error: "get-premium-escrow request failed: db unavailable",
     });
   });
 

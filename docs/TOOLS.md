@@ -48,6 +48,10 @@ Example canonical-only CLI tool:
 Example canonical + AI-wrapper inspect tools:
 - `get-goal` (aliases: `getGoal`, `goal.inspect`) reads indexed scaffold tables directly and returns concise goal, treasury, route, flow, stake, governance, and budget summary data.
 - `get-budget` (aliases: `getBudget`, `budget.inspect`) reads indexed scaffold tables directly and returns concise budget, parent-goal, treasury, flow, and governance data.
+- `get-tcr-request` (aliases: `getTcrRequest`, `tcr.request`) reads indexed protocol tables directly and returns concise TCR request, dispute, goal, and budget context by composite request id.
+- `get-dispute` (aliases: `getDispute`, `dispute.inspect`) reads indexed protocol tables directly and returns concise arbitrator dispute state, request context, and optional juror detail by composite dispute id.
+- `get-stake-position` (aliases: `getStakePosition`, `stake.inspect`) reads indexed protocol tables directly and returns compact stake-vault totals plus goal/cobuild account state for a resolved entity or vault.
+- `get-premium-escrow` (aliases: `getPremiumEscrow`, `premiumEscrow.inspect`) reads indexed protocol tables directly and returns compact premium escrow, budget stack, and optional account checkpoint state.
 
 ## Prompt guidance
 

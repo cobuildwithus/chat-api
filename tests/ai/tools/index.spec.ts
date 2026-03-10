@@ -30,6 +30,10 @@ describe("tools index", () => {
     expect(module.toolsByName.getUser).toBeDefined();
     expect(module.toolsByName.getGoal).toBeDefined();
     expect(module.toolsByName.getBudget).toBeDefined();
+    expect(module.toolsByName.getTcrRequest).toBeDefined();
+    expect(module.toolsByName.getDispute).toBeDefined();
+    expect(module.toolsByName.getStakePosition).toBeDefined();
+    expect(module.toolsByName.getPremiumEscrow).toBeDefined();
     expect(module.toolsByName.listDiscussions).toBeDefined();
     expect(module.toolsByName.getDiscussionThread).toBeDefined();
     expect(module.toolsByName.semanticSearchCasts).toBeDefined();
@@ -41,5 +45,9 @@ describe("tools index", () => {
     expect(module.defaultTools.some((tool) => tool.name === "list-wallet-notifications")).toBe(false);
     expect(module.defaultTools.some((tool) => tool.name === "getGoal")).toBe(true);
     expect(module.defaultTools.some((tool) => tool.name === "getBudget")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getTcrRequest")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getDispute")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getStakePosition")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getPremiumEscrow")).toBe(true);
   });
 });
