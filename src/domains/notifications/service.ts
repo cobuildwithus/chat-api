@@ -17,6 +17,15 @@ import { resolveSubjectWalletFromContext } from "./wallet-subject";
 
 const NEYNAR_SCORE_THRESHOLD = 0.55;
 const ISO_UTC_MICROS_TEMPLATE = `YYYY-MM-DD"T"HH24:MI:SS.US"Z"`;
+const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+const MIN_SAFE_INTEGER_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
+const ALLOWED_NOTIFICATION_PAYLOAD_KEYS = new Set([
+  "amount",
+  "labels",
+  "protocol",
+  "resource",
+  "role",
+]);
 
 type NotificationRow = {
   id: bigint | number | string;
@@ -159,12 +168,43 @@ function toHash(value: string | null): string | null {
   return value ? `0x${value}` : null;
 }
 
-function toCount(value: bigint | number | string | null | undefined): number {
-  if (typeof value === "bigint") return Number(value);
-  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+function toSafeInteger(value: bigint | number | string | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "bigint") {
+    if (value > MAX_SAFE_INTEGER_BIGINT || value < MIN_SAFE_INTEGER_BIGINT) {
+      return null;
+    }
+    return Number(value);
+  }
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) ? value : null;
+  }
   if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
+    try {
+      const parsed = BigInt(value.trim());
+      if (parsed > MAX_SAFE_INTEGER_BIGINT || parsed < MIN_SAFE_INTEGER_BIGINT) {
+        return null;
+      }
+      return Number(parsed);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function toCount(value: bigint | number | string | null | undefined): number {
+  const safeInteger = toSafeInteger(value);
+  if (safeInteger !== null) {
+    return safeInteger;
+  }
+  if (typeof value === "bigint") {
+    return value < 0n ? 0 : Number.MAX_SAFE_INTEGER;
+  }
+  if (typeof value === "string" && /^-?\d+$/.test(value.trim())) {
+    return value.trim().startsWith("-") ? 0 : Number.MAX_SAFE_INTEGER;
   }
   return 0;
 }
@@ -193,10 +233,69 @@ function toExcerpt(text: string | null | undefined): string | null {
 }
 
 function toPayload(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  const dto = toDtoValue(value);
+  if (!dto || typeof dto !== "object" || Array.isArray(dto)) {
     return null;
   }
-  return value as Record<string, unknown>;
+
+  const record = dto as Record<string, unknown>;
+  const filtered = Object.fromEntries(
+    Object.entries(record).filter(([key]) => ALLOWED_NOTIFICATION_PAYLOAD_KEYS.has(key)),
+  );
+  return Object.keys(filtered).length > 0 ? filtered : null;
+}
+
+function toDtoValue(value: unknown): unknown {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value === "string" || typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return undefined;
+    }
+    if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
+      return value.toString();
+    }
+    return value;
+  }
+  if (typeof value === "bigint") {
+    return toSafeInteger(value) ?? value.toString();
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => {
+      const dto = toDtoValue(entry);
+      return dto === undefined ? [] : [dto];
+    });
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const jsonValue = typeof (value as { toJSON?: () => unknown }).toJSON === "function"
+    ? (value as { toJSON: () => unknown }).toJSON()
+    : null;
+  if (jsonValue !== null && jsonValue !== value) {
+    return toDtoValue(jsonValue);
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return undefined;
+  }
+
+  const record: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    const dto = toDtoValue(entry);
+    if (dto !== undefined) {
+      record[key] = dto;
+    }
+  }
+  return record;
 }
 
 function buildDiscussionAppPath(row: NotificationRow): string | null {
@@ -229,7 +328,7 @@ function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
     protocolPresentation?.actorName ??
     row.actorDisplayName ??
     row.actorUsername ??
-    (row.actorFid != null ? `fid:${toCount(row.actorFid)}` : null);
+    (row.actorFid != null ? `fid:${toNumericString(row.actorFid)}` : null);
 
   return {
     id: toNumericString(row.id),
@@ -245,7 +344,7 @@ function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
       row.actorDisplayName !== null ||
       row.actorAvatarUrl !== null
         ? {
-            fid: row.actorFid == null ? null : toCount(row.actorFid),
+            fid: row.actorFid == null ? null : toSafeInteger(row.actorFid),
             walletAddress: row.actorWalletAddress,
             name: actorName,
             username: row.actorUsername,

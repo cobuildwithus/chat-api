@@ -225,7 +225,7 @@ describe("wallet notifications service", () => {
         targetHash: `0x${"c".repeat(40)}`,
         appPath: `/cast/0x${"b".repeat(40)}?post=0x${"a".repeat(40)}`,
       },
-      payload: { foo: "bar" },
+      payload: null,
     });
     expect(result.items[0].summary.title?.length).toBe(160);
     expect(result.items[0].summary.excerpt?.length).toBe(180);
@@ -355,7 +355,7 @@ describe("wallet notifications service", () => {
           sourceHash: null,
           rootHash: null,
           targetHash: null,
-          appPath: `/${goalTreasury}/events`,
+          appPath: `/${goalTreasury}/events?focus=request`,
         },
         payload: {
           labels: { goalName: "Alpha" },
@@ -363,6 +363,80 @@ describe("wallet notifications service", () => {
         },
       },
     ]);
+  });
+
+  it("allowlists notification payload keys while keeping JSON-safe DTOs and safe fid coercion", async () => {
+    mocks.requestContextGet.mockImplementation((key: string) => {
+      if (key === "toolsPrincipal") {
+        return {
+          ownerAddress: "0x0000000000000000000000000000000000000001",
+          agentKey: "forecast-bot",
+        };
+      }
+      return undefined;
+    });
+    mocks.execute
+      .mockResolvedValueOnce({
+        rows: [{ count: "1", watermark: "1741435200000001" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 43n,
+            kind: "protocol",
+            reason: "budget_accepted",
+            eventAt: "2026-03-08T12:00:03.123456Z",
+            eventAtCursor: "2026-03-08T12:00:03.123456Z",
+            createdAt: "2026-03-08T12:00:06.123456Z",
+            createdAtCursor: "2026-03-08T12:00:06.123456Z",
+            isUnread: true,
+            sourceType: "budget_request",
+            sourceId: "proto-43",
+            sourceHashHex: null,
+            rootHashHex: null,
+            targetHashHex: null,
+            actorFid: 9007199254740993n,
+            actorWalletAddress: null,
+            actorUsername: null,
+            actorDisplayName: null,
+            actorAvatarUrl: null,
+            sourceText: null,
+            rootText: null,
+            payload: {
+              role: "requester",
+              protocol: true,
+              labels: { goalName: "Alpha" },
+              resource: { goalTreasury: "0x00000000000000000000000000000000000000bb" },
+              amount: 9007199254740993n,
+              ignored: "drop-me",
+              nested: {
+                when: new Date("2026-03-08T12:00:00.000Z"),
+                entries: ["ok", 7n, Number.POSITIVE_INFINITY],
+              },
+            },
+          },
+        ],
+      });
+
+    const result = await listWalletNotifications({
+      limit: 1,
+      unreadOnly: false,
+      kinds: ["protocol"],
+    });
+
+    expect(result.items[0]).toMatchObject({
+      actor: {
+        fid: null,
+        name: "fid:9007199254740993",
+      },
+      payload: {
+        role: "requester",
+        protocol: true,
+        labels: { goalName: "Alpha" },
+        resource: { goalTreasury: "0x00000000000000000000000000000000000000bb" },
+        amount: "9007199254740993",
+      },
+    });
   });
 
   it("preserves unknown kinds instead of coercing them", async () => {
