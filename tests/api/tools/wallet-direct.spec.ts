@@ -88,19 +88,81 @@ describe("wallet tool direct execution branches", () => {
   it("publishes the narrowed wallet notification payload schema", () => {
     const outputSchema = listWalletNotificationsTool?.outputSchema as Record<string, any> | undefined;
     const payloadSchema = outputSchema?.properties?.items?.items?.properties?.payload;
+    const protocolSchema = payloadSchema?.anyOf?.[0];
 
     expect(payloadSchema).toMatchObject({
       anyOf: [
         {
           type: "object",
-          required: ["role", "resource", "actor", "labels", "schedule", "amounts"],
+          required: ["role", "resource", "actor", "labels", "schedule", "amounts", "reward"],
           additionalProperties: true,
           properties: {
+            role: {
+              anyOf: [
+                {
+                  type: "string",
+                  enum: expect.arrayContaining([
+                    "requester",
+                    "challenger",
+                    "proposer",
+                    "budget_controller",
+                    "goal_owner",
+                    "goal_stakeholder",
+                    "goal_underwriter",
+                    "budget_underwriter",
+                    "juror",
+                  ]),
+                },
+                { type: "null" },
+              ],
+            },
             actor: {
               anyOf: [
                 {
                   type: "object",
                   required: ["walletAddress"],
+                  additionalProperties: true,
+                },
+                { type: "null" },
+              ],
+            },
+            labels: {
+              anyOf: [
+                {
+                  type: "object",
+                  required: [
+                    "goalName",
+                    "budgetName",
+                    "mechanismName",
+                    "reminderContextLabel",
+                  ],
+                  additionalProperties: true,
+                },
+                { type: "null" },
+              ],
+            },
+            schedule: {
+              anyOf: [
+                {
+                  type: "object",
+                  required: [
+                    "deliverAt",
+                    "votingStartAt",
+                    "votingEndAt",
+                    "revealEndAt",
+                    "challengeWindowEndAt",
+                    "reassertGraceDeadline",
+                  ],
+                  additionalProperties: true,
+                },
+                { type: "null" },
+              ],
+            },
+            reward: {
+              anyOf: [
+                {
+                  type: "object",
+                  required: ["bucket", "bucketLabel"],
                   additionalProperties: true,
                 },
                 { type: "null" },
@@ -116,5 +178,23 @@ describe("wallet tool direct execution branches", () => {
         { type: "null" },
       ],
     });
+
+    expect(protocolSchema?.properties?.resource?.anyOf?.[0]?.required).toEqual([
+      "kind",
+      "goalTreasury",
+      "budgetTreasury",
+      "itemId",
+      "requestIndex",
+      "arbitrator",
+      "disputeId",
+    ]);
+    expect(protocolSchema?.properties?.amounts?.anyOf?.[0]?.required).toEqual([
+      "allocatedStake",
+      "claimable",
+      "claimedAmount",
+      "snapshotWeight",
+      "snapshotVotes",
+      "slashWeight",
+    ]);
   });
 });
