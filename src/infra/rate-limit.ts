@@ -142,18 +142,31 @@ export async function recordUsage(key: string, usage: number): Promise<void> {
   }
 }
 
+export async function removeRecordedUsage(key: string, memberValue: string): Promise<void> {
+  const redisClient = await getRedisClient();
+
+  try {
+    await redisClient.zRem(key, memberValue);
+  } catch (error) {
+    console.error("Error removing recorded usage:", error);
+    throw error;
+  }
+}
+
 type CheckAndRecordUsageOptions = {
   windowMinutes: number;
   maxUsage: number;
   usageToAdd: number;
   nowMs?: number;
   ttlSeconds?: number;
+  memberValue?: string;
 };
 
 export type CheckAndRecordUsageResult = {
   allowed: boolean;
   usage: number;
   retryAfterSeconds: number;
+  memberValue?: string;
 };
 
 export async function checkAndRecordUsage(
@@ -165,7 +178,7 @@ export async function checkAndRecordUsage(
   const ttlSeconds = options.ttlSeconds ?? ONE_DAY_SECONDS;
   const windowMs = Math.floor(options.windowMinutes * 60 * 1000);
   const usageToAdd = options.usageToAdd;
-  const memberValue = buildUsageMember(nowMs, usageToAdd);
+  const memberValue = options.memberValue ?? buildUsageMember(nowMs, usageToAdd);
 
   try {
     const raw = (await redisClient.eval(CHECK_AND_RECORD_USAGE_LUA, {
@@ -189,6 +202,7 @@ export async function checkAndRecordUsage(
       allowed,
       usage,
       retryAfterSeconds: allowed ? 0 : retryAfterSeconds,
+      ...(allowed ? { memberValue } : {}),
     };
   } catch (error) {
     console.error("Error checking and recording usage:", error);

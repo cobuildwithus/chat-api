@@ -15,7 +15,6 @@ GET  /api/chat/:chatId
 
 ### Auth
 - `privy-id-token` header required for all chat endpoints.
-- `x-chat-grant` is issued by the API and can be reused for subsequent chat sends.
 - Privy docs: https://privy.io
 
 ## Quick start
@@ -28,9 +27,9 @@ pnpm dev
 
 ## Request shape (high level)
 
-- `/api/chat/new` creates a chat row and returns `chatId` + `chatGrant`.
-- `/api/chat` streams a response and persists chat messages.
-- `/api/chat/:chatId` returns stored messages (and refreshes `x-chat-grant`).
+- `/api/chat/new` creates a chat row and returns `chatId`.
+- `/api/chat` accepts a single user turn (`chatId`, `clientMessageId`, `userMessage`, optional attachments/context), appends it on the server, and streams a response.
+- `/api/chat/:chatId` returns stored messages.
 
 See `src/api/chat/schema.ts` for precise request/response schemas.
 
@@ -40,6 +39,10 @@ Set `SELF_HOSTED_MODE=true` to bypass Privy auth. In this mode you must provide 
 EVM address via the `x-chat-user` header or set `SELF_HOSTED_DEFAULT_ADDRESS`.
 For a slightly safer setup, set `SELF_HOSTED_SHARED_SECRET` and send it as `x-chat-auth`
 on every request.
+
+Production guardrail: self-hosted mode now requires both `SELF_HOSTED_SHARED_SECRET` and
+an explicit `SELF_HOSTED_PRODUCTION_ENABLED=1` opt-in before the server will start in
+production.
 
 Minimal setup:
 
@@ -51,6 +54,9 @@ Minimal setup:
 
 Note: this mode is meant for local/dev or trusted environments. If you expose the service
 publicly, you should add your own auth or IP allow‑list.
+
+Geo headers are ignored unless `CHAT_TRUST_PROXY` is configured for a trusted upstream
+proxy that injects them.
 
 Example:
 
@@ -80,11 +86,12 @@ Key variables:
 - `OPENAI_API_KEY`
 - `PRIVY_APP_ID` (required unless `SELF_HOSTED_MODE=true`)
 - `PRIVY_VERIFICATION_KEY` (required in production unless `SELF_HOSTED_MODE=true`)
-- `CHAT_GRANT_SECRET`
 - `DOCS_VECTOR_STORE_ID` (optional, enable docs search tool)
 - `SELF_HOSTED_MODE` (optional, set to `true` to bypass Privy)
+- `SELF_HOSTED_PRODUCTION_ENABLED` (optional, must be `1` to allow self-hosted mode in production)
 - `SELF_HOSTED_DEFAULT_ADDRESS` (optional, fallback address in self-hosted mode)
-- `SELF_HOSTED_SHARED_SECRET` (optional, require `x-chat-auth` in self-hosted mode)
+- `SELF_HOSTED_SHARED_SECRET` (optional in development, required in self-hosted mode and in production)
+- `CHAT_TRUST_PROXY` (optional, required if a trusted upstream proxy injects geo/ip headers)
 - `POSTGRES_POOL_MAX` (optional, tune Postgres pool size)
 - `POSTGRES_POOL_IDLE_TIMEOUT_MS` (optional)
 - `POSTGRES_POOL_CONNECTION_TIMEOUT_MS` (optional)
@@ -94,12 +101,6 @@ Key variables:
 - `RATE_LIMIT_WINDOW_MS` (optional, default 60000)
 - `OPENAI_REQUEST_TIMEOUT_MS` (optional, default 30000)
 - `COBUILD_AI_CONTEXT_TIMEOUT_MS` (optional, default 7000)
-
-Generate a `CHAT_GRANT_SECRET` with:
-
-```bash
-openssl rand -hex 32
-```
 
 ## Postgres & cache guardrails
 
@@ -164,7 +165,6 @@ Hosted option: https://railway.app
    - `POSTGRES_URL` = Railway Postgres connection string
    - `REDIS_URL` = Railway Redis connection string
    - `OPENAI_API_KEY`
-   - `CHAT_GRANT_SECRET`
    - `PRIVY_APP_ID` / `PRIVY_VERIFICATION_KEY` (unless `SELF_HOSTED_MODE=true`)
 4. Build command: `pnpm install && pnpm build`
 5. Start command: `pnpm start`

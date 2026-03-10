@@ -4,22 +4,67 @@ import {
   chatGetSchema,
   chatListSchema,
   chatSchema,
+  parseChatBody,
+  parseChatCreateBody,
+  parseChatHeaders,
+  parseChatListQuery,
 } from "../../../src/api/chat/schema";
 
 describe("chat schemas", () => {
-  it("includes required properties for chat payloads", () => {
-    expect(chatSchema.body.required).toContain("id");
-    expect(chatSchema.body.required).toContain("messages");
-    expect(chatSchema.body.properties.messages.type).toBe("array");
-    expect(chatSchema.body.properties.messages.items.properties.role.enum).toEqual([
-      "user",
-      "assistant",
-    ]);
+  it("defines the append-only chat post contract", () => {
+    const bodySchema = chatSchema.body as {
+      required: string[];
+      properties: Record<string, { type?: string; enum?: string[] }>;
+    };
+    const headersSchema = chatSchema.headers as {
+      properties: Record<string, unknown>;
+    };
+
+    expect(bodySchema.required).toEqual(["chatId", "clientMessageId", "userMessage"]);
+    expect(bodySchema.properties.chatId.type).toBe("string");
+    expect(bodySchema.properties.clientMessageId.type).toBe("string");
+    expect(bodySchema.properties.userMessage.type).toBe("string");
+    expect(headersSchema.properties["x-client-device"]).toBeDefined();
   });
 
   it("defines create, get, and list schemas", () => {
-    expect(chatCreateSchema.body.required).toEqual(["type"]);
-    expect(chatGetSchema.params.required).toEqual(["chatId"]);
-    expect(chatListSchema.querystring.properties.limit.maximum).toBe(100);
+    const createSchema = chatCreateSchema.body as {
+      required: string[];
+      properties: { type: { enum: string[] } };
+    };
+    const getSchema = chatGetSchema.params as { required: string[] };
+    const listSchema = chatListSchema.querystring as {
+      properties: { limit: { maximum: number } };
+    };
+
+    expect(createSchema.required).toEqual(["type"]);
+    expect(createSchema.properties.type.enum).toEqual(["chat-default"]);
+    expect(getSchema.required).toEqual(["chatId"]);
+    expect(listSchema.properties.limit.maximum).toBe(100);
+  });
+
+  it("uses the same runtime parsers as the generated schemas", () => {
+    expect(
+      parseChatBody({
+        chatId: "chat-1",
+        clientMessageId: "client-1",
+        userMessage: "hello",
+      }),
+    ).toEqual({
+      chatId: "chat-1",
+      clientMessageId: "client-1",
+      userMessage: "hello",
+    });
+    expect(() =>
+      parseChatBody({
+        chatId: "chat-1",
+        clientMessageId: "client-1",
+      }),
+    ).toThrow();
+    expect(parseChatHeaders({ "x-client-device": "mobile" })).toEqual({
+      "x-client-device": "mobile",
+    });
+    expect(parseChatListQuery({ limit: "7" })).toEqual({ limit: 7 });
+    expect(() => parseChatCreateBody({ type: "other" })).toThrow();
   });
 });

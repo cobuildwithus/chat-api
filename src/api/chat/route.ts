@@ -8,89 +8,118 @@ import {
 import { eq } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
-import { chat } from "../../infra/db/schema";
-import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
+import type { AgentType } from "../../ai/agents/agent";
 import { getAgent } from "../../ai/agents/agent";
-import { isAiUsageAvailable } from "../../ai/ai-rate.limit";
-import type { ChatBody } from "../../ai/types";
+import { admitAiGeneration } from "../../ai/ai-rate.limit";
+import type { ChatData } from "../../ai/types";
 import { isSameAddress } from "../../chat/address";
-import { signChatGrant, verifyChatGrant } from "../../chat/grant";
+import {
+  ChatMessageAlreadyProcessedError,
+  ChatMessageInProgressError,
+  InvalidChatRequestMessageError,
+  prepareChatRequestMessages,
+  storeAssistantMessages,
+} from "../../chat/message-store";
 import {
   clearPendingAssistantIfUnclaimed,
   markAssistantMessageFailed,
 } from "../../chat/message-status";
-import { storeChatMessages } from "../../chat/message-store";
+import { parseJson } from "../../chat/parse";
 import { isChatDebugEnabled } from "../../config/env";
+import { chat } from "../../infra/db/schema";
+import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
+import { getPublicError, toPublicErrorBody } from "../../public-errors";
 import { getChatUserOrThrow } from "../auth/validate-chat-user";
 import {
   CHAT_PERSIST_ERROR,
   buildStreamMessages,
   createReasoningTracker,
-  fireAndForget,
-  recordUsageIfPresent,
   resolveIsMobileRequest,
   streamErrorMessage,
 } from "./chat-helpers";
+import { parseChatBody, parseChatHeaders } from "./schema";
 
 export async function handleChatPostRequest(
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ) {
   try {
-    const body = request.body as ChatBody;
-    const { messages, type, context, data = {}, clientMessageId } = body;
-    const includeCobuildAiContextPrompt = false;
+    const body = parseChatBody(request.body);
+    const headers = parseChatHeaders(request.headers);
+    const { attachments, chatId, clientMessageId, context, userMessage } = body;
     const user = getChatUserOrThrow();
-    const chatId = body.id;
-    const grantHeader = request.headers?.["x-chat-grant"];
-    let issuedGrant: string | null = null;
-
-    const validGrant =
-      typeof grantHeader === "string"
-        ? await verifyChatGrant(grantHeader)
-        : null;
 
     const existing = await cobuildPrimaryDb()
-      .select({ user: chat.user, type: chat.type })
+      .select({
+        user: chat.user,
+        type: chat.type,
+        data: chat.data,
+        title: chat.title,
+      })
       .from(chat)
       .where(eq(chat.id, chatId))
       .limit(1);
 
     if (!existing.length) {
-      return reply.status(404).send({ error: "Chat not found" });
+      const error = getPublicError("chatNotFound");
+      return reply.status(error.statusCode).send(toPublicErrorBody("chatNotFound"));
     }
 
     if (!isSameAddress(existing[0].user, user.address)) {
-      return reply.status(404).send({ error: "Chat not found" });
+      const error = getPublicError("chatNotFound");
+      return reply.status(error.statusCode).send(toPublicErrorBody("chatNotFound"));
     }
 
-    if (existing[0].type !== type) {
-      return reply.status(400).send({ error: "Chat type mismatch" });
+    if (existing[0].type !== "chat-default") {
+      const error = getPublicError("chatTypeMismatch");
+      return reply.status(error.statusCode).send(toPublicErrorBody("chatTypeMismatch"));
     }
 
-    const grantMatches =
-      !!validGrant &&
-      validGrant.cid === chatId &&
-      isSameAddress(validGrant.sub, user.address);
-
-    if (!grantMatches) {
-      issuedGrant = await signChatGrant(chatId, user.address);
-    }
-
-    // Check the rate limit and build the agent in parallel.
-    const [canUseAi, agent] = await Promise.all([
-      isAiUsageAvailable(user.address),
-      getAgent(type, user, data, undefined, { includeCobuildAiContextPrompt }),
-    ]);
-
-    if (!canUseAi) {
-      if (issuedGrant) {
-        reply.header?.("x-chat-grant", issuedGrant);
+    let storedStreamMessages: UIMessage[] = [];
+    let modelSourceMessages: UIMessage[] = [];
+    try {
+      const preparedMessages = await prepareChatRequestMessages({
+        chatId,
+        clientMessageId,
+        userMessage,
+        attachments,
+        existingTitle: existing[0].title ?? null,
+      });
+      storedStreamMessages = preparedMessages.streamMessages;
+      modelSourceMessages = preparedMessages.modelMessages;
+    } catch (error) {
+      if (error instanceof InvalidChatRequestMessageError) {
+        return reply.status(400).send({ error: error.message });
       }
-      return reply
-        .status(429)
-        .send("Too many AI requests. Please try again in a few hours.");
+      if (error instanceof ChatMessageInProgressError) {
+        return reply.status(409).send({ error: error.message });
+      }
+      if (error instanceof ChatMessageAlreadyProcessedError) {
+        return reply.status(409).send({ error: error.message });
+      }
+      console.error("Failed to store initial user chat message", {
+        chatId,
+        user: user.address,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error(CHAT_PERSIST_ERROR);
     }
+
+    const type: AgentType = "chat-default";
+    const data = normalizeChatData(parseJson(existing[0].data));
+    const agent = await getAgent(type, user, data);
+    const requestLeaseId = randomUUID();
+    const admissionResult = await admitAiGeneration(user.address, chatId, requestLeaseId);
+
+    if (!admissionResult.allowed) {
+      if (admissionResult.code === "chat-inflight-limit") {
+        return reply.status(409).send({ error: "Another response is already in progress for this chat." });
+      }
+      const error = getPublicError("chatRateLimited");
+      reply.header("Retry-After", String(admissionResult.retryAfterSeconds));
+      return reply.status(error.statusCode).send(toPublicErrorBody("chatRateLimited"));
+    }
+    const admission = admissionResult.admission;
 
     const pendingAssistantId = randomUUID();
     const trustedAssistantIds = new Set([pendingAssistantId]);
@@ -102,18 +131,14 @@ export async function handleChatPostRequest(
     } satisfies UIMessage;
 
     try {
-      await storeChatMessages({
+      await storeAssistantMessages({
         chatId,
-        messages: [...messages, pendingAssistantMessage],
-        type,
-        data,
-        user,
-        clientMessageId,
+        messages: [pendingAssistantMessage],
         trustedMessageIds: [pendingAssistantId],
-        generateTitle: false,
       });
     } catch (error) {
-      console.error("Failed to store initial chat messages", {
+      await admission.release();
+      console.error("Failed to store pending assistant message", {
         chatId,
         user: user.address,
         message: error instanceof Error ? error.message : String(error),
@@ -121,38 +146,64 @@ export async function handleChatPostRequest(
       throw new Error(CHAT_PERSIST_ERROR);
     }
 
-    const modelMessages = await convertToModelMessages(messages);
-    const streamMessages = buildStreamMessages(
-      agent.system,
-      modelMessages,
-      context
-    );
+    const abortController = new AbortController();
+    let settled = false;
+    const settleGeneration = async (totalTokens?: number) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      detachAbortListeners();
+      try {
+        if (typeof totalTokens === "number" && Number.isFinite(totalTokens)) {
+          await admission.finalizeUsage(totalTokens);
+        }
+      } finally {
+        await admission.release();
+      }
+    };
+
+    const handleDisconnect = () => {
+      abortController.abort(new Error("Chat client disconnected"));
+      void clearPendingAssistantIfUnclaimed(chatId, pendingAssistantId, []);
+      void settleGeneration();
+    };
+
+    const detachAbortListeners = () => {
+      request.raw.off("aborted", handleDisconnect);
+    };
+
+    request.raw.once("aborted", handleDisconnect);
+
+    const modelMessages = await convertToModelMessages(modelSourceMessages);
+    const promptMessages = buildStreamMessages(agent.system, modelMessages, context);
     const reasoningTracker = createReasoningTracker();
 
-    const hasFileSearch = Object.prototype.hasOwnProperty.call(
-      agent.tools,
-      "file_search"
-    );
-    const isMobile = resolveIsMobileRequest(
-      request.headers["x-client-device"],
-      user.userAgent
-    );
-    const result = streamText({
-      model: agent.defaultModel,
-      messages: streamMessages,
-      tools: agent.tools,
-      providerOptions: {
-        openai: {
-          reasoningEffort: "medium",
-          reasoningSummary: "auto",
-          ...(isMobile ? { textVerbosity: "low" } : {}),
-          ...(hasFileSearch ? { include: ["file_search_call.results"] } : {}),
+    const hasFileSearch = Object.prototype.hasOwnProperty.call(agent.tools, "file_search");
+    const isMobile = resolveIsMobileRequest(headers["x-client-device"], user.userAgent);
+    let result: ReturnType<typeof streamText>;
+    try {
+      result = streamText({
+        model: agent.defaultModel,
+        messages: promptMessages,
+        tools: agent.tools,
+        abortSignal: abortController.signal,
+        providerOptions: {
+          openai: {
+            reasoningEffort: "medium",
+            reasoningSummary: "auto",
+            ...(isMobile ? { textVerbosity: "low" } : {}),
+            ...(hasFileSearch ? { include: ["file_search_call.results"] } : {}),
+          },
         },
-      },
-      stopWhen: stepCountIs(7),
-    });
-
-    fireAndForget(recordUsageIfPresent(result.usage, user.address), "record AI usage");
+        stopWhen: stepCountIs(7),
+      });
+    } catch (error) {
+      detachAbortListeners();
+      await clearPendingAssistantIfUnclaimed(chatId, pendingAssistantId, []);
+      await admission.release();
+      throw error;
+    }
 
     let usedPendingMessageId = false;
     const generateMessageId = () => {
@@ -165,33 +216,31 @@ export async function handleChatPostRequest(
     };
 
     const uiStream = result.toUIMessageStream({
-      originalMessages: messages,
+      originalMessages: storedStreamMessages,
       generateMessageId,
       sendReasoning: true,
       messageMetadata: ({ part }) => reasoningTracker.trackPart(part),
       onFinish: async ({ messages: finishedMessages }) => {
         try {
-          await storeChatMessages({
+          const assistantMessages = finishedMessages
+            .slice(storedStreamMessages.length)
+            .filter((message) => message.role === "assistant");
+          await storeAssistantMessages({
             chatId,
-            messages: finishedMessages,
-            type,
-            data,
-            user,
-            clientMessageId,
+            messages: assistantMessages,
             trustedMessageIds: Array.from(trustedAssistantIds),
           });
-          await clearPendingAssistantIfUnclaimed(
-            chatId,
-            pendingAssistantId,
-            finishedMessages
-          );
+          await clearPendingAssistantIfUnclaimed(chatId, pendingAssistantId, assistantMessages);
+          const usage = await Promise.resolve(result.usage).catch(() => null);
+          await settleGeneration(usage?.totalTokens);
           if (isChatDebugEnabled()) {
             console.info("Stored chat messages", {
               chatId,
-              messageCount: finishedMessages.length,
+              messageCount: storedStreamMessages.length + assistantMessages.length,
             });
           }
         } catch (error) {
+          await settleGeneration();
           console.error("Failed to store chat messages", {
             chatId,
             user: user.address,
@@ -202,21 +251,38 @@ export async function handleChatPostRequest(
       },
       onError: (error) => {
         const message = streamErrorMessage(error);
-        fireAndForget(
+        void settleGeneration();
+        void Promise.resolve(
           markAssistantMessageFailed(chatId, pendingAssistantId, message),
-          "mark assistant message",
         );
         return message;
       },
     });
     const response = createUIMessageStreamResponse({
       stream: uiStream,
-      ...(issuedGrant ? { headers: { "x-chat-grant": issuedGrant } } : {}),
     });
-    fireAndForget(result.consumeStream(), "consume stream");
     return response;
   } catch (error) {
     console.error("Chat handler error:", error);
     throw error;
   }
+}
+
+function normalizeChatData(value: unknown): ChatData {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    ...(typeof record.goalAddress === "string" ? { goalAddress: record.goalAddress } : {}),
+    ...(typeof record.grantId === "string" ? { grantId: record.grantId } : {}),
+    ...(typeof record.impactId === "string" ? { impactId: record.impactId } : {}),
+    ...(typeof record.castId === "string" ? { castId: record.castId } : {}),
+    ...(typeof record.opportunityId === "string"
+      ? { opportunityId: record.opportunityId }
+      : {}),
+    ...(typeof record.startupId === "string" ? { startupId: record.startupId } : {}),
+    ...(typeof record.draftId === "string" ? { draftId: record.draftId } : {}),
+  };
 }

@@ -1,469 +1,359 @@
-import type { UIMessage } from "ai";
+import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { storeChatMessages } from "../../src/chat/message-store";
+import {
+  ChatMessageAlreadyProcessedError,
+  ChatMessageInProgressError,
+  InvalidChatRequestMessageError,
+  prepareChatRequestMessages,
+  storeAssistantMessages,
+} from "../../src/chat/message-store";
+import { generateChatTitle } from "../../src/chat/generate-title";
 import { chat, chatMessage } from "../../src/infra/db/schema";
 import { cobuildDb } from "../../src/infra/db/cobuildDb";
-import { generateChatTitle } from "../../src/chat/generate-title";
-import { resetAllMocks, setCobuildDbResponse } from "../utils/mocks/db";
+import {
+  queueCobuildDbResponse,
+  resetAllMocks,
+  setCobuildDbResponse,
+} from "../utils/mocks/db";
 
 vi.mock("../../src/chat/generate-title", () => ({
   generateChatTitle: vi.fn(),
 }));
 
 vi.mock("node:crypto", () => ({
-  randomUUID: vi.fn(() => "uuid"),
-  createHash: vi.fn(() => ({
-    update: vi.fn(() => ({
-      digest: vi.fn(() => "deadbeefcafebabe0123456789"),
-    })),
-  })),
+  randomUUID: vi.fn(() => "00000000-0000-0000-0000-000000000010"),
 }));
 
 const generateChatTitleMock = vi.mocked(generateChatTitle);
-
-const baseUser = {
-  address: "0xabc",
-  city: null,
-  country: null,
-  countryRegion: null,
-  userAgent: null,
-};
+const randomUUIDMock = vi.mocked(randomUUID);
 
 beforeEach(() => {
   vi.clearAllMocks();
   resetAllMocks();
+  randomUUIDMock.mockReturnValue("00000000-0000-0000-0000-000000000010");
 });
 
-describe("storeChatMessages", () => {
-  it("deletes existing messages when no messages are provided", async () => {
-    setCobuildDbResponse(chat, [{ title: null }]);
-    const deleteSpy = vi.spyOn(cobuildDb, "delete");
-
-    await storeChatMessages({
-      chatId: "chat-1",
-      messages: [],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-    });
-
-    expect(deleteSpy).toHaveBeenCalledWith(chatMessage);
-    expect(generateChatTitleMock).not.toHaveBeenCalled();
-  });
-
-  it("persists message replacement inside one transaction", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
-    const txSpy = vi.spyOn(cobuildDb, "transaction");
-
-    await storeChatMessages({
-      chatId: "chat-tx",
-      messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-    });
-
-    expect(txSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it("acquires a per-chat advisory lock before replacing messages", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
-    const executeSpy = vi.spyOn(cobuildDb, "execute");
-
-    await storeChatMessages({
-      chatId: "chat-lock",
-      messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-      generateTitle: false,
-    });
-
-    expect(executeSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it("generates and stores a title when missing", async () => {
-    setCobuildDbResponse(chat, [{ title: null }]);
+describe("prepareChatRequestMessages", () => {
+  it("appends a new user message and updates only updatedAt on the chat row", async () => {
     setCobuildDbResponse(chatMessage, []);
     generateChatTitleMock.mockResolvedValue("Cobuild progress");
     const updateSpy = vi.spyOn(cobuildDb, "update");
 
-    const messages: UIMessage[] = [
+    const prepared = await prepareChatRequestMessages({
+      chatId: "chat-1",
+      clientMessageId: "client-1",
+      userMessage: "hello world",
+      existingTitle: null,
+    });
+
+    expect(prepared.streamMessages).toEqual([
       {
-        id: "m1",
+        id: "00000000-0000-0000-0000-000000000010",
         role: "user",
         parts: [{ type: "text", text: "hello world" }],
       },
-      {
-        id: "m2",
-        role: "assistant",
-        parts: [{ type: "text", text: "response" }],
-      },
-    ];
-
-    await storeChatMessages({
-      chatId: "chat-2",
-      messages,
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-    });
-
-    expect(generateChatTitleMock).toHaveBeenCalledWith("hello world");
+    ]);
+    expect(prepared.modelMessages).toEqual(prepared.streamMessages);
     expect(updateSpy).toHaveBeenCalledWith(chat);
+    expect(updateSpy).toHaveBeenNthCalledWith(1, chat);
+    expect(updateSpy).toHaveBeenNthCalledWith(2, chat);
   });
 
-  it("skips title generation when disabled", async () => {
-    const deleteSpy = vi.spyOn(cobuildDb, "delete");
+  it("accepts attachment-only user turns", async () => {
+    setCobuildDbResponse(chatMessage, []);
+    generateChatTitleMock.mockResolvedValue(null);
 
-    await storeChatMessages({
-      chatId: "chat-3",
-      messages: [],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-      generateTitle: false,
+    const prepared = await prepareChatRequestMessages({
+      chatId: "chat-attachments",
+      clientMessageId: "client-attachments",
+      userMessage: "   ",
+      attachments: [{ type: "image", image: "https://cdn.example.com/a.png" }],
+      existingTitle: "Existing title",
     });
 
-    expect(deleteSpy).toHaveBeenCalledWith(chatMessage);
-    expect(generateChatTitleMock).not.toHaveBeenCalled();
-  });
-
-  it("uses existing message ids and client ids when available", async () => {
-    setCobuildDbResponse(chatMessage, [
-      { id: "m1", clientId: "client-1", createdAt: new Date("2024-01-01") },
-      { id: "m2", clientId: "client-2", createdAt: new Date("2024-01-02") },
+    expect(prepared.streamMessages).toEqual([
+      {
+        id: "00000000-0000-0000-0000-000000000010",
+        role: "user",
+        parts: [
+          {
+            type: "file",
+            url: "https://cdn.example.com/a.png",
+            mediaType: "image/*",
+          },
+        ],
+      },
     ]);
-    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
-
-    await storeChatMessages({
-      chatId: "chat-4",
-      messages: [
-        { id: "m1", role: "user", parts: [{ type: "text", text: "hi" }] },
-        { id: "m-new", role: "user", parts: [{ type: "text", text: "hi again" }] },
-        { id: "m-assistant", role: "assistant", parts: [] },
-      ],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-      clientMessageId: "client-2",
-    });
-
     expect(generateChatTitleMock).not.toHaveBeenCalled();
   });
 
-  it("keeps chat owner and type immutable on upsert", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
-
-    let onConflictSet: Record<string, unknown> | null = null;
-    const originalInsert = cobuildDb.insert.bind(cobuildDb);
-    type InsertTable = Parameters<typeof originalInsert>[0];
-    const insertSpy = vi.spyOn(cobuildDb, "insert").mockImplementation((table: InsertTable) => {
-      const chain = originalInsert(table) as any;
-      if (table !== chat) return chain;
-      return {
-        values: (vals: any) => {
-          const valuesChain = chain.values(vals);
-          const originalOnConflictDoUpdate = valuesChain.onConflictDoUpdate?.bind(valuesChain);
-          return {
-            ...valuesChain,
-            onConflictDoUpdate: (opts: any) => {
-              onConflictSet = opts?.set ?? null;
-              if (!originalOnConflictDoUpdate) return Promise.resolve([]);
-              return originalOnConflictDoUpdate(opts);
-            },
-          };
-        },
-      } as any;
-    });
-
-    await storeChatMessages({
-      chatId: "chat-immutable",
-      messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }],
-      type: "chat-default",
-      data: { goalAddress: "0xabc0000000000000000000000000000000000000" },
-      user: baseUser,
-    });
-
-    expect(onConflictSet).toBeTruthy();
-    expect(onConflictSet).toEqual(
-      expect.objectContaining({
-        data: { goalAddress: "0xabc0000000000000000000000000000000000000" },
+  it("rejects empty user turns", async () => {
+    await expect(
+      prepareChatRequestMessages({
+        chatId: "chat-empty",
+        clientMessageId: "client-empty",
+        userMessage: "   ",
+        existingTitle: null,
       }),
-    );
-    expect(onConflictSet).toHaveProperty("updatedAt");
-    expect(onConflictSet).not.toHaveProperty("user");
-    expect(onConflictSet).not.toHaveProperty("type");
-    insertSpy.mockRestore();
+    ).rejects.toThrow(InvalidChatRequestMessageError);
   });
 
-  it("uses primary transaction reads for existing-message mapping", async () => {
-    const originalPrimary = cobuildDb.$primary as any;
-    const selectFromPrimary = vi.fn(() => {
-      const chain = {
-        limit: (_n?: number) => chain,
-        orderBy: (_o?: unknown) => chain,
-        groupBy: (_cols?: unknown) => Promise.resolve([]),
-        then: (resolve: (rows: unknown[]) => unknown) => resolve([]),
-      };
-      return {
-        from: (_table: unknown) => ({
-          where: (_cond?: unknown) => chain,
-        }),
-      };
-    });
-    const primaryDb = {
-      ...cobuildDb,
-      select: selectFromPrimary,
-      transaction: async <T>(fn: (tx: any) => Promise<T>) => fn(primaryDb),
-    };
-    cobuildDb.$primary = primaryDb as any;
-
-    const replicaSelectSpy = vi.spyOn(cobuildDb, "select").mockImplementation(() => {
-      throw new Error("Replica read path should not be used in storeChatMessages");
-    });
-
-    try {
-      await storeChatMessages({
-        chatId: "chat-primary-only",
-        messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }],
-        type: "chat-default",
-        data: {},
-        user: baseUser,
-        generateTitle: false,
-      });
-      expect(selectFromPrimary).toHaveBeenCalled();
-      expect(replicaSelectSpy).not.toHaveBeenCalled();
-    } finally {
-      replicaSelectSpy.mockRestore();
-      cobuildDb.$primary = originalPrimary;
-    }
-  });
-
-  it("assigns server ids for new messages", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
-
-    await storeChatMessages({
-      chatId: "chat-4b",
-      messages: [
-        { id: "m-new-user", role: "user", parts: [{ type: "text", text: "new" }] },
-        { id: "m-new-assistant", role: "assistant", parts: [] },
-      ],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-    });
-
-    expect(generateChatTitleMock).not.toHaveBeenCalled();
-  });
-
-  it("ignores client-provided ids for new non-user messages", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
-
-    let insertedRows: Array<{ id: string; role: string }> = [];
-    const originalInsert = cobuildDb.insert.bind(cobuildDb);
-    type InsertTable = Parameters<typeof originalInsert>[0];
-    const insertSpy = vi.spyOn(cobuildDb, "insert").mockImplementation((table: InsertTable) => {
-      const chain = originalInsert(table);
-      if (table !== chatMessage) return chain;
-      return {
-        values: (vals: typeof insertedRows) => {
-          insertedRows = vals;
-          return chain.values(vals);
-        },
-      } as typeof chain;
-    });
-
-    await storeChatMessages({
-      chatId: "chat-foreign",
-      messages: [{ id: "foreign-assistant-id", role: "assistant", parts: [] }],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-    });
-
-    expect(insertedRows).toHaveLength(1);
-    expect(insertedRows[0]).toEqual(
-      expect.objectContaining({
-        id: "uuid",
-        role: "assistant",
-      }),
-    );
-    insertSpy.mockRestore();
-  });
-
-  it("preserves trusted non-user message ids", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
-
-    let insertedRows: Array<{ id: string; role: string }> = [];
-    const originalInsert = cobuildDb.insert.bind(cobuildDb);
-    type InsertTable = Parameters<typeof originalInsert>[0];
-    const insertSpy = vi.spyOn(cobuildDb, "insert").mockImplementation((table: InsertTable) => {
-      const chain = originalInsert(table);
-      if (table !== chatMessage) return chain;
-      return {
-        values: (vals: typeof insertedRows) => {
-          insertedRows = vals;
-          return chain.values(vals);
-        },
-      } as typeof chain;
-    });
-
-    await storeChatMessages({
-      chatId: "chat-trusted",
-      messages: [{ id: "trusted-assistant-id", role: "assistant", parts: [] }],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-      trustedMessageIds: ["trusted-assistant-id"],
-    });
-
-    expect(insertedRows).toHaveLength(1);
-    expect(insertedRows[0]).toEqual(
-      expect.objectContaining({
-        id: "trusted-assistant-id",
-        role: "assistant",
-      }),
-    );
-    insertSpy.mockRestore();
-  });
-
-  it("reuses existing ids when only a client id matches", async () => {
-    const createdAt = new Date("2024-01-01T00:00:00Z");
+  it("does not allow a duplicate clientMessageId to overwrite a different user message", async () => {
     setCobuildDbResponse(chatMessage, [
-      { id: "existing-id", clientId: "client-123", createdAt },
+      {
+        id: "user-1",
+        clientId: "client-1",
+        role: "user",
+        parts: [{ type: "text", text: "first" }],
+        metadata: null,
+        position: 0,
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+      },
     ]);
-    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
-
-    let insertedRows: Array<{ id: string; clientId: string | null; createdAt: Date }> = [];
-    const originalInsert = cobuildDb.insert.bind(cobuildDb);
-    type InsertTable = Parameters<typeof originalInsert>[0];
-    const insertSpy = vi.spyOn(cobuildDb, "insert").mockImplementation((table: InsertTable) => {
-      const chain = originalInsert(table);
-      if (table !== chatMessage) return chain;
-      return {
-        values: (vals: typeof insertedRows) => {
-          insertedRows = vals;
-          return chain.values(vals);
-        },
-      } as typeof chain;
-    });
-
-    await storeChatMessages({
-      chatId: "chat-4c",
-      messages: [{ id: "retry-user-id", role: "user", parts: [{ type: "text", text: "hi" }] }],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-      clientMessageId: "client-123",
-    });
-
-    expect(insertedRows).toHaveLength(1);
-    expect(insertedRows[0]).toEqual(
-      expect.objectContaining({ id: "existing-id", clientId: "client-123" }),
-    );
-    expect(insertedRows[0]?.createdAt).toBe(createdAt);
-    insertSpy.mockRestore();
-  });
-
-  it("throws when a message id is missing", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: "Existing title" }]);
 
     await expect(
-      storeChatMessages({
-        chatId: "chat-missing-id",
-        messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] } as UIMessage],
-        type: "chat-default",
-        data: {},
-        user: baseUser,
+      prepareChatRequestMessages({
+        chatId: "chat-1",
+        clientMessageId: "client-1",
+        userMessage: "second",
+        existingTitle: "Existing title",
       }),
-    ).rejects.toThrow("Message at index 0 is missing an id.");
+    ).rejects.toThrow(InvalidChatRequestMessageError);
   });
 
-  it("skips title generation when no user message exists", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: null }]);
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+  it("rejects replaying an older clientMessageId after later user turns already exist", async () => {
+    setCobuildDbResponse(chatMessage, [
+      {
+        id: "user-1",
+        clientId: "client-1",
+        role: "user",
+        parts: [{ type: "text", text: "first" }],
+        metadata: null,
+        position: 0,
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+      },
+      {
+        id: "user-2",
+        clientId: "client-2",
+        role: "user",
+        parts: [{ type: "text", text: "second" }],
+        metadata: null,
+        position: 1,
+        createdAt: new Date("2024-01-01T00:00:01Z"),
+      },
+    ]);
 
-    await storeChatMessages({
-      chatId: "chat-5",
-      messages: [{ id: "m-assistant-only", role: "assistant", parts: [] }],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-    });
-
-    expect(infoSpy).toHaveBeenCalledWith(
-      "Skipping title generation for chat-5: no user message found.",
-    );
-    infoSpy.mockRestore();
-  });
-
-  it("logs when title generation returns empty", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: null }]);
-    generateChatTitleMock.mockResolvedValueOnce(null);
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-
-    await storeChatMessages({
-      chatId: "chat-5b",
-      messages: [{ id: "m-user", role: "user", parts: [{ type: "text", text: "hello" }] }],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-    });
-
-    expect(infoSpy).toHaveBeenCalledWith("Title generation returned empty for chat-5b.");
-    infoSpy.mockRestore();
-  });
-
-  it("handles title generation errors", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: null }]);
-    generateChatTitleMock.mockRejectedValueOnce(new Error("fail"));
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    await storeChatMessages({
-      chatId: "chat-6",
-      messages: [{ id: "m9", role: "user", parts: [{ type: "text", text: "hello" }] } as UIMessage],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-    });
-
-    expect(errorSpy).toHaveBeenCalledWith("Failed to store chat title", expect.any(Error));
-    errorSpy.mockRestore();
-  });
-
-  it("does not log raw generated title text", async () => {
-    setCobuildDbResponse(chatMessage, []);
-    setCobuildDbResponse(chat, [{ title: null }]);
-    generateChatTitleMock.mockResolvedValueOnce("secret password 123");
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-
-    await storeChatMessages({
-      chatId: "chat-7",
-      messages: [{ id: "m-user", role: "user", parts: [{ type: "text", text: "hello" }] }],
-      type: "chat-default",
-      data: {},
-      user: baseUser,
-    });
-
-    expect(infoSpy).toHaveBeenCalledWith(
-      "Stored title for chat-7.",
-      expect.objectContaining({
-        titleLength: 19,
-        titleHash: expect.any(String),
+    await expect(
+      prepareChatRequestMessages({
+        chatId: "chat-replayed",
+        clientMessageId: "client-1",
+        userMessage: "first",
+        existingTitle: "Existing title",
       }),
-    );
-    expect(JSON.stringify(infoSpy.mock.calls)).not.toContain("secret password 123");
-    infoSpy.mockRestore();
+    ).rejects.toThrow(ChatMessageAlreadyProcessedError);
+  });
+
+  it("returns 409-style conflicts for in-progress and completed assistant history", async () => {
+    setCobuildDbResponse(chatMessage, [
+      {
+        id: "user-1",
+        clientId: "client-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+        metadata: null,
+        position: 0,
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+      },
+      {
+        id: "assistant-pending",
+        clientId: null,
+        role: "assistant",
+        parts: [],
+        metadata: { pending: true },
+        position: 1,
+        createdAt: new Date("2024-01-01T00:00:01Z"),
+      },
+    ]);
+
+    await expect(
+      prepareChatRequestMessages({
+        chatId: "chat-pending",
+        clientMessageId: "client-1",
+        userMessage: "hello",
+        existingTitle: "Existing title",
+      }),
+    ).rejects.toThrow(ChatMessageInProgressError);
+
+    setCobuildDbResponse(chatMessage, [
+      {
+        id: "user-1",
+        clientId: "client-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+        metadata: null,
+        position: 0,
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+      },
+      {
+        id: "assistant-pending",
+        clientId: null,
+        role: "assistant",
+        parts: [],
+        metadata: { pending: true },
+        position: 1,
+        createdAt: new Date("2024-01-01T00:00:01Z"),
+      },
+    ]);
+
+    await expect(
+      prepareChatRequestMessages({
+        chatId: "chat-inflight",
+        clientMessageId: "client-2",
+        userMessage: "next",
+        existingTitle: "Existing title",
+      }),
+    ).rejects.toThrow(ChatMessageInProgressError);
+
+    setCobuildDbResponse(chatMessage, [
+      {
+        id: "user-1",
+        clientId: "client-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+        metadata: null,
+        position: 0,
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+      },
+      {
+        id: "assistant-1",
+        clientId: null,
+        role: "assistant",
+        parts: [{ type: "text", text: "done" }],
+        metadata: null,
+        position: 1,
+        createdAt: new Date("2024-01-01T00:00:01Z"),
+      },
+    ]);
+
+    await expect(
+      prepareChatRequestMessages({
+        chatId: "chat-done",
+        clientMessageId: "client-1",
+        userMessage: "hello",
+        existingTitle: "Existing title",
+      }),
+    ).rejects.toThrow(ChatMessageAlreadyProcessedError);
+  });
+
+  it("reuses stored user history after a failed assistant without rewriting the user row", async () => {
+    setCobuildDbResponse(chatMessage, [
+      {
+        id: "user-1",
+        clientId: "client-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+        metadata: null,
+        position: 0,
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+      },
+      {
+        id: "assistant-error",
+        clientId: null,
+        role: "assistant",
+        parts: [{ type: "text", text: "failed" }],
+        metadata: { error: true },
+        position: 1,
+        createdAt: new Date("2024-01-01T00:00:01Z"),
+      },
+    ]);
+    const insertSpy = vi.spyOn(cobuildDb, "insert");
+
+    const prepared = await prepareChatRequestMessages({
+      chatId: "chat-retry",
+      clientMessageId: "client-1",
+      userMessage: "hello",
+      existingTitle: "Existing title",
+    });
+
+    expect(prepared.streamMessages).toEqual([
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+      },
+      {
+        id: "assistant-error",
+        role: "assistant",
+        parts: [{ type: "text", text: "failed" }],
+        metadata: { error: true },
+      },
+    ]);
+    expect(prepared.modelMessages).toEqual([
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+      },
+    ]);
+    expect(insertSpy).not.toHaveBeenCalledWith(chatMessage);
+  });
+});
+
+describe("storeAssistantMessages", () => {
+  it("rejects untrusted assistant ids", async () => {
+    setCobuildDbResponse(chatMessage, []);
+
+    await expect(
+      storeAssistantMessages({
+        chatId: "chat-1",
+        messages: [{ id: "assistant-1", role: "assistant", parts: [] }],
+        trustedMessageIds: [],
+      }),
+    ).rejects.toThrow(InvalidChatRequestMessageError);
+  });
+
+  it("updates the pending assistant row and appends later assistant messages without deleting history", async () => {
+    setCobuildDbResponse(chatMessage, [
+      {
+        id: "user-1",
+        clientId: "client-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+        metadata: null,
+        position: 0,
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+      },
+      {
+        id: "assistant-pending",
+        clientId: null,
+        role: "assistant",
+        parts: [],
+        metadata: { pending: true },
+        position: 1,
+        createdAt: new Date("2024-01-01T00:00:01Z"),
+      },
+    ]);
+    const insertSpy = vi.spyOn(cobuildDb, "insert");
+    const deleteSpy = vi.spyOn(cobuildDb, "delete");
+
+    await storeAssistantMessages({
+      chatId: "chat-1",
+      messages: [
+        {
+          id: "assistant-pending",
+          role: "assistant",
+          parts: [{ type: "text", text: "first answer" }],
+        },
+        {
+          id: "assistant-2",
+          role: "assistant",
+          parts: [{ type: "text", text: "follow-up" }],
+        },
+      ],
+      trustedMessageIds: ["assistant-pending", "assistant-2"],
+    });
+
+    expect(insertSpy).toHaveBeenCalledWith(chatMessage);
+    expect(deleteSpy).not.toHaveBeenCalled();
   });
 });

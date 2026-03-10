@@ -6,19 +6,20 @@ Primary path: `POST /api/chat` in `src/api/chat/route.ts`.
 
 ## Execution Sequence
 
-1. Resolve chat identity and validate/refresh grant.
+1. Resolve chat identity and load the stored chat type/data.
 2. In parallel:
 - run usage limiter (`src/ai/ai-rate.limit.ts`)
 - build agent (`src/ai/agents/agent.ts`)
-3. Build stream messages from prior history/context (`src/api/chat/chat-helpers.ts`).
-4. Persist pending assistant placeholder (`src/chat/message-store.ts`).
-5. Call `streamText` with:
+3. Append or rehydrate the authoritative user turn from DB-backed history (`src/chat/message-store.ts`).
+4. Build stream messages from authoritative history/context (`src/api/chat/chat-helpers.ts`).
+5. Persist pending assistant placeholder (`src/chat/message-store.ts`).
+6. Call `streamText` with:
 - model from `src/ai/ai.ts`
 - agent system prompt from `src/ai/utils/agent-prompts.ts`
 - tool set from `src/ai/tools/index.ts`
-6. On completion, persist finalized assistant output and metadata.
-7. Record usage counters asynchronously.
-8. On error, mark pending message as failed.
+7. On completion, persist finalized assistant output and metadata.
+8. Record usage counters asynchronously.
+9. On error, mark pending message as failed.
 
 ## Prompt Assembly Order
 
@@ -44,5 +45,7 @@ Primary path: `POST /api/chat` in `src/api/chat/route.ts`.
 ## Failure Semantics
 
 - Ownership/auth failures short-circuit before model call.
+- Invalid or empty incoming turns return `400`.
+- Duplicate finalized `clientMessageId` values return `409`.
 - Usage overage short-circuits with `429`.
 - Stream failures return normalized stream error text and mark pending state failed.

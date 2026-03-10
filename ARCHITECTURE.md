@@ -10,7 +10,7 @@ See `README.md` for setup/deployment and `docs/TOOLS.md` for tool contribution s
 src/
   api/        # HTTP transport, auth, schema validation, route handlers
   ai/         # model client, agents, prompts, and tool registry
-  chat/       # chat domain state (messages, grants, ids, parsing)
+  chat/       # chat domain state (messages, ids, parsing)
   config/     # env parsing + runtime constants
   infra/      # Postgres, Redis, caching, timeout and external clients
   index.ts    # process startup/shutdown
@@ -48,19 +48,18 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 
 ### POST `/api/chat`
 
-1. Parse request body (chat id, message history, type, optional context/data).
-2. Verify `x-chat-grant` if present.
-3. If grant is missing/invalid/mismatched, verify chat ownership in DB.
-4. In parallel:
+1. Parse request body (`chatId`, `clientMessageId`, `userMessage`, optional attachments/context).
+2. Verify chat ownership in DB for the authenticated wallet.
+3. In parallel:
 - enforce token-usage rate limit (`src/ai/ai-rate.limit.ts`)
 - load agent (`src/ai/agents/agent.ts`)
+4. Append the new user turn on the server using DB history as the source of truth.
 5. Persist a pending assistant message before streaming.
-  - Non-user ids are server-authoritative; route-generated ids are passed as trusted ids to storage for lifecycle consistency.
+  - Assistant ids are server-authoritative; route-generated ids are passed as trusted ids to storage for lifecycle consistency.
 6. Stream model output via AI SDK (`streamText`) with registered tools.
 7. On finish:
-- persist finalized messages
+- persist finalized assistant/tool messages
 - update usage counters asynchronously
-- set refreshed `x-chat-grant` when needed
 8. On stream error:
 - mark pending assistant message as failed
 - return stream error text
@@ -68,8 +67,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 ### POST `/api/chat/new`
 
 1. Create chat row in `cobuild.chat` for authenticated user.
-2. Generate scoped chat grant.
-3. Return `{ chatId, chatGrant }`.
+2. Return `{ chatId }`.
 
 ### GET `/api/chats`
 
@@ -83,8 +81,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 1. Enforce ownership for requested chat id.
 2. Load ordered message history from `cobuild.chat_message`.
 3. Map DB rows to UI-message shape.
-4. Issue refreshed `x-chat-grant`.
-5. Return chat payload and messages.
+4. Return chat payload and messages.
 
 ### GET `/v1/tools`
 
@@ -111,7 +108,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 - Prompt assembly: `src/ai/utils/agent-prompts.ts`.
 - Stream preparation: `src/api/chat/chat-helpers.ts`.
 - Tool registry: `src/ai/tools/index.ts` and `src/ai/tools/tool.ts`.
-- Canonical REST tool execution: `src/api/tools/registry.ts` (includes Farcaster discussion list/thread/semantic search and guarded reply publishing).
+- Canonical REST tool execution: `src/tools/registry.ts` (includes Farcaster discussion list/thread/semantic search and guarded reply publishing).
 - Wallet notifications domain: `src/domains/notifications/**` (subject-wallet resolution, cursor pagination, unread state, and notification visibility for canonical tools).
 
 ## Data + Infra Layer
@@ -140,8 +137,8 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 - Auth identity is wallet-address based.
 - Privy mode validates JWT claims and linked wallet addresses.
 - Self-hosted mode can trust shared secret + explicit address header.
-- Production self-hosted mode requires `SELF_HOSTED_SHARED_SECRET`; misconfigured mode fails fast.
-- Chat access is ownership-checked and grant-scoped.
+- Production self-hosted mode requires `SELF_HOSTED_SHARED_SECRET` plus `SELF_HOSTED_PRODUCTION_ENABLED=1`; misconfigured mode fails fast.
+- Chat access is ownership-checked per authenticated wallet.
 - Unauthorized/missing chat access returns `404` to reduce enumeration.
 
 ## Cross-Cutting Reliability Mechanisms
@@ -151,6 +148,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 - Usage-level limiter (Redis sorted-set windows).
 - Pending-message reconciliation on stream success/failure.
 - Primary-safe reads for read-after-write in title generation path.
+- Proxy-supplied geo headers are ignored unless `CHAT_TRUST_PROXY` is configured.
 - Structured shutdown that closes server + infra resources.
 
 ## Primary Doc Map

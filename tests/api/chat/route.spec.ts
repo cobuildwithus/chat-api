@@ -1,34 +1,37 @@
-import { convertToModelMessages, streamText } from "ai";
+import { convertToModelMessages, streamText, tool } from "ai";
 import type {
   FilePart,
   ImagePart,
   LanguageModel,
   ModelMessage,
   TextPart,
-  TextStreamPart,
-  ToolSet,
 } from "ai";
 import type { FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { handleChatPostRequest } from "../../../src/api/chat/route";
 import { getAgent } from "../../../src/ai/agents/agent";
-import { isAiUsageAvailable, recordAiUsage } from "../../../src/ai/ai-rate.limit";
+import { admitAiGeneration } from "../../../src/ai/ai-rate.limit";
 import { getChatUserOrThrow } from "../../../src/api/auth/validate-chat-user";
-import { storeChatMessages } from "../../../src/chat/message-store";
+import {
+  ChatMessageAlreadyProcessedError,
+  ChatMessageInProgressError,
+  InvalidChatRequestMessageError,
+  prepareChatRequestMessages,
+  storeAssistantMessages,
+} from "../../../src/chat/message-store";
 import {
   clearPendingAssistantIfUnclaimed,
   markAssistantMessageFailed,
 } from "../../../src/chat/message-status";
 import { chat } from "../../../src/infra/db/schema";
-import { cobuildDb } from "../../../src/infra/db/cobuildDb";
-import type { ChatBody } from "../../../src/ai/types";
-import { signChatGrant, verifyChatGrant } from "../../../src/chat/grant";
 import { isChatDebugEnabled } from "../../../src/config/env";
 import { CHAT_PERSIST_ERROR } from "../../../src/api/chat/chat-helpers";
+import type { ChatRequestBody } from "../../../src/api/chat/schema";
 import { createReply } from "../../utils/fastify";
 import { buildChatUser } from "../../utils/fixtures/chat-user";
-import { getDbCallCount, resetAllMocks, setCobuildDbResponse } from "../../utils/mocks/db";
+import { resetAllMocks, setCobuildDbResponse } from "../../utils/mocks/db";
 
 vi.mock("ai", async () => {
   const actual = await vi.importActual<typeof import("ai")>("ai");
@@ -44,8 +47,7 @@ vi.mock("../../../src/ai/agents/agent", () => ({
 }));
 
 vi.mock("../../../src/ai/ai-rate.limit", () => ({
-  isAiUsageAvailable: vi.fn(),
-  recordAiUsage: vi.fn(),
+  admitAiGeneration: vi.fn(),
 }));
 
 vi.mock("../../../src/api/auth/validate-chat-user", () => ({
@@ -53,17 +55,16 @@ vi.mock("../../../src/api/auth/validate-chat-user", () => ({
 }));
 
 vi.mock("../../../src/chat/message-store", () => ({
-  storeChatMessages: vi.fn(),
+  prepareChatRequestMessages: vi.fn(),
+  storeAssistantMessages: vi.fn(),
+  InvalidChatRequestMessageError: class InvalidChatRequestMessageError extends Error {},
+  ChatMessageAlreadyProcessedError: class ChatMessageAlreadyProcessedError extends Error {},
+  ChatMessageInProgressError: class ChatMessageInProgressError extends Error {},
 }));
 
 vi.mock("../../../src/chat/message-status", () => ({
   clearPendingAssistantIfUnclaimed: vi.fn(),
   markAssistantMessageFailed: vi.fn(),
-}));
-
-vi.mock("../../../src/chat/grant", () => ({
-  signChatGrant: vi.fn(),
-  verifyChatGrant: vi.fn(),
 }));
 
 vi.mock("node:crypto", () => ({
@@ -77,34 +78,47 @@ vi.mock("../../../src/config/env", () => ({
 const streamTextMock = vi.mocked(streamText);
 const convertToModelMessagesMock = vi.mocked(convertToModelMessages);
 const getAgentMock = vi.mocked(getAgent);
-const isAiUsageAvailableMock = vi.mocked(isAiUsageAvailable);
-const recordAiUsageMock = vi.mocked(recordAiUsage);
+const admitAiGenerationMock = vi.mocked(admitAiGeneration);
 const getChatUserOrThrowMock = vi.mocked(getChatUserOrThrow);
-const signChatGrantMock = vi.mocked(signChatGrant);
-const verifyChatGrantMock = vi.mocked(verifyChatGrant);
+const prepareChatRequestMessagesMock = vi.mocked(prepareChatRequestMessages);
+const storeAssistantMessagesMock = vi.mocked(storeAssistantMessages);
 const markAssistantMessageFailedMock = vi.mocked(markAssistantMessageFailed);
 const clearPendingAssistantIfUnclaimedMock = vi.mocked(clearPendingAssistantIfUnclaimed);
 const isChatDebugEnabledMock = vi.mocked(isChatDebugEnabled);
 const randomUUIDMock = vi.mocked(randomUUID);
+
 let mockModel: LanguageModel;
-const storeChatMessagesMock = vi.mocked(storeChatMessages);
+type MockFn = ReturnType<typeof vi.fn>;
+type MockFastifyRequest = FastifyRequest<{ Body: ChatRequestBody }> & {
+  raw: {
+    once: MockFn;
+    off: MockFn;
+  };
+};
 
 const buildRequest = (
-  body: ChatBody,
+  body: ChatRequestBody,
   headers: Record<string, string> = {},
-): FastifyRequest<{ Body: ChatBody }> =>
-  ({ body, headers } as unknown as FastifyRequest<{ Body: ChatBody }>);
+): MockFastifyRequest =>
+  ({
+    body,
+    headers,
+    raw: {
+      once: vi.fn(),
+      off: vi.fn(),
+    },
+  }) as unknown as MockFastifyRequest;
 
-const baseBody: ChatBody = {
-  id: "chat-1",
-  type: "chat-default",
-  messages: [],
+const baseBody: ChatRequestBody = {
+  chatId: "chat-1",
+  clientMessageId: "client-1",
+  userMessage: "hello",
 };
 
 const baseUsage = {
   inputTokens: 0,
   outputTokens: 0,
-  totalTokens: 0,
+  totalTokens: 1200,
   inputTokenDetails: {
     noCacheTokens: 0,
     cacheReadTokens: 0,
@@ -144,7 +158,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetAllMocks();
   randomUUIDMock.mockReset();
-  randomUUIDMock.mockReturnValue("00000000-0000-0000-0000-000000000000");
+  randomUUIDMock
+    .mockReturnValueOnce("00000000-0000-0000-0000-000000000001")
+    .mockReturnValueOnce("00000000-0000-0000-0000-000000000002");
   getChatUserOrThrowMock.mockReturnValue(buildChatUser());
   mockModel = {} as LanguageModel;
   getAgentMock.mockResolvedValue({
@@ -152,32 +168,189 @@ beforeEach(() => {
     tools: {},
     defaultModel: mockModel,
   });
-  setCobuildDbResponse(chat, [
-    { user: "0xabc0000000000000000000000000000000000000", type: "chat-default" },
+  admitAiGenerationMock.mockResolvedValue({
+    allowed: true,
+    admission: {
+      reservedUsage: 1000,
+      finalizeUsage: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn().mockResolvedValue(undefined),
+    },
+  });
+  prepareChatRequestMessagesMock.mockResolvedValue({
+    streamMessages: [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+      },
+    ],
+    modelMessages: [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+      },
+    ],
+  });
+  convertToModelMessagesMock.mockResolvedValue([
+    { role: "user", content: [{ type: "text", text: "hello" }] },
   ]);
-  signChatGrantMock.mockResolvedValue("chat-grant");
-  verifyChatGrantMock.mockResolvedValue(null);
+  setCobuildDbResponse(chat, [
+    {
+      user: "0xabc0000000000000000000000000000000000000",
+      type: "chat-default",
+      data: {},
+      title: null,
+    },
+  ]);
+  isChatDebugEnabledMock.mockReturnValue(false);
 });
 
 describe("handleChatPostRequest", () => {
-  it("returns 429 when rate limit denies usage", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(false);
-    streamTextMock.mockReturnValue(buildStreamResult().result);
+  it("returns 404 when the chat does not exist", async () => {
+    setCobuildDbResponse(chat, []);
 
     const reply = createReply();
     const result = await handleChatPostRequest(buildRequest(baseBody), reply);
 
-    expect(reply.status).toHaveBeenCalledWith(429);
-    expect(reply.send).toHaveBeenCalledWith(
-      "Too many AI requests. Please try again in a few hours.",
+    expect(reply.status).toHaveBeenCalledWith(404);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Chat not found" });
+    expect(prepareChatRequestMessagesMock).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+  });
+
+  it("returns 404 when the chat belongs to a different user", async () => {
+    setCobuildDbResponse(chat, [
+      {
+        user: "0x0000000000000000000000000000000000000009",
+        type: "chat-default",
+        data: {},
+        title: null,
+      },
+    ]);
+
+    const reply = createReply();
+    const result = await handleChatPostRequest(buildRequest(baseBody), reply);
+
+    expect(reply.status).toHaveBeenCalledWith(404);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Chat not found" });
+    expect(prepareChatRequestMessagesMock).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+  });
+
+  it("returns 400 when the stored chat type does not match the chat route", async () => {
+    setCobuildDbResponse(chat, [
+      {
+        user: "0xabc0000000000000000000000000000000000000",
+        type: "goal",
+        data: {},
+        title: null,
+      },
+    ]);
+
+    const reply = createReply();
+    const result = await handleChatPostRequest(buildRequest(baseBody), reply);
+
+    expect(reply.status).toHaveBeenCalledWith(400);
+    expect(reply.send).toHaveBeenCalledWith({ error: "Chat type mismatch" });
+    expect(prepareChatRequestMessagesMock).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+  });
+
+  it("normalizes stored chat data before agent construction", async () => {
+    setCobuildDbResponse(chat, [
+      {
+        user: "0xabc0000000000000000000000000000000000000",
+        type: "chat-default",
+        data: JSON.stringify({
+          goalAddress: "0xgoal",
+          grantId: "grant-1",
+          impactId: "impact-1",
+          castId: "cast-1",
+          opportunityId: "opp-1",
+          startupId: "startup-1",
+          draftId: "draft-1",
+          ignored: 7,
+        }),
+        title: null,
+      },
+    ]);
+    const { result } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
+
+    await handleChatPostRequest(buildRequest(baseBody), createReply());
+
+    expect(getAgentMock).toHaveBeenCalledWith(
+      "chat-default",
+      expect.anything(),
+      {
+        goalAddress: "0xgoal",
+        grantId: "grant-1",
+        impactId: "impact-1",
+        castId: "cast-1",
+        opportunityId: "opp-1",
+        startupId: "startup-1",
+        draftId: "draft-1",
+      },
     );
+  });
+
+  it("treats malformed stored chat data as empty agent context", async () => {
+    setCobuildDbResponse(chat, [
+      {
+        user: "0xabc0000000000000000000000000000000000000",
+        type: "chat-default",
+        data: "{not-json",
+        title: null,
+      },
+    ]);
+    const { result } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
+
+    await handleChatPostRequest(buildRequest(baseBody), createReply());
+
+    expect(getAgentMock).toHaveBeenCalledWith("chat-default", expect.anything(), {});
+  });
+
+  it("returns 429 when AI admission denies usage", async () => {
+    admitAiGenerationMock.mockResolvedValueOnce({
+      allowed: false,
+      code: "rate-limited",
+      retryAfterSeconds: 12,
+    });
+
+    const reply = createReply();
+    reply.header.mockReturnThis();
+    const result = await handleChatPostRequest(buildRequest(baseBody), reply);
+
+    expect(reply.status).toHaveBeenCalledWith(429);
+    expect(reply.header).toHaveBeenCalledWith("Retry-After", "12");
+    expect(reply.send).toHaveBeenCalledWith({
+      error: "Too many AI requests. Please try again in a few hours.",
+    });
     expect(streamTextMock).not.toHaveBeenCalled();
     expect(result).toBeUndefined();
   });
 
-  it("builds stream messages with context, attachments, and filtered videos", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
+  it("returns 409 when another generation is already in progress for the chat", async () => {
+    admitAiGenerationMock.mockResolvedValueOnce({
+      allowed: false,
+      code: "chat-inflight-limit",
+      retryAfterSeconds: 1,
+    });
 
+    const reply = createReply();
+    const result = await handleChatPostRequest(buildRequest(baseBody), reply);
+
+    expect(reply.status).toHaveBeenCalledWith(409);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: "Another response is already in progress for this chat.",
+    });
+    expect(streamTextMock).not.toHaveBeenCalled();
+    expect(result).toBeUndefined();
+  });
+
+  it("builds stream messages from authoritative stored history and request context", async () => {
     const userContent: Array<TextPart | ImagePart | FilePart> = [
       { type: "text", text: "hello" },
       { type: "image", image: "https://cdn.example.com/a.png" },
@@ -195,579 +368,480 @@ describe("handleChatPostRequest", () => {
       },
     ];
 
-    convertToModelMessagesMock.mockResolvedValue(modelMessages);
-    streamTextMock.mockReturnValue(buildStreamResult().result);
+    convertToModelMessagesMock.mockResolvedValueOnce(modelMessages);
+    const { result } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
 
     const reply = createReply();
     await handleChatPostRequest(
-      buildRequest({
-        ...baseBody,
-        messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hi" }] }],
-        context: "  trimmed context  ",
-      }),
+      buildRequest(
+        {
+          ...baseBody,
+          userMessage: "ignored by model conversion mock",
+          attachments: [
+            {
+              type: "file",
+              url: "https://cdn.example.com/context.txt",
+              mediaType: "text/plain",
+            },
+          ],
+          context: "  trimmed context  ",
+        },
+        { "x-client-device": "mobile" },
+      ),
       reply,
     );
 
+    expect(prepareChatRequestMessagesMock).toHaveBeenCalledWith({
+      chatId: "chat-1",
+      clientMessageId: "client-1",
+      userMessage: "ignored by model conversion mock",
+      attachments: [
+        {
+          type: "file",
+          url: "https://cdn.example.com/context.txt",
+          mediaType: "text/plain",
+        },
+      ],
+      existingTitle: null,
+    });
     expect(getAgentMock).toHaveBeenCalledWith(
       "chat-default",
       expect.objectContaining({ address: "0xabc0000000000000000000000000000000000000" }),
       {},
-      undefined,
-      { includeCobuildAiContextPrompt: false },
     );
 
-    const streamCall = streamTextMock.mock.calls[0]?.[0];
-    expect(streamCall?.model).toBe(mockModel);
+    const call = streamTextMock.mock.calls[0]?.[0];
+    expect(call?.model).toBe(mockModel);
+    expect(call?.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(call?.providerOptions?.openai?.textVerbosity).toBe("low");
 
-    const messages = streamCall?.messages as ModelMessage[];
-    const contextMessage = messages.find(
-      (message) =>
-        message.role === "user" &&
-        typeof message.content === "string" &&
-        message.content.includes("Additional context from the user"),
-    );
-    expect(contextMessage).toBeTruthy();
-
-    const attachmentsMessage = messages.find(
-      (message) =>
-        message.role === "system" &&
-        typeof message.content === "string" &&
-        message.content.includes("list of all the attachments"),
-    );
-    expect(attachmentsMessage).toBeTruthy();
-
+    const messages = call?.messages as ModelMessage[];
+    expect(
+      messages.some(
+        (message) =>
+          message.role === "user" &&
+          typeof message.content === "string" &&
+          message.content.includes("Additional context from the user"),
+      ),
+    ).toBe(true);
+    expect(
+      messages.some(
+        (message) =>
+          message.role === "system" &&
+          typeof message.content === "string" &&
+          message.content.includes("attachments"),
+      ),
+    ).toBe(true);
     const userMessage = messages.find(
       (message) => message.role === "user" && Array.isArray(message.content),
     );
-    expect(userMessage).toBeTruthy();
     const parts = userMessage?.content as Array<{ type: string; mediaType?: string }>;
     expect(parts.find((part) => part.type === "file" && part.mediaType?.startsWith("video/"))).toBe(
       undefined,
     );
   });
 
-  it("sets text verbosity for mobile clients via header", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    streamTextMock.mockReturnValue(buildStreamResult().result);
-
-    const reply = createReply();
-    await handleChatPostRequest(buildRequest(baseBody, { "x-client-device": "mobile" }), reply);
-
-    expect(getAgentMock).toHaveBeenCalledWith(
-      "chat-default",
-      expect.objectContaining({ address: "0xabc0000000000000000000000000000000000000" }),
-      {},
-      undefined,
-      { includeCobuildAiContextPrompt: false },
-    );
-
-    const options = streamTextMock.mock.calls[0]?.[0];
-    expect(options?.providerOptions?.openai?.textVerbosity).toBe("low");
-  });
-
-  it("infers mobile clients from user agent when header is missing", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    streamTextMock.mockReturnValue(buildStreamResult().result);
-    getChatUserOrThrowMock.mockReturnValue(
-      buildChatUser({
-        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
-      }),
-    );
-
-    const reply = createReply();
-    await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    const options = streamTextMock.mock.calls[0]?.[0];
-    expect(options?.providerOptions?.openai?.textVerbosity).toBe("low");
-  });
-
-  it("respects desktop device header even if user agent is mobile", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    streamTextMock.mockReturnValue(buildStreamResult().result);
-    getChatUserOrThrowMock.mockReturnValue(
-      buildChatUser({
-        userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
-      }),
-    );
-
-    const reply = createReply();
-    await handleChatPostRequest(buildRequest(baseBody, { "x-client-device": "desktop" }), reply);
-
-    const options = streamTextMock.mock.calls[0]?.[0];
-    expect(options?.providerOptions?.openai?.textVerbosity).toBeUndefined();
-  });
-
-  it("records AI usage when tokens are present", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    const { result } = buildStreamResult({
-      usage: Promise.resolve({
-        ...baseUsage,
-        totalTokens: 123,
-        inputTokens: 50,
-        outputTokens: 73,
-        inputTokenDetails: {
-          ...baseUsage.inputTokenDetails,
-          noCacheTokens: 50,
-        },
-        outputTokenDetails: {
-          ...baseUsage.outputTokenDetails,
-          textTokens: 73,
-        },
-      }),
-    });
-    streamTextMock.mockReturnValue(result);
-
-    const reply = createReply();
-    await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(recordAiUsageMock).toHaveBeenCalledWith(
-      "0xabc0000000000000000000000000000000000000",
-      123,
-    );
-  });
-
-  it("swallows usage-recording failures without failing the request", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    const { result } = buildStreamResult({
-      usage: Promise.reject(new Error("usage failed")),
-    });
-    streamTextMock.mockReturnValue(result);
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    const reply = createReply();
-    const response = await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    await Promise.resolve();
-    expect(response).toBeInstanceOf(Response);
-    expect(warnSpy).toHaveBeenCalledWith(
-      "Failed to record AI usage",
-      expect.objectContaining({ message: "usage failed" }),
-    );
-    warnSpy.mockRestore();
-  });
-
-  it("persists conversation on finish", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-
-    convertToModelMessagesMock.mockResolvedValue([]);
-
-    const { result, toUIMessageStream } = buildStreamResult();
-    streamTextMock.mockReturnValue(result);
-
-    const reply = createReply();
-    const response = await handleChatPostRequest(
-      buildRequest({
-        id: "chat-99",
-        type: "chat-default",
-        messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }],
-      }),
-      reply,
-    );
-
-    expect(response).toBeInstanceOf(Response);
-    const options = toUIMessageStream.mock.calls[0]?.[0];
-    if (!options?.onFinish) {
-      throw new Error("Expected onFinish to be captured");
-    }
-    await options.onFinish({
-      messages: [
-        { id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] },
-        { id: "m2", role: "assistant", parts: [{ type: "text", text: "done" }] },
-      ],
-      isContinuation: false,
-      isAborted: false,
-      responseMessage: { id: "m2", role: "assistant", parts: [{ type: "text", text: "done" }] },
-      finishReason: "stop",
-    });
-
-    expect(storeChatMessagesMock).toHaveBeenCalledTimes(2);
-    const [initialCall, finishCall] = storeChatMessagesMock.mock.calls.map((call) => call[0]);
-    expect(initialCall).toEqual(
-      expect.objectContaining({
-        chatId: "chat-99",
-        generateTitle: false,
-        trustedMessageIds: expect.any(Array),
-        type: "chat-default",
-      }),
-    );
-    expect(initialCall?.messages).toHaveLength(2);
-    expect(initialCall?.messages?.[1]).toEqual(
-      expect.objectContaining({
-        role: "assistant",
-        metadata: { pending: true },
-      }),
-    );
-    expect(initialCall?.trustedMessageIds).toEqual([initialCall?.messages?.[1]?.id]);
-    expect(finishCall).toEqual(
-      expect.objectContaining({
-        chatId: "chat-99",
-        messages: expect.any(Array),
-        trustedMessageIds: expect.arrayContaining([initialCall?.messages?.[1]?.id]),
-        type: "chat-default",
-      }),
-    );
-  });
-
-  it("attaches reasoning duration metadata from stream start to finish", async () => {
-    vi.useFakeTimers();
-    const startTime = new Date("2025-01-01T00:00:00Z");
-    vi.setSystemTime(startTime);
-
-    try {
-      isAiUsageAvailableMock.mockResolvedValue(true);
-      const modelMessages: ModelMessage[] = [
-        { role: "user", content: [{ type: "text", text: "hello" }] },
-      ];
-      convertToModelMessagesMock.mockResolvedValue(modelMessages);
-
-      const { result, toUIMessageStream } = buildStreamResult();
-      streamTextMock.mockImplementation((options) => {
-        return result;
-      });
-
-      const reply = createReply();
-      const response = await handleChatPostRequest(
-        buildRequest({
-          id: "chat-100",
-          type: "chat-default",
-          messages: [{ id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] }],
+  it("includes file-search result expansion when the agent exposes file_search", async () => {
+    getAgentMock.mockResolvedValueOnce({
+      system: [{ role: "system", content: "sys" }],
+      tools: {
+        file_search: tool({
+          description: "file search",
+          inputSchema: z.object({}),
+          execute: async () => ({ ok: true }),
         }),
-        reply,
-      );
+      },
+      defaultModel: mockModel,
+    });
+    const { result } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
 
-      expect(response).toBeInstanceOf(Response);
-      const options = toUIMessageStream.mock.calls[0]?.[0];
-      if (!options?.messageMetadata) {
-        throw new Error("Expected messageMetadata to be captured");
-      }
+    await handleChatPostRequest(buildRequest(baseBody), createReply());
 
-      const startPart = { type: "start" } as unknown as TextStreamPart<ToolSet>;
-      options.messageMetadata({ part: startPart });
-
-      vi.setSystemTime(new Date(startTime.getTime() + 5000));
-      const finishPart = { type: "finish" } as unknown as TextStreamPart<ToolSet>;
-      const metadata = options.messageMetadata({ part: finishPart }) as
-        | { reasoningDurationMs?: number }
-        | undefined;
-      expect(metadata?.reasoningDurationMs).toBe(5000);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(streamTextMock.mock.calls[0]?.[0]?.providerOptions?.openai?.include).toEqual([
+      "file_search_call.results",
+    ]);
   });
 
-  it("returns the UI stream response", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
+  it("stores pending and finished assistant messages with trusted ids", async () => {
     const { result, toUIMessageStream, consumeStream } = buildStreamResult();
     streamTextMock.mockReturnValue(result);
 
     const reply = createReply();
     const response = await handleChatPostRequest(buildRequest(baseBody), reply);
+
     expect(response).toBeInstanceOf(Response);
-    expect(consumeStream).toHaveBeenCalledTimes(1);
-    expect(toUIMessageStream).toHaveBeenCalled();
+    expect(storeAssistantMessagesMock).toHaveBeenNthCalledWith(1, {
+      chatId: "chat-1",
+      messages: [
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [],
+          metadata: { pending: true },
+        },
+      ],
+      trustedMessageIds: ["00000000-0000-0000-0000-000000000002"],
+    });
 
     const options = toUIMessageStream.mock.calls[0]?.[0];
-    options?.generateMessageId?.();
-    options?.generateMessageId?.();
-  });
-
-  it("swallows consumeStream failures without failing the response", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    const { result } = buildStreamResult({
-      consumeStream: vi.fn(() => Promise.reject(new Error("consume failed"))),
+    await options?.onFinish?.({
+      messages: [
+        {
+          id: "user-1",
+          role: "user",
+          parts: [{ type: "text", text: "hello" }],
+        },
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [{ type: "text", text: "done" }],
+        },
+      ],
+      isContinuation: false,
+      isAborted: false,
+      responseMessage: {
+        id: "00000000-0000-0000-0000-000000000002",
+        role: "assistant",
+        parts: [{ type: "text", text: "done" }],
+      },
     });
-    streamTextMock.mockReturnValue(result);
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const reply = createReply();
-    const response = await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    await Promise.resolve();
-    expect(response).toBeInstanceOf(Response);
-    expect(warnSpy).toHaveBeenCalledWith(
-      "consume stream failed",
-      expect.objectContaining({ message: "consume failed" }),
+    expect(storeAssistantMessagesMock).toHaveBeenNthCalledWith(2, {
+      chatId: "chat-1",
+      messages: [
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [{ type: "text", text: "done" }],
+        },
+      ],
+      trustedMessageIds: ["00000000-0000-0000-0000-000000000002"],
+    });
+    expect(clearPendingAssistantIfUnclaimedMock).toHaveBeenCalledWith(
+      "chat-1",
+      "00000000-0000-0000-0000-000000000002",
+      [
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [{ type: "text", text: "done" }],
+        },
+      ],
     );
-    warnSpy.mockRestore();
+    expect(consumeStream).not.toHaveBeenCalled();
   });
 
-  it("uses the pending assistant id before generating a new id", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    const { result, toUIMessageStream } = buildStreamResult();
-    streamTextMock.mockReturnValue(result);
-    randomUUIDMock
-      .mockImplementationOnce(() => "11111111-1111-1111-1111-111111111111")
-      .mockImplementationOnce(() => "22222222-2222-2222-2222-222222222222");
-
-    const reply = createReply();
-    await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    const options = toUIMessageStream.mock.calls[0]?.[0];
-    const first = options?.generateMessageId?.();
-    const second = options?.generateMessageId?.();
-    expect(first).toBe("11111111-1111-1111-1111-111111111111");
-    expect(second).toBe("22222222-2222-2222-2222-222222222222");
-  });
-
-  it("returns 404 when chat does not exist", async () => {
-    setCobuildDbResponse(chat, []);
-    isAiUsageAvailableMock.mockResolvedValue(true);
-
-    const reply = createReply();
-    const result = await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    expect(reply.status).toHaveBeenCalledWith(404);
-    expect(reply.send).toHaveBeenCalledWith({ error: "Chat not found" });
-    expect(streamTextMock).not.toHaveBeenCalled();
-    expect(result).toBeUndefined();
-  });
-
-  it("uses primary DB for chat ownership lookup", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    streamTextMock.mockReturnValue(buildStreamResult().result);
-
-    const originalPrimary = cobuildDb.$primary as any;
-    const selectFromPrimary = vi.fn(() => {
-      const chain = {
-        limit: (_n?: number) => chain,
-        orderBy: (_o?: unknown) => chain,
-        groupBy: (_cols?: unknown) => Promise.resolve([]),
-        then: (resolve: (rows: unknown[]) => unknown) =>
-          resolve([{ user: "0xabc0000000000000000000000000000000000000", type: "chat-default" }]),
-      };
-      return {
-        from: (_table: unknown) => ({
-          where: (_cond?: unknown) => chain,
-        }),
-      };
-    });
-    const primaryDb = {
-      ...cobuildDb,
-      select: selectFromPrimary,
-    };
-    cobuildDb.$primary = primaryDb as any;
-
-    const replicaSelectSpy = vi.spyOn(cobuildDb, "select").mockImplementation(() => {
-      throw new Error("Replica lookup should not be used for chat ownership checks");
-    });
-
-    try {
-      const reply = createReply();
-      const response = await handleChatPostRequest(buildRequest(baseBody), reply);
-
-      expect(response).toBeInstanceOf(Response);
-      expect(selectFromPrimary).toHaveBeenCalled();
-      expect(replicaSelectSpy).not.toHaveBeenCalled();
-    } finally {
-      replicaSelectSpy.mockRestore();
-      cobuildDb.$primary = originalPrimary;
-    }
-  });
-
-  it("returns 404 when chat belongs to another user", async () => {
-    setCobuildDbResponse(chat, [
-      { user: "0xdef0000000000000000000000000000000000000", type: "chat-default" },
-    ]);
-    isAiUsageAvailableMock.mockResolvedValue(true);
-
-    const reply = createReply();
-    const result = await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    expect(reply.status).toHaveBeenCalledWith(404);
-    expect(reply.send).toHaveBeenCalledWith({ error: "Chat not found" });
-    expect(streamTextMock).not.toHaveBeenCalled();
-    expect(result).toBeUndefined();
-  });
-
-  it("avoids issuing a new grant when a valid grant matches the chat", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    verifyChatGrantMock.mockResolvedValue({
-      cid: baseBody.id,
-      perm: "send",
-      sub: "0xabc0000000000000000000000000000000000000",
-    });
-    convertToModelMessagesMock.mockResolvedValue([]);
-    streamTextMock.mockReturnValue(buildStreamResult().result);
-
-    const reply = createReply();
-    await handleChatPostRequest(buildRequest(baseBody, { "x-chat-grant": "grant" }), reply);
-
-    expect(getDbCallCount(chat)).toBe(1);
-    expect(signChatGrantMock).not.toHaveBeenCalled();
-  });
-
-  it("returns 400 when request type does not match stored chat type", async () => {
-    setCobuildDbResponse(chat, [
-      { user: "0xabc0000000000000000000000000000000000000", type: "chat-special" },
-    ]);
-    isAiUsageAvailableMock.mockResolvedValue(true);
+  it("returns 400 for invalid user message payloads without overwriting chat history", async () => {
+    prepareChatRequestMessagesMock.mockRejectedValueOnce(
+      new InvalidChatRequestMessageError("bad user payload"),
+    );
 
     const reply = createReply();
     const result = await handleChatPostRequest(buildRequest(baseBody), reply);
 
     expect(reply.status).toHaveBeenCalledWith(400);
-    expect(reply.send).toHaveBeenCalledWith({ error: "Chat type mismatch" });
+    expect(reply.send).toHaveBeenCalledWith({ error: "bad user payload" });
+    expect(admitAiGenerationMock).not.toHaveBeenCalled();
     expect(streamTextMock).not.toHaveBeenCalled();
     expect(result).toBeUndefined();
   });
 
-  it("issues a chat grant header when a grant is missing", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
+  it("throws a persistence error when preparing the authoritative user turn fails unexpectedly", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    prepareChatRequestMessagesMock.mockRejectedValueOnce("write failed");
+
+    await expect(handleChatPostRequest(buildRequest(baseBody), createReply())).rejects.toThrow(
+      CHAT_PERSIST_ERROR,
+    );
+
+    expect(admitAiGenerationMock).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("returns 409 for duplicate processed or in-progress messages", async () => {
+    prepareChatRequestMessagesMock
+      .mockRejectedValueOnce(new ChatMessageInProgressError("Message already in progress."))
+      .mockRejectedValueOnce(new ChatMessageAlreadyProcessedError("Message already processed."));
+
+    const reply1 = createReply();
+    await handleChatPostRequest(buildRequest(baseBody), reply1);
+    expect(reply1.status).toHaveBeenCalledWith(409);
+    expect(reply1.send).toHaveBeenCalledWith({ error: "Message already in progress." });
+
+    const reply2 = createReply();
+    await handleChatPostRequest(buildRequest(baseBody), reply2);
+    expect(reply2.status).toHaveBeenCalledWith(409);
+    expect(reply2.send).toHaveBeenCalledWith({ error: "Message already processed." });
+  });
+
+  it("marks the pending assistant as failed when streaming errors occur", async () => {
     const { result, toUIMessageStream } = buildStreamResult();
     streamTextMock.mockReturnValue(result);
 
     const reply = createReply();
-    const response = await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    expect(response.headers.get("x-chat-grant")).toBe("chat-grant");
-    expect(toUIMessageStream).toHaveBeenCalled();
-  });
-
-  it("sets grant header when rate limited and grant issued", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(false);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    streamTextMock.mockReturnValue(buildStreamResult().result);
-
-    const reply = createReply();
-
     await handleChatPostRequest(buildRequest(baseBody), reply);
 
-    expect(reply.header).toHaveBeenCalledWith("x-chat-grant", "chat-grant");
-    expect(reply.status).toHaveBeenCalledWith(429);
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    const responseMessage = options?.onError?.(new Error("boom"));
+    await Promise.resolve();
+
+    expect(responseMessage).toBe("Something went wrong generating a response. Please retry.");
+    expect(markAssistantMessageFailedMock).toHaveBeenCalledWith(
+      "chat-1",
+      "00000000-0000-0000-0000-000000000002",
+      "Something went wrong generating a response. Please retry.",
+    );
   });
 
-  it("throws when initial chat persistence fails", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    storeChatMessagesMock.mockRejectedValueOnce(new Error("db down"));
+  it("releases admission only once when stream cleanup is triggered repeatedly", async () => {
+    const admission = {
+      reservedUsage: 1000,
+      finalizeUsage: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+    admitAiGenerationMock.mockResolvedValueOnce({ allowed: true, admission });
+    const { result, toUIMessageStream } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
+
+    await handleChatPostRequest(buildRequest(baseBody), createReply());
+
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    options?.onError?.(new Error("boom"));
+    options?.onError?.(new Error("boom again"));
+    await Promise.resolve();
+
+    expect(admission.release).toHaveBeenCalledTimes(1);
+    expect(admission.finalizeUsage).not.toHaveBeenCalled();
+  });
+
+  it("cleans up and releases admission when stream setup throws before a response exists", async () => {
+    const admission = {
+      reservedUsage: 1000,
+      finalizeUsage: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+    admitAiGenerationMock.mockResolvedValueOnce({ allowed: true, admission });
+    streamTextMock.mockImplementationOnce(() => {
+      throw new Error("stream unavailable");
+    });
+
+    const reply = createReply();
+    const request = buildRequest(baseBody);
+
+    await expect(handleChatPostRequest(request, reply)).rejects.toThrow("stream unavailable");
+
+    expect(request.raw.off).toHaveBeenCalledWith("aborted", expect.any(Function));
+    expect(clearPendingAssistantIfUnclaimedMock).toHaveBeenCalledWith(
+      "chat-1",
+      "00000000-0000-0000-0000-000000000002",
+      [],
+    );
+    expect(admission.finalizeUsage).not.toHaveBeenCalled();
+    expect(admission.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases admission and surfaces a persistence error when final assistant storage fails", async () => {
+    const admission = {
+      reservedUsage: 1000,
+      finalizeUsage: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+    admitAiGenerationMock.mockResolvedValueOnce({ allowed: true, admission });
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { result, toUIMessageStream } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
+    storeAssistantMessagesMock
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce("store failed");
+
+    await handleChatPostRequest(buildRequest(baseBody), createReply());
+
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    await expect(
+      options?.onFinish?.({
+        messages: [
+          {
+            id: "user-1",
+            role: "user",
+            parts: [{ type: "text", text: "hello" }],
+          },
+          {
+            id: "00000000-0000-0000-0000-000000000002",
+            role: "assistant",
+            parts: [{ type: "text", text: "done" }],
+          },
+        ],
+        isContinuation: false,
+        isAborted: false,
+        responseMessage: {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [{ type: "text", text: "done" }],
+        },
+      }),
+    ).rejects.toThrow(CHAT_PERSIST_ERROR);
+
+    expect(admission.finalizeUsage).not.toHaveBeenCalled();
+    expect(admission.release).toHaveBeenCalledTimes(1);
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("reuses the pending assistant id once and allocates fresh trusted ids for follow-up assistant messages", async () => {
+    randomUUIDMock.mockReturnValueOnce("00000000-0000-0000-0000-000000000003");
+    const { result, toUIMessageStream } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
+
+    await handleChatPostRequest(buildRequest(baseBody), createReply());
+
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    expect(options?.generateMessageId?.()).toBe("00000000-0000-0000-0000-000000000002");
+    expect(options?.generateMessageId?.()).toBe("00000000-0000-0000-0000-000000000003");
+
+    await options?.onFinish?.({
+      messages: [
+        {
+          id: "user-1",
+          role: "user",
+          parts: [{ type: "text", text: "hello" }],
+        },
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [{ type: "text", text: "first" }],
+        },
+        {
+          id: "00000000-0000-0000-0000-000000000003",
+          role: "assistant",
+          parts: [{ type: "text", text: "second" }],
+        },
+      ],
+      isContinuation: false,
+      isAborted: false,
+      responseMessage: {
+        id: "00000000-0000-0000-0000-000000000003",
+        role: "assistant",
+        parts: [{ type: "text", text: "second" }],
+      },
+    });
+
+    expect(storeAssistantMessagesMock).toHaveBeenNthCalledWith(2, {
+      chatId: "chat-1",
+      messages: [
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [{ type: "text", text: "first" }],
+        },
+        {
+          id: "00000000-0000-0000-0000-000000000003",
+          role: "assistant",
+          parts: [{ type: "text", text: "second" }],
+        },
+      ],
+      trustedMessageIds: [
+        "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-000000000003",
+      ],
+    });
+  });
+
+  it("does not reserve AI admission when agent construction fails", async () => {
+    getAgentMock.mockRejectedValueOnce(new Error("agent unavailable"));
+
+    const reply = createReply();
+    await expect(handleChatPostRequest(buildRequest(baseBody), reply)).rejects.toThrow(
+      "agent unavailable",
+    );
+
+    expect(admitAiGenerationMock).not.toHaveBeenCalled();
+    expect(storeAssistantMessagesMock).not.toHaveBeenCalled();
+  });
+
+  it("logs successful storage in debug mode and tolerates missing usage totals", async () => {
+    const admission = {
+      reservedUsage: 1000,
+      finalizeUsage: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+    admitAiGenerationMock.mockResolvedValueOnce({ allowed: true, admission });
+    isChatDebugEnabledMock.mockReturnValueOnce(true);
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const { result, toUIMessageStream } = buildStreamResult({
+      usage: Promise.reject(new Error("usage unavailable")),
+    });
+    streamTextMock.mockReturnValue(result);
+
+    await handleChatPostRequest(buildRequest(baseBody), createReply());
+
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    await options?.onFinish?.({
+      messages: [
+        {
+          id: "user-1",
+          role: "user",
+          parts: [{ type: "text", text: "hello" }],
+        },
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [{ type: "text", text: "done" }],
+        },
+      ],
+      isContinuation: false,
+      isAborted: false,
+      responseMessage: {
+        id: "00000000-0000-0000-0000-000000000002",
+        role: "assistant",
+        parts: [{ type: "text", text: "done" }],
+      },
+    });
+
+    expect(admission.finalizeUsage).not.toHaveBeenCalled();
+    expect(admission.release).toHaveBeenCalledTimes(1);
+    expect(consoleInfoSpy).toHaveBeenCalledWith("Stored chat messages", {
+      chatId: "chat-1",
+      messageCount: 2,
+    });
+    consoleInfoSpy.mockRestore();
+  });
+
+  it("cleans up the pending assistant on request aborts", async () => {
+    const admission = {
+      reservedUsage: 1000,
+      finalizeUsage: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+    admitAiGenerationMock.mockResolvedValueOnce({ allowed: true, admission });
+    const { result } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
+
+    const reply = createReply();
+    const request = buildRequest(baseBody);
+    await handleChatPostRequest(request, reply);
+
+    expect(request.raw.once).toHaveBeenCalledTimes(1);
+    expect(request.raw.once).toHaveBeenCalledWith("aborted", expect.any(Function));
+    const handleDisconnect = request.raw.once.mock.calls[0]?.[1] as (() => void) | undefined;
+    handleDisconnect?.();
+    await Promise.resolve();
+
+    expect(clearPendingAssistantIfUnclaimedMock).toHaveBeenCalledWith(
+      "chat-1",
+      "00000000-0000-0000-0000-000000000002",
+      [],
+    );
+    expect(admission.finalizeUsage).not.toHaveBeenCalled();
+    expect(admission.release).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws the persistence error when initial assistant persistence fails", async () => {
+    storeAssistantMessagesMock.mockRejectedValueOnce("db down");
 
     const reply = createReply();
     await expect(handleChatPostRequest(buildRequest(baseBody), reply)).rejects.toThrow(
       CHAT_PERSIST_ERROR,
     );
-  });
-
-  it("includes file_search results when available", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    streamTextMock.mockReturnValue(buildStreamResult().result);
-    getAgentMock.mockResolvedValue({
-      system: [],
-      tools: { file_search: {} } as unknown as ToolSet,
-      defaultModel: mockModel,
-    });
-
-    const reply = createReply();
-    await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    const options = streamTextMock.mock.calls[0]?.[0];
-    expect(options?.providerOptions?.openai?.include).toEqual(["file_search_call.results"]);
-  });
-
-  it("marks assistant message failed on stream error", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    const { result, toUIMessageStream } = buildStreamResult();
-    streamTextMock.mockReturnValue(result);
-
-    const reply = createReply();
-    await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    const options = toUIMessageStream.mock.calls[0]?.[0];
-    if (!options?.onError) throw new Error("Expected onError to be captured");
-
-    const message = options.onError(new Error("boom"));
-    expect(message).toBe("Something went wrong generating a response. Please retry.");
-    expect(markAssistantMessageFailedMock).toHaveBeenCalled();
-  });
-
-  it("swallows mark-assistant-message failures", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    const { result, toUIMessageStream } = buildStreamResult();
-    streamTextMock.mockReturnValue(result);
-    markAssistantMessageFailedMock.mockRejectedValueOnce(new Error("write failed"));
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    const reply = createReply();
-    await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    const options = toUIMessageStream.mock.calls[0]?.[0];
-    if (!options?.onError) throw new Error("Expected onError to be captured");
-    options.onError(new Error("boom"));
-
-    await Promise.resolve();
-    expect(warnSpy).toHaveBeenCalledWith(
-      "mark assistant message failed",
-      expect.objectContaining({ message: "write failed" }),
-    );
-    warnSpy.mockRestore();
-  });
-
-  it("logs debug info when chat debug is enabled", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    const { result, toUIMessageStream } = buildStreamResult();
-    streamTextMock.mockReturnValue(result);
-    isChatDebugEnabledMock.mockReturnValue(true);
-
-    const reply = createReply();
-    const response = await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    const options = toUIMessageStream.mock.calls[0]?.[0];
-    if (!options?.onFinish) throw new Error("Expected onFinish to be captured");
-
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-    await options.onFinish({
-      messages: [
-        { id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] },
-      ],
-      isContinuation: false,
-      isAborted: false,
-      responseMessage: { id: "m1", role: "assistant", parts: [] },
-      finishReason: "stop",
-    });
-    expect(clearPendingAssistantIfUnclaimedMock).toHaveBeenCalled();
-    expect(infoSpy).toHaveBeenCalledWith(
-      "Stored chat messages",
-      expect.objectContaining({ chatId: baseBody.id }),
-    );
-    infoSpy.mockRestore();
-  });
-
-  it("throws when final chat persistence fails", async () => {
-    isAiUsageAvailableMock.mockResolvedValue(true);
-    convertToModelMessagesMock.mockResolvedValue([]);
-    const { result, toUIMessageStream } = buildStreamResult();
-    streamTextMock.mockReturnValue(result);
-    storeChatMessagesMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("fail"));
-
-    const reply = createReply();
-    await handleChatPostRequest(buildRequest(baseBody), reply);
-
-    const options = toUIMessageStream.mock.calls[0]?.[0];
-    if (!options?.onFinish) throw new Error("Expected onFinish to be captured");
-
-    await expect(
-      options.onFinish({
-        messages: [
-          { id: "m1", role: "user", parts: [{ type: "text", text: "hello" }] },
-        ],
-        isContinuation: false,
-        isAborted: false,
-        responseMessage: { id: "m1", role: "assistant", parts: [] },
-        finishReason: "stop",
-      }),
-    ).rejects.toThrow(CHAT_PERSIST_ERROR);
   });
 });

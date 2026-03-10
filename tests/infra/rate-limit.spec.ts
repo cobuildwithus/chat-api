@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { checkAndRecordUsage, getUsage, recordUsage } from "../../src/infra/rate-limit";
+import {
+  checkAndRecordUsage,
+  getUsage,
+  recordUsage,
+  removeRecordedUsage,
+} from "../../src/infra/rate-limit";
 import { getRedisClient } from "../../src/infra/redis";
 
 const evalMock = vi.fn();
 const execMock = vi.fn();
+const zRemMock = vi.fn();
 const expireMock = vi.fn(() => ({ exec: execMock }));
 const zAddMock = vi.fn(() => ({ expire: expireMock }));
 const multiMock = vi.fn(() => ({ zAdd: zAddMock }));
@@ -18,6 +24,7 @@ describe("rate-limit", () => {
     const redisClient = {
       eval: evalMock,
       multi: multiMock,
+      zRem: zRemMock,
     } as unknown as Awaited<ReturnType<typeof getRedisClient>>;
     vi.mocked(getRedisClient).mockResolvedValue(redisClient);
   });
@@ -107,11 +114,13 @@ describe("rate-limit", () => {
       nowMs: 1234,
     });
 
-    expect(result).toEqual({
-      allowed: true,
-      usage: 7,
-      retryAfterSeconds: 0,
-    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        allowed: true,
+        usage: 7,
+        retryAfterSeconds: 0,
+      }),
+    );
     expect(evalMock).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -148,11 +157,13 @@ describe("rate-limit", () => {
       usageToAdd: 1,
     });
 
-    expect(result).toEqual({
-      allowed: true,
-      usage: 12,
-      retryAfterSeconds: 0,
-    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        allowed: true,
+        usage: 12,
+        retryAfterSeconds: 0,
+      }),
+    );
   });
 
   it("falls back safely when lua response fields are non-numeric", async () => {
@@ -184,5 +195,11 @@ describe("rate-limit", () => {
     ).rejects.toThrow("atomic fail");
 
     errorSpy.mockRestore();
+  });
+
+  it("removes a recorded usage member", async () => {
+    await removeRecordedUsage("key", "1000|request-1");
+
+    expect(zRemMock).toHaveBeenCalledWith("key", "1000|request-1");
   });
 });

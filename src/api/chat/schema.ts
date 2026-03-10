@@ -1,196 +1,98 @@
-export const chatSchema = {
-  body: {
-    type: "object",
-    required: ["id", "messages", "type"],
-    properties: {
-      id: { type: "string" },
-      clientMessageId: { type: "string" },
-      messages: {
-        type: "array",
-        items: {
-          type: "object",
-          required: ["id", "role", "parts"],
-          properties: {
-            id: { type: "string" },
-            role: { enum: ["user", "assistant"] },
-            metadata: {
-              type: "object",
-              additionalProperties: true,
-            },
-            parts: {
-              type: "array",
-              items: {
-                oneOf: [
-                  {
-                    type: "object",
-                    required: ["type", "text"],
-                    properties: {
-                      type: { const: "text" },
-                      text: { type: "string" },
-                    },
-                    additionalProperties: true,
-                  },
-                  {
-                    type: "object",
-                    required: ["type", "text"],
-                    properties: {
-                      type: { const: "reasoning" },
-                      text: { type: "string" },
-                    },
-                    additionalProperties: true,
-                  },
-                  {
-                    type: "object",
-                    required: ["type", "url", "mediaType"],
-                    properties: {
-                      type: { const: "file" },
-                      url: { type: "string" },
-                      mediaType: { type: "string" },
-                      filename: { type: "string" },
-                    },
-                    additionalProperties: true,
-                  },
-                  {
-                    type: "object",
-                    required: ["type", "image"],
-                    properties: {
-                      type: { const: "image" },
-                      image: { type: "string" },
-                    },
-                    additionalProperties: true,
-                  },
-                  {
-                    type: "object",
-                    required: ["type"],
-                    properties: {
-                      type: { const: "step-start" },
-                    },
-                    additionalProperties: true,
-                  },
-                  {
-                    type: "object",
-                    required: ["type", "sourceId", "url"],
-                    properties: {
-                      type: { const: "source-url" },
-                      sourceId: { type: "string" },
-                      url: { type: "string" },
-                      title: { type: "string" },
-                    },
-                    additionalProperties: true,
-                  },
-                  {
-                    type: "object",
-                    required: ["type", "sourceId", "mediaType", "title"],
-                    properties: {
-                      type: { const: "source-document" },
-                      sourceId: { type: "string" },
-                      mediaType: { type: "string" },
-                      title: { type: "string" },
-                      filename: { type: "string" },
-                      url: { type: "string" },
-                    },
-                    additionalProperties: true,
-                  },
-                  {
-                    type: "object",
-                    required: ["type", "toolCallId", "state"],
-                    properties: {
-                      type: { type: "string", pattern: "^tool-" },
-                      toolCallId: { type: "string" },
-                      state: {
-                        enum: [
-                          "input-streaming",
-                          "input-available",
-                          "output-available",
-                          "output-error",
-                        ],
-                      },
-                      input: {},
-                      output: {},
-                      errorText: { type: "string" },
-                    },
-                    additionalProperties: true,
-                  },
-                  {
-                    type: "object",
-                    required: ["type", "toolName", "toolCallId", "state"],
-                    properties: {
-                      type: { const: "dynamic-tool" },
-                      toolName: { type: "string" },
-                      toolCallId: { type: "string" },
-                      state: {
-                        enum: [
-                          "input-streaming",
-                          "input-available",
-                          "output-available",
-                          "output-error",
-                        ],
-                      },
-                      input: {},
-                      output: {},
-                      errorText: { type: "string" },
-                    },
-                    additionalProperties: true,
-                  },
-                  {
-                    type: "object",
-                    required: ["type", "data"],
-                    properties: {
-                      type: { type: "string", pattern: "^data-" },
-                      id: { type: "string" },
-                      data: {},
-                    },
-                    additionalProperties: true,
-                  },
-                ],
-              },
-            },
-          },
-          additionalProperties: true,
-        },
-      },
-      type: { type: "string" },
-      data: {
-        type: "object",
-        additionalProperties: true,
-      },
-      context: { type: "string" },
-    },
-    additionalProperties: true,
-  },
-};
+import { z } from "zod";
+import {
+  buildFastifyRouteSchema,
+  createRuntimeSchemaParser,
+} from "../zod-route-schema";
 
-export const chatCreateSchema = {
-  body: {
-    type: "object",
-    required: ["type"],
-    properties: {
-      type: { type: "string" },
-      data: {
-        type: "object",
-        additionalProperties: true,
-      },
-    },
-    additionalProperties: true,
-  },
-};
+const CHAT_TYPES = ["chat-default"] as const;
 
-export const chatGetSchema = {
-  params: {
-    type: "object",
-    required: ["chatId"],
-    properties: {
-      chatId: { type: "string" },
-    },
-  },
-};
+const chatDataSchema = z.object({
+  goalAddress: z.string().optional(),
+  grantId: z.string().optional(),
+  impactId: z.string().optional(),
+  castId: z.string().optional(),
+  opportunityId: z.string().optional(),
+  startupId: z.string().optional(),
+  draftId: z.string().optional(),
+}).strict();
 
-export const chatListSchema = {
-  querystring: {
-    type: "object",
-    properties: {
-      goalAddress: { type: "string" },
-      limit: { type: "number", minimum: 1, maximum: 100 },
-    },
-  },
-};
+const filePartSchema = z.object({
+  type: z.literal("file"),
+  url: z.string(),
+  mediaType: z.string(),
+  filename: z.string().optional(),
+  mimeType: z.string().optional(),
+  name: z.string().optional(),
+}).strict();
+
+const imagePartSchema = z.object({
+  type: z.literal("image"),
+  image: z.string(),
+  mimeType: z.string().optional(),
+}).strict();
+
+const chatAttachmentSchema = z.union([filePartSchema, imagePartSchema]);
+
+const chatHeadersSchema = z.object({
+  "x-client-device": z.string().min(1).optional(),
+}).passthrough();
+
+const chatBodySchema = z.object({
+  chatId: z.string().min(1),
+  clientMessageId: z.string().min(1),
+  userMessage: z.string(),
+  attachments: z.array(chatAttachmentSchema).optional(),
+  context: z.string().optional(),
+  id: z.never().optional(),
+  type: z.never().optional(),
+  data: z.never().optional(),
+  messages: z.never().optional(),
+}).strict();
+
+const chatCreateBodySchema = z.object({
+  type: z.enum(CHAT_TYPES),
+  data: chatDataSchema.optional(),
+}).strict();
+
+const chatGetParamsSchema = z.object({
+  chatId: z.string(),
+}).strict();
+
+const chatListQuerySchema = z.object({
+  goalAddress: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+}).strict();
+
+const chatHeadersParser = createRuntimeSchemaParser(chatHeadersSchema);
+const chatBodyParser = createRuntimeSchemaParser(chatBodySchema);
+const chatCreateBodyParser = createRuntimeSchemaParser(chatCreateBodySchema);
+const chatGetParamsParser = createRuntimeSchemaParser(chatGetParamsSchema);
+const chatListQueryParser = createRuntimeSchemaParser(chatListQuerySchema);
+
+export const chatSchema = buildFastifyRouteSchema({
+  body: chatBodyParser,
+  headers: chatHeadersParser,
+});
+
+export const chatCreateSchema = buildFastifyRouteSchema({
+  body: chatCreateBodyParser,
+});
+
+export const chatGetSchema = buildFastifyRouteSchema({
+  params: chatGetParamsParser,
+});
+
+export const chatListSchema = buildFastifyRouteSchema({
+  querystring: chatListQueryParser,
+});
+
+export const parseChatBody = chatBodyParser.parse;
+export const parseChatHeaders = chatHeadersParser.parse;
+export const parseChatCreateBody = chatCreateBodyParser.parse;
+export const parseChatGetParams = chatGetParamsParser.parse;
+export const parseChatListQuery = chatListQueryParser.parse;
+
+export type ChatRequestBody = z.infer<typeof chatBodySchema>;
+export type ChatCreateRequestBody = z.infer<typeof chatCreateBodySchema>;
+export type ChatGetParams = z.infer<typeof chatGetParamsSchema>;
+export type ChatListQuery = z.infer<typeof chatListQuerySchema>;
