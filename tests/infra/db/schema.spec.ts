@@ -3,6 +3,7 @@ import { getTableConfig } from "drizzle-orm/pg-core";
 import {
   chat,
   chatMessage,
+  cliAgentWallets,
   cliOauthCodes,
   cliSessions,
   farcasterProfiles,
@@ -15,6 +16,7 @@ describe("db schema", () => {
     expect(farcasterProfiles).toBeDefined();
     expect(cliOauthCodes).toBeDefined();
     expect(cliSessions).toBeDefined();
+    expect(cliAgentWallets).toBeDefined();
   });
 
   it("registers expected indexes and constraints", () => {
@@ -26,5 +28,8 @@ describe("db schema", () => {
 
     const cliSessionsConfig = getTableConfig(cliSessions);
     expect(cliSessionsConfig.indexes).toHaveLength(3);
+
+    const cliAgentWalletsConfig = getTableConfig(cliAgentWallets);
+    expect(cliAgentWalletsConfig.indexes).toHaveLength(3);
   });
 });

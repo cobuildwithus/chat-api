@@ -34,22 +34,6 @@ describe("handleChatListRequest", () => {
         updatedAt: now,
         createdAt: now,
       },
-      {
-        id: "chat-2",
-        title: "Goal Two",
-        data: { goalAddress: "0xdef0000000000000000000000000000000000000" },
-        type: "chat-default",
-        updatedAt: now,
-        createdAt: now,
-      },
-      {
-        id: "chat-3",
-        title: "Invalid data",
-        data: "not-json",
-        type: "chat-default",
-        updatedAt: now,
-        createdAt: now,
-      },
     ]);
 
     const reply = createReply();

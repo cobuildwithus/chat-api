@@ -3,7 +3,6 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { parseEvmAddress } from "@cobuild/wire";
 import { chat } from "../../infra/db/schema";
 import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
-import { parseJson } from "../../chat/parse";
 import { getChatUserOrThrow } from "../auth/validate-chat-user";
 import { parseChatListQuery } from "./schema";
 
@@ -39,23 +38,13 @@ export async function handleChatListRequest(
       .orderBy(desc(chat.updatedAt))
       .limit(resolvedLimit);
 
-    const items = chats.flatMap((entry) => {
-      if (normalizedGoal) {
-        const data = parseJson(entry.data) as Record<string, unknown> | null;
-        const entryGoal = parseEvmAddress(data?.goalAddress);
-        if (!entryGoal || entryGoal !== normalizedGoal) return [];
-      }
-
-      return [
-        {
-          id: entry.id,
-          title: entry.title ?? null,
-          type: entry.type,
-          updatedAt: entry.updatedAt.toISOString(),
-          createdAt: entry.createdAt.toISOString(),
-        },
-      ];
-    });
+    const items = chats.map((entry) => ({
+      id: entry.id,
+      title: entry.title ?? null,
+      type: entry.type,
+      updatedAt: entry.updatedAt.toISOString(),
+      createdAt: entry.createdAt.toISOString(),
+    }));
 
     return reply.send({ chats: items });
   } catch (error) {

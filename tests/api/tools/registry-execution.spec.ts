@@ -26,6 +26,7 @@ vi.mock("../../../src/infra/db/cobuildDb", () => ({
     execute: mocks.execute,
   },
   cobuildPrimaryDb: () => ({
+    select: mocks.select,
     execute: mocks.execute,
   }),
 }));
@@ -277,6 +278,7 @@ describe("tool registry execution", () => {
   it("executes get-wallet-balances with short-term cache", async () => {
     const getBalance = vi.fn().mockResolvedValue(1_250_000_000_000_000_000n);
     const readContract = vi.fn().mockResolvedValue(2_500_000n);
+    queueSelectRows([{ address: "0x00000000000000000000000000000000000000aa" }]);
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x00000000000000000000000000000000000000aA",
       agentKey: "default",
@@ -1613,10 +1615,14 @@ describe("tool registry execution", () => {
     expect(mocks.execute).toHaveBeenCalledTimes(2);
   });
 
-  it("returns request-scoped agentKey even when wallet balances are cached", async () => {
+  it("uses distinct hosted-wallet cache entries for different agent keys", async () => {
     const getBalance = vi.fn().mockResolvedValue(1_250_000_000_000_000_000n);
     const readContract = vi.fn().mockResolvedValue(2_500_000n);
     const cache = new Map<string, unknown>();
+    queueSelectRows(
+      [{ address: "0x00000000000000000000000000000000000000aa" }],
+      [{ address: "0x00000000000000000000000000000000000000bb" }],
+    );
     mocks.createPublicClient.mockReturnValue({
       getBalance,
       readContract,
@@ -1670,8 +1676,8 @@ describe("tool registry execution", () => {
         agentKey: "ops",
       },
     });
-    expect(getBalance).toHaveBeenCalledTimes(1);
-    expect(readContract).toHaveBeenCalledTimes(1);
+    expect(getBalance).toHaveBeenCalledTimes(2);
+    expect(readContract).toHaveBeenCalledTimes(2);
   });
 
   it("executes docs-search and parses results from both payload formats", async () => {
@@ -2498,6 +2504,7 @@ describe("tool registry execution", () => {
   it("executes get-wallet-balances with explicit matching agent on base", async () => {
     const getBalance = vi.fn().mockResolvedValue(10000000000000000n);
     const readContract = vi.fn().mockResolvedValue(500000n);
+    queueSelectRows([{ address: "0x00000000000000000000000000000000000000ff" }]);
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "ops",
@@ -2525,7 +2532,7 @@ describe("tool registry execution", () => {
       address: "0x833589fCD6EDB6E08F4C7C32D4F71B54BDA02913",
       abi: expect.any(Array),
       functionName: "balanceOf",
-      args: ["0x0000000000000000000000000000000000000001"],
+      args: ["0x00000000000000000000000000000000000000ff"],
     });
   });
 
@@ -2558,6 +2565,7 @@ describe("tool registry execution", () => {
   });
 
   it("returns 502 when balance fetch fails upstream", async () => {
+    queueSelectRows([{ address: "0x0000000000000000000000000000000000000001" }]);
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
@@ -2570,6 +2578,22 @@ describe("tool registry execution", () => {
       name: "get-wallet-balances",
       statusCode: 502,
       error: "Tool request failed.",
+    });
+  });
+
+  it("returns 409 when the hosted CLI wallet has not been provisioned", async () => {
+    queueSelectRows([]);
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+      scopes: ["tools:read"],
+    });
+
+    expect(await executeTool("get-wallet-balances", {})).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 409,
+      error: "Hosted CLI wallet has not been provisioned for this token yet.",
     });
   });
 

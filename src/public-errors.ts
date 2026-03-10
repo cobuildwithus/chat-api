@@ -36,6 +36,7 @@ export type PublicErrorKey =
   | "toolUnavailable"
   | "toolExecutionFailed"
   | "toolInternalError"
+  | "toolHostedWalletRequired"
   | "toolWalletSubjectRequired"
   | "toolNotificationsCursorInvalid"
   | "toolCastUrlUnsupported"
@@ -132,6 +133,10 @@ const STATIC_PUBLIC_ERRORS = {
   toolInternalError: {
     statusCode: 500,
     error: "Tool request failed.",
+  },
+  toolHostedWalletRequired: {
+    statusCode: 409,
+    error: "Hosted CLI wallet has not been provisioned for this token yet.",
   },
   toolWalletSubjectRequired: {
     statusCode: 401,

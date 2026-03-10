@@ -81,6 +81,59 @@ function toCliSessionView(row: {
   };
 }
 
+export async function readActiveCliSession(params: {
+  sessionId: string;
+  ownerAddress: string;
+  agentKey: string;
+}): Promise<{
+  sessionId: string;
+  ownerAddress: string;
+  agentKey: string;
+  scope: string;
+  expiresAt: Date;
+} | null> {
+  const db = cobuildPrimaryDb();
+  const normalizedOwner = normalizeOwnerAddressOrThrow(params.ownerAddress);
+  const parsedSessionId = parseSessionId(params.sessionId);
+  if (!parsedSessionId) {
+    return null;
+  }
+
+  const now = new Date();
+  const rows = await db
+    .select({
+      id: cliSessions.id,
+      ownerAddress: cliSessions.ownerAddress,
+      agentKey: cliSessions.agentKey,
+      scope: cliSessions.scope,
+      expiresAt: cliSessions.expiresAt,
+    })
+    .from(cliSessions)
+    .where(
+      and(
+        eq(cliSessions.id, parsedSessionId),
+        eq(cliSessions.ownerAddress, normalizedOwner),
+        eq(cliSessions.agentKey, params.agentKey),
+        isNull(cliSessions.revokedAt),
+        gt(cliSessions.expiresAt, now),
+      ),
+    )
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    sessionId: row.id.toString(),
+    ownerAddress: row.ownerAddress,
+    agentKey: row.agentKey,
+    scope: row.scope,
+    expiresAt: row.expiresAt,
+  };
+}
+
 export async function createAuthorizationCode(params: {
   ownerAddress: string;
   agentKey: string;

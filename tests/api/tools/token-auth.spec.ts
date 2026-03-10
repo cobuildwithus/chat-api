@@ -3,15 +3,27 @@ import { authenticateToolsBearerToken } from "../../../src/api/tools/token-auth"
 
 const mocks = vi.hoisted(() => ({
   verifyCliAccessToken: vi.fn(),
+  readActiveCliSession: vi.fn(),
 }));
 
 vi.mock("../../../src/api/oauth/jwt", () => ({
   verifyCliAccessToken: (...args: unknown[]) => mocks.verifyCliAccessToken(...args),
 }));
 
+vi.mock("../../../src/api/oauth/store", () => ({
+  readActiveCliSession: (...args: unknown[]) => mocks.readActiveCliSession(...args),
+}));
+
 describe("authenticateToolsBearerToken", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.readActiveCliSession.mockResolvedValue({
+      sessionId: "42",
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "ops",
+      scope: "tools:read tools:write wallet:read offline_access",
+      expiresAt: new Date("2026-03-10T00:00:00.000Z"),
+    });
   });
 
   it("returns null when JWT verification fails", async () => {
@@ -73,9 +85,21 @@ describe("authenticateToolsBearerToken", () => {
       hasWalletExecute: false,
       hasAnyWriteScope: true,
     });
+    expect(mocks.readActiveCliSession).toHaveBeenCalledWith({
+      sessionId: "42",
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "ops",
+    });
   });
 
   it("derives explicit write capabilities from wallet:execute scope", async () => {
+    mocks.readActiveCliSession.mockResolvedValueOnce({
+      sessionId: "43",
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "ops",
+      scope: "tools:read wallet:execute offline_access",
+      expiresAt: new Date("2026-03-10T00:00:00.000Z"),
+    });
     mocks.verifyCliAccessToken.mockResolvedValueOnce({
       sub: "0x0000000000000000000000000000000000000001",
       sid: "43",
@@ -94,5 +118,21 @@ describe("authenticateToolsBearerToken", () => {
       hasWalletExecute: true,
       hasAnyWriteScope: true,
     });
+  });
+
+  it("returns null when the backing CLI session is missing or revoked", async () => {
+    mocks.readActiveCliSession.mockResolvedValueOnce(null);
+    mocks.verifyCliAccessToken.mockResolvedValueOnce({
+      sub: "0x0000000000000000000000000000000000000001",
+      sid: "43",
+      agentKey: "ops",
+      scope: "tools:read wallet:execute offline_access",
+      iat: 1,
+      exp: 2,
+      iss: "issuer",
+      aud: "audience",
+    });
+
+    await expect(authenticateToolsBearerToken("token")).resolves.toBeNull();
   });
 });

@@ -132,20 +132,20 @@ describe("cacheResult", () => {
     expect(flattened).toEqual(expect.arrayContaining(keys));
   });
 
-  it("falls back to direct fetch when lock waits time out", async () => {
+  it("rethrows lock timeout when the cache is still empty", async () => {
     process.env.NODE_ENV = "production";
     const { getOrSetCachedResultWithLock } = await import("../../src/infra/cache/cacheResult");
 
     withRedisLock.mockRejectedValueOnce(new Error("NonceLockTimeout:prefix:lock:key-timeout"));
     redisGet.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
 
-    const result = await getOrSetCachedResultWithLock(
-      "key-timeout",
-      "prefix:",
-      async () => "fresh",
-    );
-
-    expect(result).toBe("fresh");
-    expect(redisSet).toHaveBeenCalled();
+    await expect(
+      getOrSetCachedResultWithLock(
+        "key-timeout",
+        "prefix:",
+        async () => "fresh",
+      ),
+    ).rejects.toThrow("NonceLockTimeout:prefix:lock:key-timeout");
+    expect(redisSet).not.toHaveBeenCalled();
   });
 });

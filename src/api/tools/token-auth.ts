@@ -8,6 +8,7 @@ import {
   normalizeSubjectWallet,
   type ToolsPrincipal,
 } from "../auth/principals";
+import { readActiveCliSession } from "../oauth/store";
 
 export async function authenticateToolsBearerToken(
   rawToken: string,
@@ -21,6 +22,15 @@ export async function authenticateToolsBearerToken(
   const scope = claims.scope.trim();
   const agentKey = claims.agentKey.trim();
   if (!ownerAddress || !scope || !agentKey) {
+    return null;
+  }
+
+  const session = await readActiveCliSession({
+    sessionId: claims.sid,
+    ownerAddress,
+    agentKey,
+  });
+  if (!session || session.scope !== scope) {
     return null;
   }
 

@@ -29,7 +29,7 @@ Schema source: `src/infra/db/schema.ts` and `migrations/0001_canonical_schema.sq
 
 - Generic cache helper: `src/infra/cache/cacheResult.ts`.
 - Pattern: get -> lock -> compute -> set -> unlock.
-- Lock timeout path falls back to compute without cache lock.
+- Lock timeout path briefly rechecks the cache and then rethrows if the cache is still empty.
 - Cache is disabled in development mode to reduce local stale behavior.
 
 ## Timeout and HTTP Controls

@@ -91,9 +91,9 @@ export async function getOrSetCachedResultWithLock<T>(
     );
   } catch (error) {
     if (!isNonceLockTimeout(error)) throw error;
-    const cachedAfterTimeout = await loadCached();
+    const cachedAfterTimeout = await waitForCachedResult(loadCached, Math.min(maxWaitMs, 250));
     if (cachedAfterTimeout !== null) return cachedAfterTimeout;
-    return runFetchAndCache();
+    throw error;
   }
 }
 
@@ -147,4 +147,32 @@ async function fetchAndCacheResult<T>(
 
 function isNonceLockTimeout(error: unknown): boolean {
   return error instanceof Error && error.message.startsWith("NonceLockTimeout:");
+}
+
+async function waitForCachedResult<T>(
+  loadCached: () => Promise<T | null>,
+  maxWaitMs: number,
+): Promise<T | null> {
+  const deadline = Date.now() + Math.max(0, maxWaitMs);
+
+  while (true) {
+    const cached = await loadCached();
+    if (cached !== null) {
+      return cached;
+    }
+
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      return null;
+    }
+
+    await sleep(Math.min(50, remainingMs));
+  }
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => {
+    const timeout = setTimeout(resolve, ms);
+    timeout.unref?.();
+  });
 }
