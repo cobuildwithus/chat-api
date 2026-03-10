@@ -190,6 +190,19 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("returns a public failure when get-user cached lookup throws", async () => {
+    mocks.getOrSetCachedResultWithLock.mockRejectedValueOnce(new Error("cache down"));
+
+    const result = await executeTool("get-user", { fname: "alice" });
+
+    expect(result).toEqual({
+      ok: false,
+      name: "get-user",
+      statusCode: 502,
+      error: "Tool request failed.",
+    });
+  });
+
   it("executes get-cast and normalizes alias names", async () => {
     mocks.execute.mockResolvedValueOnce({
       rows: [
@@ -1390,28 +1403,28 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-goal",
       statusCode: 502,
-      error: "get-goal request failed: db unavailable",
+      error: "Tool request failed.",
     });
 
     await expect(executeTool("get-budget", { identifier: "0xrecipientid1" })).resolves.toEqual({
       ok: false,
       name: "get-budget",
       statusCode: 502,
-      error: "get-budget request failed: db unavailable",
+      error: "Tool request failed.",
     });
 
     await expect(executeTool("get-tcr-request", { identifier: "0xtcr:0xitem:1" })).resolves.toEqual({
       ok: false,
       name: "get-tcr-request",
       statusCode: 502,
-      error: "get-tcr-request request failed: db unavailable",
+      error: "Tool request failed.",
     });
 
     await expect(executeTool("get-dispute", { identifier: "0xarbitrator:1" })).resolves.toEqual({
       ok: false,
       name: "get-dispute",
       statusCode: 502,
-      error: "get-dispute request failed: db unavailable",
+      error: "Tool request failed.",
     });
 
     await expect(
@@ -1423,14 +1436,14 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-stake-position",
       statusCode: 502,
-      error: "get-stake-position request failed: db unavailable",
+      error: "Tool request failed.",
     });
 
     await expect(executeTool("get-premium-escrow", { identifier: "0xstack" })).resolves.toEqual({
       ok: false,
       name: "get-premium-escrow",
       statusCode: 502,
-      error: "get-premium-escrow request failed: db unavailable",
+      error: "Tool request failed.",
     });
   });
 
@@ -1715,6 +1728,164 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("ignores malformed docs-search entries while still normalizing urls", async () => {
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.DOCS_VECTOR_STORE_ID = "vs_123";
+
+    const timeoutFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            "skip-me",
+            {
+              file_id: "file_data_3",
+              filename: "odd.md",
+              score: "0.72",
+              content: "not-an-array",
+              attributes: {
+                slug: "docs/no-leading-slash",
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    mocks.createTimeoutFetch.mockReturnValue(timeoutFetch);
+
+    const result = await executeTool("docs-search", { query: "odd", limit: 1 });
+
+    expect(result).toMatchObject({
+      ok: true,
+      name: "docs-search",
+      output: {
+        count: 1,
+        results: [
+          {
+            fileId: "file_data_3",
+            filename: "odd.md",
+            score: 0.72,
+            snippet: null,
+            url: "https://docs.co.build/docs/no-leading-slash",
+          },
+        ],
+      },
+    });
+  });
+
+  it("handles empty and malformed docs-search payload envelopes", async () => {
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.DOCS_VECTOR_STORE_ID = "vs_123";
+
+    const timeoutFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("", { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output: [
+              { type: "other" },
+              { type: "file_search_call", results: "bad" },
+              {
+                type: "file_search_call",
+                results: [null, { file_id: "file_output_2", filename: "attrs-null.md", score: 1 }],
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      );
+    mocks.createTimeoutFetch.mockReturnValue(timeoutFetch);
+
+    const emptyPayload = await executeTool("docs-search", { query: "empty", limit: 1 });
+    const malformedOutput = await executeTool("docs-search", { query: "output", limit: 1 });
+
+    expect(emptyPayload).toMatchObject({
+      ok: true,
+      name: "docs-search",
+      output: {
+        count: 0,
+        results: [],
+      },
+    });
+    expect(malformedOutput).toMatchObject({
+      ok: true,
+      name: "docs-search",
+      output: {
+        count: 1,
+        results: [
+          {
+            fileId: "file_output_2",
+            filename: "attrs-null.md",
+            url: null,
+          },
+        ],
+      },
+    });
+  });
+
+  it("truncates docs-search snippets from direct text and content arrays", async () => {
+    process.env.OPENAI_API_KEY = "test-openai-key";
+    process.env.DOCS_VECTOR_STORE_ID = "vs_123";
+
+    const timeoutFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          output: [
+            { type: "other" },
+            {
+              type: "file_search_call",
+              results: [
+                {
+                  file_id: "file_output_3",
+                  filename: "direct.md",
+                  score: 0.9,
+                  text: "d".repeat(500),
+                  attributes: null,
+                },
+                {
+                  file_id: "file_output_4",
+                  filename: "content.md",
+                  score: 0.7,
+                  content: [null, { text: "   " }, { text: "c".repeat(500) }],
+                  attributes: {
+                    slug: "docs/content",
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    mocks.createTimeoutFetch.mockReturnValue(timeoutFetch);
+
+    const result = await executeTool("docs-search", { query: "snippets", limit: 2 });
+
+    expect(result).toMatchObject({
+      ok: true,
+      name: "docs-search",
+      output: {
+        count: 2,
+        results: [
+          {
+            fileId: "file_output_3",
+            filename: "direct.md",
+            snippet: `${"d".repeat(420)}...`,
+            url: null,
+          },
+          {
+            fileId: "file_output_4",
+            filename: "content.md",
+            snippet: `${"c".repeat(420)}...`,
+            url: "https://docs.co.build/docs/content",
+          },
+        ],
+      },
+    });
+  });
+
   it("executes list-discussions with sorting and pagination", async () => {
     mocks.execute.mockResolvedValue({
       rows: [
@@ -1810,6 +1981,47 @@ describe("tool registry execution", () => {
           {
             hash: `0x${"2".repeat(40)}`,
             lastReply: null,
+          },
+        ],
+      },
+    });
+  });
+
+  it("truncates discussion titles/excerpts and falls back to unknown authors", async () => {
+    mocks.execute.mockResolvedValueOnce({
+      rows: [
+        {
+          hashHex: "4".repeat(40),
+          text: `\n${"a".repeat(320)}`,
+          castTimestamp: "2026-03-01T00:00:00.000Z",
+          replyCount: "0",
+          viewCount: "1",
+          lastReplyTimestamp: null,
+          lastReplyAuthorFname: null,
+          authorFid: null,
+          authorFname: null,
+          authorDisplayName: null,
+          authorAvatarUrl: null,
+          authorNeynarScore: null,
+        },
+      ],
+    });
+
+    const result = await executeTool("list-discussions", {});
+
+    expect(result).toMatchObject({
+      ok: true,
+      output: {
+        items: [
+          {
+            hash: `0x${"4".repeat(40)}`,
+            title: `${"a".repeat(157)}...`,
+            excerpt: `${"a".repeat(277)}...`,
+            authorUsername: "unknown",
+            author: {
+              fid: null,
+              username: "unknown",
+            },
           },
         ],
       },
@@ -2007,7 +2219,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-user",
       statusCode: 502,
-      error: "get-user request failed: db down",
+      error: "Tool request failed.",
     });
   });
 
@@ -2070,7 +2282,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-cast",
       statusCode: 502,
-      error: "get-cast request failed: db fail",
+      error: "Tool request failed.",
     });
   });
 
@@ -2099,7 +2311,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-treasury-stats",
       statusCode: 502,
-      error: "get-treasury-stats request failed: upstream unavailable",
+      error: "Tool request failed.",
     });
 
     mocks.getCobuildAiContextSnapshot.mockRejectedValueOnce(new Error("boom"));
@@ -2107,7 +2319,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-treasury-stats",
       statusCode: 502,
-      error: "get-treasury-stats request failed: boom",
+      error: "Tool request failed.",
     });
   });
 
@@ -2148,7 +2360,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-wallet-balances",
       statusCode: 403,
-      error: 'agentKey mismatch for this token. Expected "default".',
+      error: "agentKey mismatch for this token.",
     });
   });
 
@@ -2230,7 +2442,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "list-wallet-notifications",
       statusCode: 502,
-      error: "list-wallet-notifications request failed: db unavailable",
+      error: "Tool request failed.",
     });
   });
 
@@ -2308,7 +2520,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-wallet-balances",
       statusCode: 502,
-      error: "get-wallet-balances request failed: rpc unavailable",
+      error: "Tool request failed.",
     });
   });
 
@@ -2329,7 +2541,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "docs-search",
       statusCode: 503,
-      error: "Docs search is not configured (missing DOCS_VECTOR_STORE_ID).",
+      error: "Tool is unavailable.",
     });
 
     process.env.DOCS_VECTOR_STORE_ID = "vs_123";
@@ -2337,7 +2549,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "docs-search",
       statusCode: 503,
-      error: "Docs search is not configured (missing OPENAI_API_KEY).",
+      error: "Tool is unavailable.",
     });
 
     process.env.OPENAI_API_KEY = "key";
@@ -2379,7 +2591,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "docs-search",
       statusCode: 502,
-      error: "Docs search request failed: OpenAI vector store search request failed with status 500",
+      error: "Tool request failed.",
     });
 
     mocks.createTimeoutFetch.mockReturnValueOnce(
@@ -2389,7 +2601,61 @@ describe("tool registry execution", () => {
       ok: false,
       name: "docs-search",
       statusCode: 502,
-      error: "Docs search request failed: OpenAI vector store search returned invalid JSON.",
+      error: "Tool request failed.",
+    });
+  });
+
+  it("normalizes sparse docs-search output payloads with nested content snippets", async () => {
+    process.env.DOCS_VECTOR_STORE_ID = "vs_123";
+    process.env.OPENAI_API_KEY = "key";
+    mocks.createTimeoutFetch.mockReturnValueOnce(
+      vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            output: [
+              { type: "ignored" },
+              { type: "file_search_call", results: "bad" },
+              {
+                type: "file_search_call",
+                results: [
+                  null,
+                  {
+                    file_id: "file-1",
+                    filename: "guide.md",
+                    score: "0.9",
+                    content: [{ text: "Nested snippet" }],
+                    attributes: "bad",
+                  },
+                ],
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const result = await executeTool("docs-search", { query: "nested", limit: 1 });
+
+    expect(result).toEqual({
+      ok: true,
+      name: "docs-search",
+      cacheControl: "no-store",
+      output: {
+        query: "nested",
+        count: 1,
+        results: [
+          {
+            fileId: "file-1",
+            filename: "guide.md",
+            score: 0.9,
+            snippet: "Nested snippet",
+            path: null,
+            slug: null,
+            url: null,
+          },
+        ],
+      },
     });
   });
 
@@ -2412,7 +2678,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "list-discussions",
       statusCode: 502,
-      error: "list-discussions request failed: db timeout",
+      error: "Tool request failed.",
     });
   });
 
@@ -2469,7 +2735,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-discussion-thread",
       statusCode: 502,
-      error: "get-discussion-thread request failed: db fail",
+      error: "Tool request failed.",
     });
   });
 
@@ -2510,7 +2776,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "semantic-search-casts",
       statusCode: 503,
-      error: "semantic-search-casts request failed: OPENAI_API_KEY is not configured.",
+      error: "Tool is unavailable.",
     });
 
     process.env.OPENAI_API_KEY = "key";
@@ -2521,7 +2787,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "semantic-search-casts",
       statusCode: 502,
-      error: "semantic-search-casts request failed: OpenAI embeddings request failed with status 500",
+      error: "Tool request failed.",
     });
 
     mocks.createTimeoutFetch.mockReturnValueOnce(
@@ -2531,7 +2797,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "semantic-search-casts",
       statusCode: 502,
-      error: "semantic-search-casts request failed: OpenAI embeddings returned invalid JSON.",
+      error: "Tool request failed.",
     });
 
     mocks.createTimeoutFetch.mockReturnValueOnce(
@@ -2541,7 +2807,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "semantic-search-casts",
       statusCode: 502,
-      error: "semantic-search-casts request failed: OpenAI embeddings response is missing data.",
+      error: "Tool request failed.",
     });
 
     mocks.createTimeoutFetch.mockReturnValueOnce(
@@ -2551,7 +2817,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "semantic-search-casts",
       statusCode: 502,
-      error: "semantic-search-casts request failed: OpenAI embeddings response is missing embedding values.",
+      error: "Tool request failed.",
     });
 
     mocks.createTimeoutFetch.mockReturnValueOnce(
@@ -2563,7 +2829,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "semantic-search-casts",
       statusCode: 502,
-      error: "semantic-search-casts request failed: OpenAI embeddings dimension mismatch: expected 256, got 0",
+      error: "Tool request failed.",
     });
   });
 
@@ -2624,6 +2890,51 @@ describe("tool registry execution", () => {
     }
   });
 
+  it("handles sparse semantic embeddings and empty query rows", async () => {
+    process.env.OPENAI_API_KEY = "key";
+    mocks.createTimeoutFetch.mockReturnValueOnce(
+      vi.fn().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                embedding: [...Array.from({ length: 255 }, (_, i) => i / 255), null],
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+    mocks.execute.mockResolvedValueOnce({});
+
+    const result = await executeTool("semantic-search-casts", { query: "sparse" });
+
+    expect(result).toMatchObject({
+      ok: true,
+      name: "semantic-search-casts",
+      output: {
+        query: "sparse",
+        count: 0,
+        items: [],
+      },
+    });
+  });
+
+  it("returns a tool failure when the embeddings API succeeds with an empty body", async () => {
+    process.env.OPENAI_API_KEY = "key";
+    mocks.createTimeoutFetch.mockReturnValueOnce(
+      vi.fn().mockResolvedValueOnce(new Response("", { status: 200 })),
+    );
+
+    expect(await executeTool("semantic-search-casts", { query: "empty body" })).toEqual({
+      ok: false,
+      name: "semantic-search-casts",
+      statusCode: 502,
+      error: "Tool request failed.",
+    });
+  });
+
   it("uses fid fallback for author usernames when fname/display are missing", async () => {
     process.env.OPENAI_API_KEY = "key";
     mocks.createTimeoutFetch.mockReturnValueOnce(
@@ -2678,7 +2989,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-treasury-stats",
       statusCode: 502,
-      error: "get-treasury-stats request failed: unknown error",
+      error: "Tool request failed.",
     });
   });
 });

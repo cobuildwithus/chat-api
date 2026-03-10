@@ -1,15 +1,20 @@
 import { z } from "zod";
 import {
   authorizeToolExecution,
+  failureFromPublicError,
   normalizeToolLookupKey,
+  requiresToolsPrincipal,
   toToolInputFailure,
   toToolInputSchema,
 } from "./registry/runtime";
 import {
   DEFAULT_TOOL_AUTH_POLICY,
+  DEFAULT_TOOL_EXPOSURE,
   requiresWriteScopeForMetadata,
   type RegisteredTool,
   type ToolAuthPolicy,
+  type ToolExposure,
+  type ToolExecutionResult,
   type ToolMetadata,
 } from "./registry/types";
 import { contextToolDefinitions } from "./registry/context";
@@ -28,6 +33,7 @@ export type {
   ToolExecutionFailure,
   ToolExecutionResult,
   ToolExecutionSuccess,
+  ToolExposure,
   ToolMetadata,
   ToolSideEffects,
   ToolWalletBinding,
@@ -46,6 +52,7 @@ const RAW_TOOL_DEFINITIONS = [
 const TOOL_DEFINITIONS: RegisteredTool[] = RAW_TOOL_DEFINITIONS.map((tool) => ({
   ...tool,
   authPolicy: tool.authPolicy ?? DEFAULT_TOOL_AUTH_POLICY,
+  exposure: tool.exposure ?? DEFAULT_TOOL_EXPOSURE,
   inputSchema: toToolInputSchema(tool.input),
 }));
 
@@ -69,6 +76,7 @@ function toMetadata(tool: RegisteredTool): ToolMetadata {
     ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
     scopes: tool.scopes,
     authPolicy: tool.authPolicy,
+    exposure: tool.exposure,
     sideEffects: tool.sideEffects,
     version: tool.version,
     deprecated: tool.deprecated,
@@ -93,6 +101,11 @@ export function resolveToolAuthPolicy(name: string): ToolAuthPolicy | null {
   return tool?.authPolicy ?? null;
 }
 
+export function resolveToolExposure(name: string): ToolExposure | null {
+  const tool = TOOL_LOOKUP.get(normalizeToolLookupKey(name));
+  return tool?.exposure ?? null;
+}
+
 export function resolveToolInputSchema(name: string): z.ZodTypeAny | null {
   const tool = TOOL_LOOKUP.get(normalizeToolLookupKey(name));
   return tool?.input ?? null;
@@ -104,29 +117,18 @@ export function requiresWriteScopeForTool(name: string): boolean {
   return requiresWriteScopeForMetadata(tool);
 }
 
-export async function executeTool(name: string, input: unknown) {
+export async function executeTool(name: string, input: unknown): Promise<ToolExecutionResult> {
   const normalizedName = name.trim();
   if (!normalizedName) {
-    return {
-      ok: false as const,
-      name: "",
-      statusCode: 400,
-      error: "Tool name must not be empty.",
-    };
+    return failureFromPublicError("", "toolNameRequired");
   }
 
   const tool = TOOL_LOOKUP.get(normalizeToolLookupKey(normalizedName));
   if (!tool) {
-    return {
-      ok: false as const,
-      name: normalizedName,
-      statusCode: 404,
-      error: `Unknown tool "${normalizedName}".`,
-    };
+    return failureFromPublicError(normalizedName, "toolUnknown");
   }
 
-  if (tool.authPolicy.walletBinding === "subject-wallet" ||
-      tool.authPolicy.requiredScopes.some((scope) => scope !== "tools:read")) {
+  if (requiresToolsPrincipal(tool.authPolicy)) {
     const accessFailure = authorizeToolExecution(tool);
     if (accessFailure) {
       return accessFailure;
@@ -138,8 +140,7 @@ export async function executeTool(name: string, input: unknown) {
     return toToolInputFailure(tool.name, parsed.error);
   }
 
-  if (!(tool.authPolicy.walletBinding === "subject-wallet" ||
-      tool.authPolicy.requiredScopes.some((scope) => scope !== "tools:read"))) {
+  if (!requiresToolsPrincipal(tool.authPolicy)) {
     const accessFailure = authorizeToolExecution(tool);
     if (accessFailure) {
       return accessFailure;

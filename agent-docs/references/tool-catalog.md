@@ -1,7 +1,8 @@
 # Tool Catalog Reference
 
 Source registries:
-- Canonical REST tools: `src/tools/registry.ts`
+- Canonical REST tools manifest: `src/tools/registry.ts`
+- Canonical REST tool domains: `src/tools/registry/{farcaster,wallet,protocol,context}.ts`
 - AI wrappers: `src/ai/tools/index.ts`
 
 Validation source of truth:
