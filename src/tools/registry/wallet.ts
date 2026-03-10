@@ -3,12 +3,12 @@ import type {
   ProtocolNotificationActor,
   ProtocolNotificationAmounts,
   ProtocolNotificationLabels,
-  ProtocolNotificationPayload,
   ProtocolNotificationResource,
   ProtocolNotificationReward,
   ProtocolNotificationRole,
   ProtocolNotificationSchedule,
 } from "@cobuild/wire";
+import { and, eq } from "drizzle-orm";
 import { base } from "viem/chains";
 import {
   createPublicClient,
@@ -33,6 +33,8 @@ import {
 } from "../../domains/notifications/service";
 import { getToolsPrincipalFromContext } from "../../domains/notifications/wallet-subject";
 import { getOrSetCachedResultWithLock } from "../../infra/cache/cacheResult";
+import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
+import { cliAgentWallets } from "../../infra/db/schema";
 import {
   NO_STORE_CACHE_CONTROL,
   SHORT_PRIVATE_CACHE_CONTROL,
@@ -75,70 +77,57 @@ const nullableStringSchema: JsonSchema = {
   anyOf: [{ type: "string" }, { type: "null" }],
 };
 
-const protocolNotificationRoleFlags = {
-  requester: true,
-  challenger: true,
-  proposer: true,
-  budget_controller: true,
-  goal_owner: true,
-  goal_stakeholder: true,
-  goal_underwriter: true,
-  budget_underwriter: true,
-  juror: true,
-} satisfies Record<ProtocolNotificationRole, true>;
+const protocolNotificationRoleValues = [
+  "requester",
+  "challenger",
+  "proposer",
+  "budget_controller",
+  "goal_owner",
+  "goal_stakeholder",
+  "goal_underwriter",
+  "budget_underwriter",
+  "juror",
+] as const satisfies readonly ProtocolNotificationRole[];
 
-const protocolNotificationActorDefaults: ProtocolNotificationActor = {
-  walletAddress: null,
-};
-
-const protocolNotificationResourceDefaults: ProtocolNotificationResource = {
-  kind: null,
-  goalTreasury: null,
-  budgetTreasury: null,
-  itemId: null,
-  requestIndex: null,
-  arbitrator: null,
-  disputeId: null,
-};
-
-const protocolNotificationLabelsDefaults: ProtocolNotificationLabels = {
-  goalName: null,
-  budgetName: null,
-  mechanismName: null,
-  reminderContextLabel: null,
-};
-
-const protocolNotificationScheduleDefaults: ProtocolNotificationSchedule = {
-  deliverAt: null,
-  votingStartAt: null,
-  votingEndAt: null,
-  revealEndAt: null,
-  challengeWindowEndAt: null,
-  reassertGraceDeadline: null,
-};
-
-const protocolNotificationAmountsDefaults: ProtocolNotificationAmounts = {
-  allocatedStake: null,
-  claimable: null,
-  claimedAmount: null,
-  snapshotWeight: null,
-  snapshotVotes: null,
-  slashWeight: null,
-};
-
-const protocolNotificationRewardDefaults: ProtocolNotificationReward = {
-  bucket: null,
-  bucketLabel: null,
-};
-
-const protocolNotificationPayloadDefaults: ProtocolNotificationPayload = {
-  role: null,
-  resource: null,
-  actor: null,
-  labels: null,
-  schedule: null,
-  amounts: null,
-  reward: null,
+const protocolNotificationSectionContracts = {
+  resource: {
+    kind: null,
+    goalTreasury: null,
+    budgetTreasury: null,
+    itemId: null,
+    requestIndex: null,
+    arbitrator: null,
+    disputeId: null,
+  } satisfies ProtocolNotificationResource,
+  actor: {
+    walletAddress: null,
+  } satisfies ProtocolNotificationActor,
+  labels: {
+    goalName: null,
+    budgetName: null,
+    mechanismName: null,
+    reminderContextLabel: null,
+  } satisfies ProtocolNotificationLabels,
+  schedule: {
+    deliverAt: null,
+    votingStartAt: null,
+    votingEndAt: null,
+    revealEndAt: null,
+    challengeWindowEndAt: null,
+    reassertGraceDeadline: null,
+  } satisfies ProtocolNotificationSchedule,
+  amounts: {
+    allocatedStake: null,
+    claimable: null,
+    claimedAmount: null,
+    snapshotWeight: null,
+    snapshotVotes: null,
+    slashWeight: null,
+  } satisfies ProtocolNotificationAmounts,
+  reward: {
+    bucket: null,
+    bucketLabel: null,
+  } satisfies ProtocolNotificationReward,
 };
 
 function buildObjectSchema(
@@ -173,36 +162,42 @@ function buildNullableStringProperties<T extends Record<string, unknown>>(
   ) as Record<keyof T & string, JsonSchema>;
 }
 
+function buildProtocolNotificationSectionSchema<T extends Record<string, unknown>>(
+  contract: T,
+): JsonSchema {
+  return buildNullableObjectSchema(buildNullableStringProperties(contract));
+}
+
+const protocolNotificationSectionSchemas: Record<
+  keyof typeof protocolNotificationSectionContracts,
+  JsonSchema
+> = {
+  actor: buildProtocolNotificationSectionSchema(protocolNotificationSectionContracts.actor),
+  resource: buildProtocolNotificationSectionSchema(protocolNotificationSectionContracts.resource),
+  labels: buildProtocolNotificationSectionSchema(protocolNotificationSectionContracts.labels),
+  schedule: buildProtocolNotificationSectionSchema(protocolNotificationSectionContracts.schedule),
+  amounts: buildProtocolNotificationSectionSchema(protocolNotificationSectionContracts.amounts),
+  reward: buildProtocolNotificationSectionSchema(protocolNotificationSectionContracts.reward),
+};
+
+const protocolNotificationPayloadProperties: Record<
+  "role" | keyof typeof protocolNotificationSectionContracts,
+  JsonSchema
+> = {
+  role: {
+    anyOf: [
+      {
+        type: "string",
+        enum: [...protocolNotificationRoleValues],
+      },
+      { type: "null" },
+    ],
+  },
+  ...protocolNotificationSectionSchemas,
+};
+
 const protocolNotificationPayloadSchema = buildObjectSchema(
-  {
-    role: {
-      anyOf: [
-        {
-          type: "string",
-          enum: Object.keys(protocolNotificationRoleFlags),
-        },
-        { type: "null" },
-      ],
-    },
-    resource: buildNullableObjectSchema(
-      buildNullableStringProperties(protocolNotificationResourceDefaults),
-    ),
-    actor: buildNullableObjectSchema(
-      buildNullableStringProperties(protocolNotificationActorDefaults),
-    ),
-    labels: buildNullableObjectSchema(
-      buildNullableStringProperties(protocolNotificationLabelsDefaults),
-    ),
-    schedule: buildNullableObjectSchema(
-      buildNullableStringProperties(protocolNotificationScheduleDefaults),
-    ),
-    amounts: buildNullableObjectSchema(
-      buildNullableStringProperties(protocolNotificationAmountsDefaults),
-    ),
-    reward: buildNullableObjectSchema(
-      buildNullableStringProperties(protocolNotificationRewardDefaults),
-    ),
-  } satisfies Record<keyof typeof protocolNotificationPayloadDefaults, JsonSchema>,
+  protocolNotificationPayloadProperties,
   true,
 );
 
@@ -236,6 +231,31 @@ function getWalletBalanceNetworkConfig() {
   };
 }
 
+async function resolveHostedWalletAddress(params: {
+  ownerAddress: string;
+  agentKey: string;
+}): Promise<Address | null> {
+  const rows = await cobuildPrimaryDb()
+    .select({
+      address: cliAgentWallets.address,
+    })
+    .from(cliAgentWallets)
+    .where(
+      and(
+        eq(cliAgentWallets.ownerAddress, params.ownerAddress),
+        eq(cliAgentWallets.agentKey, params.agentKey),
+      ),
+    )
+    .limit(1);
+
+  const address = rows[0]?.address;
+  if (typeof address !== "string" || address.length === 0) {
+    return null;
+  }
+
+  return getAddress(address).toLowerCase() as Address;
+}
+
 async function executeGetWalletBalances(
   input: z.infer<typeof getWalletBalancesInputSchema>,
 ) {
@@ -249,12 +269,19 @@ async function executeGetWalletBalances(
     return failureFromPublicError(name, "toolAgentKeyMismatch");
   }
 
-  /* c8 ignore next 5 -- ownerAddress is normalized by getToolsPrincipalFromContext */
-  let walletAddress: Address;
+  let ownerAddress: Address;
   try {
-    walletAddress = getAddress(principal.ownerAddress).toLowerCase() as Address;
+    ownerAddress = getAddress(principal.ownerAddress).toLowerCase() as Address;
   } catch {
     return failureFromPublicError(name, "toolInternalError");
+  }
+
+  const walletAddress = await resolveHostedWalletAddress({
+    ownerAddress,
+    agentKey: principal.agentKey,
+  });
+  if (!walletAddress) {
+    return failureFromPublicError(name, "toolHostedWalletRequired");
   }
 
   const agentKey = input.agentKey ?? principal.agentKey;
