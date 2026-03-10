@@ -1,5 +1,7 @@
 import {
+  buildDiscussionNotificationAppPath,
   buildProtocolNotificationPresentation,
+  normalizeWalletNotificationPayload,
 } from "@cobuild/wire";
 import { sql } from "drizzle-orm";
 import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
@@ -12,7 +14,6 @@ import {
   type ListWalletNotificationsInput,
   type ListWalletNotificationsOutput,
   type NotificationKind,
-  type PaymentNotificationPayload,
   type WalletNotificationItem,
   type WalletNotificationPayload,
   type WalletNotificationsUnreadState,
@@ -238,197 +239,6 @@ function toExcerpt(text: string | null | undefined): string | null {
   return compact.length <= 180 ? compact : `${compact.slice(0, 177)}...`;
 }
 
-type DtoScalarMode = "default" | "protocol";
-
-function normalizeDtoValue(value: unknown, scalarMode: DtoScalarMode): unknown {
-  if (value === null) {
-    return null;
-  }
-  if (typeof value === "string" || typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      return undefined;
-    }
-    if (scalarMode === "protocol") {
-      return String(value);
-    }
-    if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
-      return value.toString();
-    }
-    return value;
-  }
-  if (typeof value === "bigint") {
-    return scalarMode === "protocol" ? value.toString() : (toSafeInteger(value) ?? value.toString());
-  }
-  if (Array.isArray(value)) {
-    return value.flatMap((entry) => {
-      const dto = normalizeDtoValue(entry, scalarMode);
-      return dto === undefined ? [] : [dto];
-    });
-  }
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const jsonValue = typeof (value as { toJSON?: () => unknown }).toJSON === "function"
-    ? (value as { toJSON: () => unknown }).toJSON()
-    : null;
-  if (jsonValue !== null && jsonValue !== value) {
-    return normalizeDtoValue(jsonValue, scalarMode);
-  }
-
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) {
-    return undefined;
-  }
-
-  const record: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    const dto = normalizeDtoValue(entry, scalarMode);
-    if (dto !== undefined) {
-      record[key] = dto;
-    }
-  }
-  return record;
-}
-
-function asDtoRecord(
-  value: unknown,
-  scalarMode: DtoScalarMode = "default",
-): Record<string, unknown> | null {
-  const dto = normalizeDtoValue(value, scalarMode);
-  if (!dto || typeof dto !== "object" || Array.isArray(dto)) {
-    return null;
-  }
-
-  const record = dto as Record<string, unknown>;
-  return Object.keys(record).length > 0 ? record : null;
-}
-
-function toPaymentPayload(value: unknown): PaymentNotificationPayload | null {
-  const record = asDtoRecord(value);
-  if (!record) {
-    return null;
-  }
-
-  const amount = record.amount;
-  if (typeof amount === "string") {
-    return { amount };
-  }
-  if (typeof amount === "number" && Number.isFinite(amount)) {
-    return { amount: String(amount) };
-  }
-
-  return null;
-}
-
-function normalizeProtocolActor(value: unknown): Record<string, unknown> | null {
-  const record = asDtoRecord(value, "protocol");
-  if (!record) {
-    return null;
-  }
-
-  return {
-    ...record,
-    walletAddress: typeof record.walletAddress === "string" ? record.walletAddress : null,
-  };
-}
-
-function normalizeProtocolResource(value: unknown): Record<string, unknown> | null {
-  const record = asDtoRecord(value, "protocol");
-  if (!record) {
-    return null;
-  }
-
-  return {
-    ...record,
-    kind: typeof record.kind === "string" ? record.kind : null,
-    goalTreasury: typeof record.goalTreasury === "string" ? record.goalTreasury : null,
-    budgetTreasury: typeof record.budgetTreasury === "string" ? record.budgetTreasury : null,
-    itemId: typeof record.itemId === "string" ? record.itemId : null,
-    requestIndex: typeof record.requestIndex === "string" ? record.requestIndex : null,
-    arbitrator: typeof record.arbitrator === "string" ? record.arbitrator : null,
-    disputeId: typeof record.disputeId === "string" ? record.disputeId : null,
-  };
-}
-
-function normalizeProtocolLabels(value: unknown): Record<string, unknown> | null {
-  const record = asDtoRecord(value, "protocol");
-  if (!record) {
-    return null;
-  }
-
-  return {
-    ...record,
-    goalName: typeof record.goalName === "string" ? record.goalName : null,
-    budgetName: typeof record.budgetName === "string" ? record.budgetName : null,
-    mechanismName: typeof record.mechanismName === "string" ? record.mechanismName : null,
-  };
-}
-
-function normalizeProtocolSchedule(value: unknown): Record<string, unknown> | null {
-  const record = asDtoRecord(value, "protocol");
-  if (!record) {
-    return null;
-  }
-
-  return {
-    ...record,
-    deliverAt: typeof record.deliverAt === "string" ? record.deliverAt : null,
-    votingStartAt: typeof record.votingStartAt === "string" ? record.votingStartAt : null,
-    votingEndAt: typeof record.votingEndAt === "string" ? record.votingEndAt : null,
-    revealEndAt: typeof record.revealEndAt === "string" ? record.revealEndAt : null,
-  };
-}
-
-function normalizeProtocolAmounts(value: unknown): Record<string, unknown> | null {
-  const record = asDtoRecord(value, "protocol");
-  if (!record) {
-    return null;
-  }
-
-  return {
-    ...record,
-    allocatedStake: typeof record.allocatedStake === "string" ? record.allocatedStake : null,
-    claimable: typeof record.claimable === "string" ? record.claimable : null,
-    claimedAmount: typeof record.claimedAmount === "string" ? record.claimedAmount : null,
-    snapshotWeight: typeof record.snapshotWeight === "string" ? record.snapshotWeight : null,
-    snapshotVotes: typeof record.snapshotVotes === "string" ? record.snapshotVotes : null,
-    slashWeight: typeof record.slashWeight === "string" ? record.slashWeight : null,
-  };
-}
-
-function normalizeProtocolPayload(value: unknown): Record<string, unknown> | null {
-  const record = asDtoRecord(value, "protocol");
-  if (!record) {
-    return null;
-  }
-
-  return {
-    ...record,
-    role: typeof record.role === "string" ? record.role : null,
-    actor: normalizeProtocolActor(record.actor),
-    resource: normalizeProtocolResource(record.resource),
-    labels: normalizeProtocolLabels(record.labels),
-    schedule: normalizeProtocolSchedule(record.schedule),
-    amounts: normalizeProtocolAmounts(record.amounts),
-  };
-}
-
-function toNotificationPayload(kind: string, value: unknown): WalletNotificationPayload {
-  if (kind === "protocol") {
-    return normalizeProtocolPayload(value);
-  }
-  if (kind === "payment") {
-    return toPaymentPayload(value);
-  }
-  return null;
-}
-
 function getProtocolPayloadActorWalletAddress(
   payload: WalletNotificationPayload
 ): string | null {
@@ -438,22 +248,6 @@ function getProtocolPayloadActorWalletAddress(
 
   const actor = (payload as { actor?: { walletAddress?: unknown } | null }).actor;
   return typeof actor?.walletAddress === "string" ? actor.walletAddress : null;
-}
-
-function buildDiscussionAppPath(row: NotificationRow): string | null {
-  if (row.kind !== "discussion") {
-    return null;
-  }
-
-  const sourceHash = toHash(row.sourceHashHex);
-  const rootHash = toHash(row.rootHashHex);
-  if (!sourceHash) {
-    return null;
-  }
-  if (!rootHash || sourceHash === rootHash) {
-    return `/cast/${sourceHash}`;
-  }
-  return `/cast/${rootHash}?post=${sourceHash}`;
 }
 
 function buildUnreadFilter() {
@@ -468,7 +262,7 @@ function buildUnreadFilter() {
 }
 
 function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
-  const payload = toNotificationPayload(row.kind, row.payload);
+  const payload = normalizeWalletNotificationPayload(row.kind, row.payload);
   const actorWalletAddress =
     row.actorWalletAddress ?? getProtocolPayloadActorWalletAddress(payload);
   const sourceHash = toHash(row.sourceHashHex);
@@ -519,7 +313,11 @@ function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
       sourceHash,
       rootHash,
       targetHash,
-      appPath: protocolPresentation?.appPath ?? buildDiscussionAppPath(row),
+      appPath:
+        protocolPresentation?.appPath ??
+        (row.kind === "discussion"
+          ? buildDiscussionNotificationAppPath(sourceHash, rootHash)
+          : null),
     },
     payload,
   };

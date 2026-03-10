@@ -542,11 +542,23 @@ describe("wallet notifications service", () => {
             payload: {
               role: "proposer",
               protocol: true,
-              labels: { goalName: "Alpha" },
-              resource: { goalTreasury: "0x00000000000000000000000000000000000000bb" },
-              actor: { walletAddress: "0x00000000000000000000000000000000000000dd" },
+              labels: {
+                goalName: " Alpha ",
+                reminderContextLabel: " Allocation mechanism removal request ",
+              },
+              resource: {
+                goalTreasury: "0x00000000000000000000000000000000000000BB",
+                budgetTreasury: "0x00000000000000000000000000000000000000CC",
+                itemId: `0x${"A".repeat(64)}`,
+                requestIndex: 3n,
+                arbitrator: "0x00000000000000000000000000000000000000DD",
+                disputeId: 9n,
+              },
+              actor: { walletAddress: "0x00000000000000000000000000000000000000DD" },
               schedule: {
                 deliverAt: new Date("2026-03-08T12:00:00.000Z"),
+                challengeWindowEndAt: 12n,
+                reassertGraceDeadline: new Date("2026-03-09T12:00:00.000Z"),
               },
               amounts: {
                 claimable: 7n,
@@ -581,9 +593,17 @@ describe("wallet notifications service", () => {
       payload: expect.objectContaining({
         role: "proposer",
         protocol: true,
-        labels: expect.objectContaining({ goalName: "Alpha" }),
+        labels: expect.objectContaining({
+          goalName: "Alpha",
+          reminderContextLabel: "Allocation mechanism removal request",
+        }),
         resource: expect.objectContaining({
           goalTreasury: "0x00000000000000000000000000000000000000bb",
+          budgetTreasury: "0x00000000000000000000000000000000000000cc",
+          itemId: `0x${"a".repeat(64)}`,
+          requestIndex: "3",
+          arbitrator: "0x00000000000000000000000000000000000000dd",
+          disputeId: "9",
         }),
         actor: { walletAddress: "0x00000000000000000000000000000000000000dd" },
         schedule: {
@@ -591,6 +611,8 @@ describe("wallet notifications service", () => {
           votingStartAt: null,
           votingEndAt: null,
           revealEndAt: null,
+          challengeWindowEndAt: "12",
+          reassertGraceDeadline: "2026-03-09T12:00:00.000Z",
         },
         amounts: {
           allocatedStake: null,
@@ -607,6 +629,7 @@ describe("wallet notifications service", () => {
         },
       }),
     });
+    expect(result.items[0]?.payload).not.toHaveProperty("reward");
   });
 
   it("preserves unknown kinds instead of coercing them", async () => {
