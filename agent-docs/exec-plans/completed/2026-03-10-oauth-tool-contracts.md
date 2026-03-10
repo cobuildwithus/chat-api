@@ -33,3 +33,7 @@ Replace repo-local OAuth and `/v1/tools*` route DTO parsing/serialization with t
 - `pnpm test:coverage` passed.
 - `bash scripts/check-agent-docs-drift.sh` passed.
 - `bash scripts/doc-gardening.sh --fail-on-issues` passed.
+
+## Status
+
+completed

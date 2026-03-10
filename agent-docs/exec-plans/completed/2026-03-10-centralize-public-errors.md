@@ -28,3 +28,7 @@ Move public-facing error mapping for chat routes, canonical tool routes/executio
 3. Replace dynamic tool execution backend failure strings with stable mapped errors.
 4. Update tests and docs.
 5. Run completion workflow passes and required checks.
+
+## Status
+
+completed

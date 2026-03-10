@@ -1,6 +1,6 @@
 # Harden chat integrity, quota admission, and tool exposure
 
-Status: active
+Status: completed
 Created: 2026-03-10
 Updated: 2026-03-10
 

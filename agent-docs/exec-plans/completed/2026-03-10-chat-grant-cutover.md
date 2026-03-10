@@ -1,6 +1,6 @@
 # Remove chat grants as an auth primitive
 
-Status: active
+Status: completed
 Created: 2026-03-10
 Updated: 2026-03-10
 
