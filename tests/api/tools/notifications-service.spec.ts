@@ -266,6 +266,105 @@ describe("wallet notifications service", () => {
     });
   });
 
+  it("maps protocol notifications through the protocol presenter", async () => {
+    const subjectWalletAddress = "0x0000000000000000000000000000000000000001";
+    const goalTreasury = "0x00000000000000000000000000000000000000bb";
+    const actorWalletAddress = "0x00000000000000000000000000000000000000cc";
+
+    mocks.requestContextGet.mockImplementation((key: string) => {
+      if (key === "toolsPrincipal") {
+        return {
+          ownerAddress: subjectWalletAddress,
+          agentKey: "forecast-bot",
+        };
+      }
+      return undefined;
+    });
+    mocks.execute
+      .mockResolvedValueOnce({
+        rows: [{ count: "1", watermark: "1741435200000001" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 42n,
+            kind: "protocol",
+            reason: "budget_accepted",
+            eventAt: "2026-03-08T12:00:03.123456Z",
+            eventAtCursor: "2026-03-08T12:00:03.123456Z",
+            createdAt: "2026-03-08T12:00:06.123456Z",
+            createdAtCursor: "2026-03-08T12:00:06.123456Z",
+            isUnread: true,
+            sourceType: "budget_request",
+            sourceId: "proto-42",
+            sourceHashHex: null,
+            rootHashHex: null,
+            targetHashHex: null,
+            actorFid: null,
+            actorWalletAddress,
+            actorUsername: null,
+            actorDisplayName: null,
+            actorAvatarUrl: null,
+            sourceText: null,
+            rootText: null,
+            payload: {
+              labels: { goalName: "Alpha" },
+              resource: { goalTreasury },
+            },
+          },
+        ],
+      });
+
+    const result = await listWalletNotifications({
+      limit: 1,
+      unreadOnly: false,
+      kinds: ["protocol"],
+    });
+
+    expect(result.unread).toEqual({
+      count: 1,
+      watermark: "1741435200000001",
+    });
+    expect(result.pageInfo).toEqual({
+      limit: 1,
+      nextCursor: null,
+      hasMore: false,
+    });
+    expect(result.items).toEqual([
+      {
+        id: "42",
+        kind: "protocol",
+        reason: "budget_accepted",
+        eventAt: "2026-03-08T12:00:03.123456Z",
+        createdAt: "2026-03-08T12:00:06.123456Z",
+        isUnread: true,
+        actor: {
+          fid: null,
+          walletAddress: actorWalletAddress,
+          name: "0x0000...00cc",
+          username: null,
+          avatarUrl: null,
+        },
+        summary: {
+          title: "Budget accepted in Alpha.",
+          excerpt: "The proposal cleared governance and is queued for activation.",
+        },
+        resource: {
+          sourceType: "budget_request",
+          sourceId: "proto-42",
+          sourceHash: null,
+          rootHash: null,
+          targetHash: null,
+          appPath: `/${goalTreasury}/events`,
+        },
+        payload: {
+          labels: { goalName: "Alpha" },
+          resource: { goalTreasury },
+        },
+      },
+    ]);
+  });
+
   it("preserves unknown kinds instead of coercing them", async () => {
     mocks.requestContextGet.mockImplementation((key: string) => {
       if (key === "toolsPrincipal") {

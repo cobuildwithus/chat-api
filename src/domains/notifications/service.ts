@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
+import { buildProtocolNotificationPresentation } from "./presentation";
 import {
   decodeWalletNotificationsCursor,
   encodeWalletNotificationsCursor,
@@ -215,7 +216,17 @@ function buildDiscussionAppPath(row: NotificationRow): string | null {
 }
 
 function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
+  const payload = toPayload(row.payload);
+  const protocolPresentation =
+    row.kind === "protocol"
+      ? buildProtocolNotificationPresentation({
+          reason: row.reason,
+          payload,
+          actorWalletAddress: row.actorWalletAddress
+        })
+      : null;
   const actorName =
+    protocolPresentation?.actorName ??
     row.actorDisplayName ??
     row.actorUsername ??
     (row.actorFid != null ? `fid:${toCount(row.actorFid)}` : null);
@@ -242,8 +253,8 @@ function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
           }
         : null,
     summary: {
-      title: toTitle(row.rootText ?? row.sourceText),
-      excerpt: toExcerpt(row.sourceText),
+      title: protocolPresentation?.title ?? toTitle(row.rootText ?? row.sourceText),
+      excerpt: protocolPresentation?.excerpt ?? toExcerpt(row.sourceText),
     },
     resource: {
       sourceType: row.sourceType,
@@ -251,9 +262,9 @@ function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
       sourceHash: toHash(row.sourceHashHex),
       rootHash: toHash(row.rootHashHex),
       targetHash: toHash(row.targetHashHex),
-      appPath: buildDiscussionAppPath(row),
+      appPath: protocolPresentation?.appPath ?? buildDiscussionAppPath(row),
     },
-    payload: toPayload(row.payload),
+    payload,
   };
 }
 
