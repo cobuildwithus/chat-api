@@ -276,10 +276,15 @@ async function executeGetWalletBalances(
     return failureFromPublicError(name, "toolInternalError");
   }
 
-  const walletAddress = await resolveHostedWalletAddress({
-    ownerAddress,
-    agentKey: principal.agentKey,
-  });
+  let walletAddress: Address | null;
+  try {
+    walletAddress = await resolveHostedWalletAddress({
+      ownerAddress,
+      agentKey: principal.agentKey,
+    });
+  } catch {
+    return failureFromPublicError(name, "toolExecutionFailed");
+  }
   if (!walletAddress) {
     return failureFromPublicError(name, "toolHostedWalletRequired");
   }

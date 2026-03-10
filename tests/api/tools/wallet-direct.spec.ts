@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getToolsPrincipalFromContext: vi.fn(),
   listWalletNotifications: vi.fn(),
   hostedWalletRows: [] as Array<{ address: string }>,
+  hostedWalletLookupError: null as Error | null,
 }));
 
 vi.mock("../../../src/domains/notifications/wallet-subject", () => ({
@@ -40,7 +41,12 @@ vi.mock("../../../src/infra/db/cobuildDb", () => ({
     select: () => ({
       from: () => ({
         where: () => ({
-          limit: async () => mocks.hostedWalletRows,
+          limit: async () => {
+            if (mocks.hostedWalletLookupError) {
+              throw mocks.hostedWalletLookupError;
+            }
+            return mocks.hostedWalletRows;
+          },
         }),
       }),
     }),
@@ -134,6 +140,7 @@ describe("wallet tool direct execution branches", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.hostedWalletRows = [];
+    mocks.hostedWalletLookupError = null;
   });
 
   it("maps invalid tools principal owner addresses to internal tool failures", async () => {
@@ -151,6 +158,26 @@ describe("wallet tool direct execution branches", () => {
       ok: false,
       name: "get-wallet-balances",
       statusCode: 500,
+      error: "Tool request failed.",
+    });
+  });
+
+  it("maps hosted wallet lookup failures to tool execution failures", async () => {
+    mocks.getToolsPrincipalFromContext.mockReturnValue({
+      ownerAddress: "0x00000000000000000000000000000000000000aa",
+      agentKey: "default",
+      scopes: ["tools:read"],
+    });
+    mocks.hostedWalletLookupError = new Error("db unavailable");
+
+    const result = await getWalletBalancesTool?.execute({
+      network: "base",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 502,
       error: "Tool request failed.",
     });
   });
@@ -201,7 +228,6 @@ describe("wallet tool direct execution branches", () => {
 
     expect(protocolSchema).toMatchObject({
       type: "object",
-      required: protocolNotificationContract.payloadKeys,
       additionalProperties: true,
       properties: {
         role: {
@@ -215,6 +241,9 @@ describe("wallet tool direct execution branches", () => {
         },
       },
     });
+    expect([...protocolSchema?.required ?? []].sort()).toEqual(
+      [...protocolNotificationContract.payloadKeys].sort(),
+    );
 
     const nestedContractKeys = {
       actor: protocolNotificationContract.actorKeys,
@@ -230,7 +259,6 @@ describe("wallet tool direct execution branches", () => {
         anyOf: [
           {
             type: "object",
-            required,
             properties: Object.fromEntries(
               required.map((field) => [field, nullableStringSchema]),
             ),
@@ -239,6 +267,9 @@ describe("wallet tool direct execution branches", () => {
           { type: "null" },
         ],
       });
+      expect(
+        [...(protocolSchema?.properties?.[property]?.anyOf?.[0]?.required ?? [])].sort(),
+      ).toEqual([...required].sort());
     }
   });
 
