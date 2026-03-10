@@ -43,6 +43,18 @@ type LockOpts = {
   retryMaxMs?: number;
 };
 
+type SemaphoreLeaseOptions = {
+  maxCount: number;
+  ttlMs?: number;
+  heartbeatMs?: number;
+  member?: string;
+};
+
+export type RedisSemaphoreLease = {
+  member: string;
+  release: () => Promise<void>;
+};
+
 const DEFAULT_LOCK_OPTS: Required<LockOpts> = {
   ttlMs: 10_000,
   maxWaitMs: 60_000,
@@ -68,6 +80,52 @@ const HEARTBEAT_LUA = `
   else
     return 0
   end
+`;
+
+const ACQUIRE_SEMAPHORE_LUA = `
+  local key = KEYS[1]
+  local nowMs = tonumber(ARGV[1])
+  local ttlMs = tonumber(ARGV[2])
+  local maxCount = tonumber(ARGV[3])
+  local member = ARGV[4]
+  local expiresAt = nowMs + ttlMs
+
+  redis.call("ZREMRANGEBYSCORE", key, "-inf", nowMs)
+
+  local existingScore = redis.call("ZSCORE", key, member)
+  if existingScore then
+    redis.call("ZADD", key, expiresAt, member)
+    redis.call("PEXPIRE", key, ttlMs)
+    return {1, redis.call("ZCARD", key)}
+  end
+
+  local count = redis.call("ZCARD", key)
+  if count >= maxCount then
+    return {0, count}
+  end
+
+  redis.call("ZADD", key, expiresAt, member)
+  redis.call("PEXPIRE", key, ttlMs)
+  return {1, count + 1}
+`;
+
+const HEARTBEAT_SEMAPHORE_LUA = `
+  local key = KEYS[1]
+  local member = ARGV[1]
+  local expiresAt = tonumber(ARGV[2])
+  local ttlMs = tonumber(ARGV[3])
+
+  if redis.call("ZSCORE", key, member) then
+    redis.call("ZADD", key, expiresAt, member)
+    redis.call("PEXPIRE", key, ttlMs)
+    return 1
+  end
+
+  return 0
+`;
+
+const RELEASE_SEMAPHORE_LUA = `
+  return redis.call("ZREM", KEYS[1], ARGV[1])
 `;
 
 export async function withRedisLock<T>(
@@ -124,4 +182,56 @@ export async function withRedisLock<T>(
       // ignore
     }
   }
+}
+
+export async function acquireRedisSemaphoreLease(
+  key: string,
+  opts: SemaphoreLeaseOptions,
+): Promise<RedisSemaphoreLease | null> {
+  const ttlMs = opts.ttlMs ?? 30_000;
+  const heartbeatMs = opts.heartbeatMs ?? Math.max(1000, Math.floor(ttlMs / 3));
+  const member = opts.member ?? randomUUID();
+  const c = await getRedisClient();
+  const nowMs = Date.now();
+
+  const raw = (await c.eval(ACQUIRE_SEMAPHORE_LUA, {
+    keys: [key],
+    arguments: [String(nowMs), String(ttlMs), String(opts.maxCount), member],
+  })) as unknown[];
+
+  const acquired = raw[0] === 1 || raw[0] === "1";
+  if (!acquired) {
+    return null;
+  }
+
+  let released = false;
+  const heartbeat = setInterval(() => {
+    const nextNowMs = Date.now();
+    void c
+      .eval(HEARTBEAT_SEMAPHORE_LUA, {
+        keys: [key],
+        arguments: [member, String(nextNowMs + ttlMs), String(ttlMs)],
+      })
+      .catch(() => {});
+  }, heartbeatMs);
+  heartbeat.unref?.();
+
+  return {
+    member,
+    release: async () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      clearInterval(heartbeat);
+      try {
+        await c.eval(RELEASE_SEMAPHORE_LUA, {
+          keys: [key],
+          arguments: [member],
+        });
+      } catch {
+        // ignore
+      }
+    },
+  };
 }

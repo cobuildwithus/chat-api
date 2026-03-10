@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  cliToolExecutionRequestBodyJsonSchema,
+  cliToolMetadataParamsJsonSchema,
+  cliToolsAuthHeadersJsonSchema,
+} from "@cobuild/wire";
+import {
+  parseToolExecutionBody,
   toolExecutionSchema,
   toolMetadataSchema,
   toolsListSchema,
@@ -7,18 +13,23 @@ import {
 
 describe("tools schema", () => {
   it("defines request body for tool execution", () => {
-    expect(toolExecutionSchema.body.required).toEqual(["name"]);
-    expect(toolExecutionSchema.body.properties.name.minLength).toBe(1);
-    expect(toolExecutionSchema.body.properties.name.maxLength).toBe(128);
+    expect(toolExecutionSchema.body).toEqual(cliToolExecutionRequestBodyJsonSchema);
   });
 
   it("defines params for tool metadata lookup", () => {
-    expect(toolMetadataSchema.params.required).toEqual(["name"]);
-    expect(toolMetadataSchema.params.properties.name.minLength).toBe(1);
-    expect(toolMetadataSchema.params.properties.name.maxLength).toBe(128);
+    expect(toolMetadataSchema.params).toEqual(cliToolMetadataParamsJsonSchema);
   });
 
-  it("keeps list schema unconstrained", () => {
-    expect(toolsListSchema).toEqual({});
+  it("requires authorization headers for tool routes", () => {
+    expect(toolsListSchema.headers).toEqual(cliToolsAuthHeadersJsonSchema);
+  });
+
+  it("uses the same runtime parser for tool execution input", () => {
+    expect(parseToolExecutionBody({ name: "get-user" })).toEqual({
+      name: "get-user",
+      input: {},
+    });
+    expect(() => parseToolExecutionBody({})).toThrow();
+    expect(() => parseToolExecutionBody({ name: "get-user", extra: true })).toThrow();
   });
 });

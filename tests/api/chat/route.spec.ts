@@ -533,6 +533,51 @@ describe("handleChatPostRequest", () => {
     expect(consumeStream).not.toHaveBeenCalled();
   });
 
+  it("charges reported token usage on successful completion before releasing admission", async () => {
+    const admission = {
+      reservedUsage: 1000,
+      finalizeUsage: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+    admitAiGenerationMock.mockResolvedValueOnce({ allowed: true, admission });
+    const { result, toUIMessageStream } = buildStreamResult({
+      usage: Promise.resolve({
+        ...baseUsage,
+        totalTokens: 4321,
+      }),
+    });
+    streamTextMock.mockReturnValue(result);
+
+    await handleChatPostRequest(buildRequest(baseBody), createReply());
+
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    await options?.onFinish?.({
+      messages: [
+        {
+          id: "user-1",
+          role: "user",
+          parts: [{ type: "text", text: "hello" }],
+        },
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [{ type: "text", text: "done" }],
+        },
+      ],
+      isContinuation: false,
+      isAborted: false,
+      responseMessage: {
+        id: "00000000-0000-0000-0000-000000000002",
+        role: "assistant",
+        parts: [{ type: "text", text: "done" }],
+      },
+    });
+
+    expect(admission.finalizeUsage).toHaveBeenCalledTimes(1);
+    expect(admission.finalizeUsage).toHaveBeenCalledWith(4321);
+    expect(admission.release).toHaveBeenCalledTimes(1);
+  });
+
   it("returns 400 for invalid user message payloads without overwriting chat history", async () => {
     prepareChatRequestMessagesMock.mockRejectedValueOnce(
       new InvalidChatRequestMessageError("bad user payload"),
@@ -613,7 +658,39 @@ describe("handleChatPostRequest", () => {
     await Promise.resolve();
 
     expect(admission.release).toHaveBeenCalledTimes(1);
-    expect(admission.finalizeUsage).not.toHaveBeenCalled();
+    expect(admission.finalizeUsage).toHaveBeenCalledTimes(1);
+    expect(admission.finalizeUsage).toHaveBeenCalledWith(1000);
+  });
+
+  it("releases admission after background cleanup settlement failures", async () => {
+    const admission = {
+      reservedUsage: 1000,
+      finalizeUsage: vi.fn().mockRejectedValueOnce(new Error("quota finalize failed")),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+    admitAiGenerationMock.mockResolvedValueOnce({ allowed: true, admission });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { result, toUIMessageStream } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
+
+    await handleChatPostRequest(buildRequest(baseBody), createReply());
+
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    const responseMessage = options?.onError?.(new Error("boom"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(responseMessage).toBe("Something went wrong generating a response. Please retry.");
+    expect(admission.finalizeUsage).toHaveBeenCalledTimes(1);
+    expect(admission.finalizeUsage).toHaveBeenCalledWith(1000);
+    expect(admission.release).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Failed to settle chat generation admission",
+      expect.objectContaining({
+        chatId: "chat-1",
+        message: "quota finalize failed",
+      }),
+    );
+    errorSpy.mockRestore();
   });
 
   it("cleans up and releases admission when stream setup throws before a response exists", async () => {
@@ -683,7 +760,8 @@ describe("handleChatPostRequest", () => {
       }),
     ).rejects.toThrow(CHAT_PERSIST_ERROR);
 
-    expect(admission.finalizeUsage).not.toHaveBeenCalled();
+    expect(admission.finalizeUsage).toHaveBeenCalledTimes(1);
+    expect(admission.finalizeUsage).toHaveBeenCalledWith(1000);
     expect(admission.release).toHaveBeenCalledTimes(1);
     consoleErrorSpy.mockRestore();
   });
@@ -798,7 +876,8 @@ describe("handleChatPostRequest", () => {
       },
     });
 
-    expect(admission.finalizeUsage).not.toHaveBeenCalled();
+    expect(admission.finalizeUsage).toHaveBeenCalledTimes(1);
+    expect(admission.finalizeUsage).toHaveBeenCalledWith(1000);
     expect(admission.release).toHaveBeenCalledTimes(1);
     expect(consoleInfoSpy).toHaveBeenCalledWith("Stored chat messages", {
       chatId: "chat-1",
@@ -832,7 +911,8 @@ describe("handleChatPostRequest", () => {
       "00000000-0000-0000-0000-000000000002",
       [],
     );
-    expect(admission.finalizeUsage).not.toHaveBeenCalled();
+    expect(admission.finalizeUsage).toHaveBeenCalledTimes(1);
+    expect(admission.finalizeUsage).toHaveBeenCalledWith(1000);
     expect(admission.release).toHaveBeenCalledTimes(1);
   });
 

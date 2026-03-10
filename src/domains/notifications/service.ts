@@ -1,16 +1,20 @@
+import {
+  buildProtocolNotificationPresentation,
+} from "@cobuild/wire";
 import { sql } from "drizzle-orm";
 import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
-import { buildProtocolNotificationPresentation } from "./presentation";
 import {
   decodeWalletNotificationsCursor,
   encodeWalletNotificationsCursor,
+  type WalletNotificationsCursor,
 } from "./cursor";
 import {
   type ListWalletNotificationsInput,
   type ListWalletNotificationsOutput,
   type NotificationKind,
+  type PaymentNotificationPayload,
   type WalletNotificationItem,
-  type WalletNotificationsCursor,
+  type WalletNotificationPayload,
   type WalletNotificationsUnreadState,
 } from "./types";
 import { resolveSubjectWalletFromContext } from "./wallet-subject";
@@ -19,6 +23,7 @@ const NEYNAR_SCORE_THRESHOLD = 0.55;
 const ISO_UTC_MICROS_TEMPLATE = `YYYY-MM-DD"T"HH24:MI:SS.US"Z"`;
 const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_INTEGER_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
+
 type NotificationRow = {
   id: bigint | number | string;
   kind: string;
@@ -156,6 +161,15 @@ function buildTimestampMicrosSql(alias: string, column: string) {
   )`;
 }
 
+function buildNotificationCursorSql(alias: string) {
+  const createdAtMicros = buildTimestampMicrosSql(alias, "created_at");
+  const id = columnRef(alias, "id");
+
+  return sql`(
+    (${createdAtMicros})::bigint::text || ':' || ${id}::bigint::text
+  )`;
+}
+
 function toHash(value: string | null): string | null {
   return value ? `0x${value}` : null;
 }
@@ -224,17 +238,9 @@ function toExcerpt(text: string | null | undefined): string | null {
   return compact.length <= 180 ? compact : `${compact.slice(0, 177)}...`;
 }
 
-function toPayload(value: unknown): Record<string, unknown> | null {
-  const dto = toDtoValue(value);
-  if (!dto || typeof dto !== "object" || Array.isArray(dto)) {
-    return null;
-  }
+type DtoScalarMode = "default" | "protocol";
 
-  const record = dto as Record<string, unknown>;
-  return Object.keys(record).length > 0 ? record : null;
-}
-
-function toDtoValue(value: unknown): unknown {
+function normalizeDtoValue(value: unknown, scalarMode: DtoScalarMode): unknown {
   if (value === null) {
     return null;
   }
@@ -245,17 +251,20 @@ function toDtoValue(value: unknown): unknown {
     if (!Number.isFinite(value)) {
       return undefined;
     }
+    if (scalarMode === "protocol") {
+      return String(value);
+    }
     if (Number.isInteger(value) && !Number.isSafeInteger(value)) {
       return value.toString();
     }
     return value;
   }
   if (typeof value === "bigint") {
-    return toSafeInteger(value) ?? value.toString();
+    return scalarMode === "protocol" ? value.toString() : (toSafeInteger(value) ?? value.toString());
   }
   if (Array.isArray(value)) {
     return value.flatMap((entry) => {
-      const dto = toDtoValue(entry);
+      const dto = normalizeDtoValue(entry, scalarMode);
       return dto === undefined ? [] : [dto];
     });
   }
@@ -269,7 +278,7 @@ function toDtoValue(value: unknown): unknown {
     ? (value as { toJSON: () => unknown }).toJSON()
     : null;
   if (jsonValue !== null && jsonValue !== value) {
-    return toDtoValue(jsonValue);
+    return normalizeDtoValue(jsonValue, scalarMode);
   }
 
   const prototype = Object.getPrototypeOf(value);
@@ -279,12 +288,156 @@ function toDtoValue(value: unknown): unknown {
 
   const record: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    const dto = toDtoValue(entry);
+    const dto = normalizeDtoValue(entry, scalarMode);
     if (dto !== undefined) {
       record[key] = dto;
     }
   }
   return record;
+}
+
+function asDtoRecord(
+  value: unknown,
+  scalarMode: DtoScalarMode = "default",
+): Record<string, unknown> | null {
+  const dto = normalizeDtoValue(value, scalarMode);
+  if (!dto || typeof dto !== "object" || Array.isArray(dto)) {
+    return null;
+  }
+
+  const record = dto as Record<string, unknown>;
+  return Object.keys(record).length > 0 ? record : null;
+}
+
+function toPaymentPayload(value: unknown): PaymentNotificationPayload | null {
+  const record = asDtoRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  const amount = record.amount;
+  if (typeof amount === "string") {
+    return { amount };
+  }
+  if (typeof amount === "number" && Number.isFinite(amount)) {
+    return { amount: String(amount) };
+  }
+
+  return null;
+}
+
+function normalizeProtocolActor(value: unknown): Record<string, unknown> | null {
+  const record = asDtoRecord(value, "protocol");
+  if (!record) {
+    return null;
+  }
+
+  return {
+    ...record,
+    walletAddress: typeof record.walletAddress === "string" ? record.walletAddress : null,
+  };
+}
+
+function normalizeProtocolResource(value: unknown): Record<string, unknown> | null {
+  const record = asDtoRecord(value, "protocol");
+  if (!record) {
+    return null;
+  }
+
+  return {
+    ...record,
+    kind: typeof record.kind === "string" ? record.kind : null,
+    goalTreasury: typeof record.goalTreasury === "string" ? record.goalTreasury : null,
+    budgetTreasury: typeof record.budgetTreasury === "string" ? record.budgetTreasury : null,
+    itemId: typeof record.itemId === "string" ? record.itemId : null,
+    requestIndex: typeof record.requestIndex === "string" ? record.requestIndex : null,
+    arbitrator: typeof record.arbitrator === "string" ? record.arbitrator : null,
+    disputeId: typeof record.disputeId === "string" ? record.disputeId : null,
+  };
+}
+
+function normalizeProtocolLabels(value: unknown): Record<string, unknown> | null {
+  const record = asDtoRecord(value, "protocol");
+  if (!record) {
+    return null;
+  }
+
+  return {
+    ...record,
+    goalName: typeof record.goalName === "string" ? record.goalName : null,
+    budgetName: typeof record.budgetName === "string" ? record.budgetName : null,
+    mechanismName: typeof record.mechanismName === "string" ? record.mechanismName : null,
+  };
+}
+
+function normalizeProtocolSchedule(value: unknown): Record<string, unknown> | null {
+  const record = asDtoRecord(value, "protocol");
+  if (!record) {
+    return null;
+  }
+
+  return {
+    ...record,
+    deliverAt: typeof record.deliverAt === "string" ? record.deliverAt : null,
+    votingStartAt: typeof record.votingStartAt === "string" ? record.votingStartAt : null,
+    votingEndAt: typeof record.votingEndAt === "string" ? record.votingEndAt : null,
+    revealEndAt: typeof record.revealEndAt === "string" ? record.revealEndAt : null,
+  };
+}
+
+function normalizeProtocolAmounts(value: unknown): Record<string, unknown> | null {
+  const record = asDtoRecord(value, "protocol");
+  if (!record) {
+    return null;
+  }
+
+  return {
+    ...record,
+    allocatedStake: typeof record.allocatedStake === "string" ? record.allocatedStake : null,
+    claimable: typeof record.claimable === "string" ? record.claimable : null,
+    claimedAmount: typeof record.claimedAmount === "string" ? record.claimedAmount : null,
+    snapshotWeight: typeof record.snapshotWeight === "string" ? record.snapshotWeight : null,
+    snapshotVotes: typeof record.snapshotVotes === "string" ? record.snapshotVotes : null,
+    slashWeight: typeof record.slashWeight === "string" ? record.slashWeight : null,
+  };
+}
+
+function normalizeProtocolPayload(value: unknown): Record<string, unknown> | null {
+  const record = asDtoRecord(value, "protocol");
+  if (!record) {
+    return null;
+  }
+
+  return {
+    ...record,
+    role: typeof record.role === "string" ? record.role : null,
+    actor: normalizeProtocolActor(record.actor),
+    resource: normalizeProtocolResource(record.resource),
+    labels: normalizeProtocolLabels(record.labels),
+    schedule: normalizeProtocolSchedule(record.schedule),
+    amounts: normalizeProtocolAmounts(record.amounts),
+  };
+}
+
+function toNotificationPayload(kind: string, value: unknown): WalletNotificationPayload {
+  if (kind === "protocol") {
+    return normalizeProtocolPayload(value);
+  }
+  if (kind === "payment") {
+    return toPaymentPayload(value);
+  }
+  return null;
+}
+
+function getProtocolPayloadActorWalletAddress(
+  payload: WalletNotificationPayload
+): string | null {
+  if (!payload || Array.isArray(payload)) {
+    return null;
+  }
+
+  const actor = (payload as { actor?: { walletAddress?: unknown } | null }).actor;
+  return typeof actor?.walletAddress === "string" ? actor.walletAddress : null;
 }
 
 function buildDiscussionAppPath(row: NotificationRow): string | null {
@@ -303,14 +456,30 @@ function buildDiscussionAppPath(row: NotificationRow): string | null {
   return `/cast/${rootHash}?post=${sourceHash}`;
 }
 
+function buildUnreadFilter() {
+  return sql`(
+    state.last_read_at IS NULL
+    OR notification.created_at > state.last_read_at
+    OR (
+      notification.created_at = state.last_read_at
+      AND notification.id > COALESCE(state.last_read_notification_id, 0)
+    )
+  )`;
+}
+
 function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
-  const payload = toPayload(row.payload);
+  const payload = toNotificationPayload(row.kind, row.payload);
+  const actorWalletAddress =
+    row.actorWalletAddress ?? getProtocolPayloadActorWalletAddress(payload);
+  const sourceHash = toHash(row.sourceHashHex);
+  const rootHash = toHash(row.rootHashHex);
+  const targetHash = toHash(row.targetHashHex);
   const protocolPresentation =
     row.kind === "protocol"
       ? buildProtocolNotificationPresentation({
           reason: row.reason,
           payload,
-          actorWalletAddress: row.actorWalletAddress
+          actorWalletAddress,
         })
       : null;
   const actorName =
@@ -328,13 +497,13 @@ function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
     isUnread: row.isUnread,
     actor:
       row.actorFid != null ||
-      row.actorWalletAddress !== null ||
+      actorWalletAddress !== null ||
       row.actorUsername !== null ||
       row.actorDisplayName !== null ||
       row.actorAvatarUrl !== null
         ? {
             fid: row.actorFid == null ? null : toSafeInteger(row.actorFid),
-            walletAddress: row.actorWalletAddress,
+            walletAddress: actorWalletAddress,
             name: actorName,
             username: row.actorUsername,
             avatarUrl: row.actorAvatarUrl,
@@ -347,9 +516,9 @@ function mapNotificationRow(row: NotificationRow): WalletNotificationItem {
     resource: {
       sourceType: row.sourceType,
       sourceId: row.sourceId,
-      sourceHash: toHash(row.sourceHashHex),
-      rootHash: toHash(row.rootHashHex),
-      targetHash: toHash(row.targetHashHex),
+      sourceHash,
+      rootHash,
+      targetHash,
       appPath: protocolPresentation?.appPath ?? buildDiscussionAppPath(row),
     },
     payload,
@@ -365,26 +534,35 @@ async function getUnreadState(
   if (kindsFilter) {
     filters.push(kindsFilter);
   }
-  filters.push(sql`(
-    state.last_read_at IS NULL
-    OR notification.created_at > state.last_read_at
-  )`);
+  filters.push(buildUnreadFilter());
 
   const result = (await cobuildPrimaryDb().execute(sql`
+    WITH unread AS (
+      SELECT
+        notification.created_at,
+        notification.id,
+        ${buildNotificationCursorSql("notification")} AS cursor
+      ${NOTIFICATION_FROM_SQL}
+      WHERE ${joinFilters(filters)}
+    )
     SELECT
       COUNT(*)::bigint AS count,
       COALESCE(
-        (MAX(${buildTimestampMicrosSql("notification", "created_at")}))::bigint::text,
-        '0'
+        (
+          SELECT cursor
+          FROM unread
+          ORDER BY created_at DESC, id DESC
+          LIMIT 1
+        ),
+        '0:0'
       ) AS watermark
-    ${NOTIFICATION_FROM_SQL}
-    WHERE ${joinFilters(filters)}
+    FROM unread
   `)) as { rows?: UnreadRow[] };
 
   const row = result.rows?.[0];
   return {
     count: toCount(row?.count),
-    watermark: row?.watermark ?? "0",
+    watermark: row?.watermark ?? "0:0",
   };
 }
 
@@ -457,10 +635,7 @@ export async function listWalletNotifications(
     filters.push(kindsFilter);
   }
   if (input.unreadOnly) {
-    filters.push(sql`(
-      state.last_read_at IS NULL
-      OR notification.created_at > state.last_read_at
-    )`);
+    filters.push(buildUnreadFilter());
   }
   if (cursor) {
     filters.push(buildCursorFilter(cursor));
@@ -474,10 +649,7 @@ export async function listWalletNotifications(
       notification.reason,
       ${buildIsoTimestampSql("notification", "event_at")} AS "eventAtCursor",
       ${buildIsoTimestampSql("notification", "created_at")} AS "createdAtCursor",
-      (
-        state.last_read_at IS NULL
-        OR notification.created_at > state.last_read_at
-      ) AS "isUnread",
+      ${buildUnreadFilter()} AS "isUnread",
       notification.source_type AS "sourceType",
       notification.source_id AS "sourceId",
       encode(notification.source_cast_hash, 'hex') AS "sourceHashHex",

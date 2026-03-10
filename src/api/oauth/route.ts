@@ -1,18 +1,20 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
-  hasAnyWriteCapability,
-  validateScope,
+  serializeCliOAuthAuthorizeCodeResponse,
+  serializeCliOAuthErrorResponse,
+  serializeCliOAuthTokenResponse,
 } from "@cobuild/wire";
 import { getChatUserOrThrow } from "../auth/validate-chat-user";
+import {
+  parseCliSessionRevokeBody,
+  parseOauthAuthorizeCodeBody,
+  parseOauthTokenBody,
+} from "./schema";
 import { signCliAccessToken } from "./jwt";
 import {
   CLI_OAUTH_PUBLIC_CLIENT_ID,
   OAUTH_ACCESS_TOKEN_TTL_SECONDS,
   deriveS256CodeChallenge,
-  validateCliSessionLabel,
-  validateCliRedirectUri,
-  validatePkceCodeChallenge,
-  validatePkceCodeVerifier,
 } from "./security";
 import {
   createAuthorizationCode,
@@ -22,29 +24,10 @@ import {
   rotateCliSessionAndIssueAccessToken,
 } from "./store";
 
-type OauthAuthorizeCodeBody = {
-  client_id: string;
-  redirect_uri: string;
-  scope: string;
-  code_challenge: string;
-  code_challenge_method: string;
-  state: string;
-  agent_key: string;
-  label?: string;
-};
-
-type OauthTokenBody = {
-  grant_type: string;
-  client_id: string;
-  code?: string;
-  redirect_uri?: string;
-  code_verifier?: string;
-  refresh_token?: string;
-};
-
-type SessionRevokeBody = {
-  sessionId: string;
-};
+function setOauthNoStoreHeaders(reply: FastifyReply): void {
+  reply.header("Cache-Control", "no-store");
+  reply.header("Pragma", "no-cache");
+}
 
 function sendOauthError(
   reply: FastifyReply,
@@ -53,15 +36,12 @@ function sendOauthError(
   description: string,
 ) {
   setOauthNoStoreHeaders(reply);
-  return reply.status(statusCode).send({
-    error,
-    error_description: description,
-  });
-}
-
-function setOauthNoStoreHeaders(reply: FastifyReply): void {
-  reply.header("Cache-Control", "no-store");
-  reply.header("Pragma", "no-cache");
+  return reply.status(statusCode).send(
+    serializeCliOAuthErrorResponse({
+      error,
+      errorDescription: description,
+    }),
+  );
 }
 
 function assertPublicClient(clientId: string): void {
@@ -70,12 +50,23 @@ function assertPublicClient(clientId: string): void {
   }
 }
 
-function parseState(input: string): string {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    throw new Error("state is required");
-  }
-  return trimmed;
+function getOauthErrorDescription(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function toOauthTokenResponse(args: {
+  accessToken: string;
+  refreshToken: string;
+  scope: string;
+  sessionId: string;
+}) {
+  return serializeCliOAuthTokenResponse({
+    accessToken: args.accessToken,
+    expiresIn: OAUTH_ACCESS_TOKEN_TTL_SECONDS,
+    refreshToken: args.refreshToken,
+    scope: args.scope,
+    sessionId: args.sessionId,
+  });
 }
 
 export async function handleOauthAuthorizeCodeRequest(
@@ -84,85 +75,75 @@ export async function handleOauthAuthorizeCodeRequest(
 ) {
   try {
     const user = getChatUserOrThrow();
-    const body = request.body as OauthAuthorizeCodeBody;
-    assertPublicClient(body.client_id);
-    const redirectUri = validateCliRedirectUri(body.redirect_uri);
-    const scope = validateScope(body.scope);
-    const codeChallenge = validatePkceCodeChallenge(body.code_challenge);
-    if (body.code_challenge_method !== "S256") {
-      throw new Error("code_challenge_method must be S256");
-    }
-    const state = parseState(body.state);
-    const agentKey = body.agent_key.trim();
-    if (!agentKey) {
-      throw new Error("agent_key is required");
-    }
-    const label = validateCliSessionLabel(body.label);
+    const body = parseOauthAuthorizeCodeBody(request.body);
+    assertPublicClient(body.clientId);
 
     const created = await createAuthorizationCode({
       ownerAddress: user.address,
-      agentKey,
-      scope,
-      redirectUri,
-      codeChallenge,
-      codeChallengeMethod: "S256",
-      ...(label ? { label } : {}),
+      agentKey: body.agentKey,
+      scope: body.scope,
+      redirectUri: body.redirectUri,
+      codeChallenge: body.codeChallenge,
+      codeChallengeMethod: body.codeChallengeMethod,
+      ...(body.label ? { label: body.label } : {}),
     });
 
     setOauthNoStoreHeaders(reply);
-    return reply.send({
-      code: created.code,
-      state,
-      redirect_uri: redirectUri,
-      expires_in: Math.floor((created.expiresAt.getTime() - Date.now()) / 1000),
-    });
+    return reply.send(
+      serializeCliOAuthAuthorizeCodeResponse({
+        code: created.code,
+        state: body.state,
+        redirectUri: body.redirectUri,
+        expiresIn: Math.floor((created.expiresAt.getTime() - Date.now()) / 1000),
+      }),
+    );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Invalid authorization request";
-    return sendOauthError(reply, 400, "invalid_request", message);
+    return sendOauthError(
+      reply,
+      400,
+      "invalid_request",
+      getOauthErrorDescription(error, "Invalid authorization request"),
+    );
   }
-}
-
-function tokenResponse(params: {
-  accessToken: string;
-  refreshToken: string;
-  scope: string;
-  sessionId: string;
-}) {
-  return {
-    token_type: "Bearer",
-    access_token: params.accessToken,
-    expires_in: OAUTH_ACCESS_TOKEN_TTL_SECONDS,
-    refresh_token: params.refreshToken,
-    scope: params.scope,
-    session_id: params.sessionId,
-    can_write: hasAnyWriteCapability(params.scope),
-  };
 }
 
 export async function handleOauthTokenRequest(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const body = request.body as OauthTokenBody;
+  let body: ReturnType<typeof parseOauthTokenBody>;
   try {
-    assertPublicClient(body.client_id);
+    body = parseOauthTokenBody(request.body);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unsupported client_id";
-    return sendOauthError(reply, 401, "invalid_client", message);
+    return sendOauthError(
+      reply,
+      400,
+      "invalid_request",
+      getOauthErrorDescription(error, "Invalid token request"),
+    );
   }
 
-  if (body.grant_type === "authorization_code") {
+  try {
+    assertPublicClient(body.clientId);
+  } catch (error) {
+    return sendOauthError(
+      reply,
+      401,
+      "invalid_client",
+      getOauthErrorDescription(error, "Unsupported client_id"),
+    );
+  }
+
+  if (body.grantType === "authorization_code") {
     try {
-      if (!body.code || !body.redirect_uri || !body.code_verifier) {
+      if (!body.code || !body.redirectUri || !body.codeVerifier) {
         throw new Error("code, redirect_uri, and code_verifier are required");
       }
 
-      const redirectUri = validateCliRedirectUri(body.redirect_uri);
-      const codeVerifier = validatePkceCodeVerifier(body.code_verifier);
-      const expectedCodeChallenge = await deriveS256CodeChallenge(codeVerifier);
+      const expectedCodeChallenge = await deriveS256CodeChallenge(body.codeVerifier);
       const exchanged = await exchangeAuthorizationCodeForSession({
         rawCode: body.code,
-        redirectUri,
+        redirectUri: body.redirectUri,
         expectedCodeChallenge,
         codeChallengeMethod: "S256",
       });
@@ -178,28 +159,30 @@ export async function handleOauthTokenRequest(
       });
 
       setOauthNoStoreHeaders(reply);
-      return reply.send(
-        tokenResponse({
-          accessToken,
-          refreshToken: exchanged.refreshToken,
-          scope: exchanged.scope,
-          sessionId: exchanged.sessionId,
-        }),
-      );
+      return reply.send(toOauthTokenResponse({
+        accessToken,
+        refreshToken: exchanged.refreshToken,
+        scope: exchanged.scope,
+        sessionId: exchanged.sessionId,
+      }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Invalid token request";
-      return sendOauthError(reply, 400, "invalid_request", message);
+      return sendOauthError(
+        reply,
+        400,
+        "invalid_request",
+        getOauthErrorDescription(error, "Invalid token request"),
+      );
     }
   }
 
-  if (body.grant_type === "refresh_token") {
+  if (body.grantType === "refresh_token") {
     try {
-      if (!body.refresh_token) {
+      if (!body.refreshToken) {
         throw new Error("refresh_token is required");
       }
 
       const rotated = await rotateCliSessionAndIssueAccessToken({
-        refreshToken: body.refresh_token,
+        refreshToken: body.refreshToken,
         issueAccessToken: async (claims) =>
           await signCliAccessToken({
             sub: claims.ownerAddress,
@@ -213,17 +196,19 @@ export async function handleOauthTokenRequest(
       }
 
       setOauthNoStoreHeaders(reply);
-      return reply.send(
-        tokenResponse({
-          accessToken: rotated.accessToken,
-          refreshToken: rotated.refreshToken,
-          scope: rotated.scope,
-          sessionId: rotated.sessionId,
-        }),
-      );
+      return reply.send(toOauthTokenResponse({
+        accessToken: rotated.accessToken,
+        refreshToken: rotated.refreshToken,
+        scope: rotated.scope,
+        sessionId: rotated.sessionId,
+      }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Invalid token request";
-      return sendOauthError(reply, 400, "invalid_request", message);
+      return sendOauthError(
+        reply,
+        400,
+        "invalid_request",
+        getOauthErrorDescription(error, "Invalid token request"),
+      );
     }
   }
 
@@ -248,7 +233,7 @@ export async function handleCliSessionRevokeRequest(
   reply: FastifyReply,
 ) {
   const user = getChatUserOrThrow();
-  const body = request.body as SessionRevokeBody;
+  const body = parseCliSessionRevokeBody(request.body);
   const revoked = await revokeCliSession({
     ownerAddress: user.address,
     sessionId: body.sessionId,

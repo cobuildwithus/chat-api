@@ -1,5 +1,5 @@
 import type { FastifyRequest } from "fastify";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleCobuildAiContextRequest } from "../../../src/api/cobuild-ai-context/route";
 import { createReply } from "../../utils/fastify";
 
@@ -12,6 +12,10 @@ vi.mock("../../../src/infra/cobuild-ai-context", () => ({
 }));
 
 describe("handleCobuildAiContextRequest", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("returns snapshot data with cache headers when available", async () => {
     mocks.getCobuildAiContextSnapshot.mockResolvedValueOnce({
       data: { asOf: "2026-03-02T00:00:00.000Z", foo: "bar" },
@@ -40,9 +44,10 @@ describe("handleCobuildAiContextRequest", () => {
 
     await handleCobuildAiContextRequest({} as FastifyRequest, reply);
 
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(reply.status).toHaveBeenCalledWith(502);
     expect(reply.send).toHaveBeenCalledWith({
-      error: "Cobuild AI context unavailable: upstream failed.",
+      error: "Cobuild AI context unavailable.",
     });
   });
 
@@ -55,9 +60,30 @@ describe("handleCobuildAiContextRequest", () => {
 
     await handleCobuildAiContextRequest({} as FastifyRequest, reply);
 
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
     expect(reply.status).toHaveBeenCalledWith(502);
     expect(reply.send).toHaveBeenCalledWith({
-      error: "Cobuild AI context unavailable: unknown error.",
+      error: "Cobuild AI context unavailable.",
     });
+  });
+
+  it("sanitizes thrown snapshot failures instead of surfacing raw internal exception text", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.getCobuildAiContextSnapshot.mockRejectedValueOnce(
+      new Error("database password mismatch"),
+    );
+    const reply = createReply();
+
+    await handleCobuildAiContextRequest({} as FastifyRequest, reply);
+
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.status).toHaveBeenCalledWith(502);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: "Cobuild AI context unavailable.",
+    });
+    expect(reply.send).not.toHaveBeenCalledWith({
+      error: "database password mismatch",
+    });
+    errorSpy.mockRestore();
   });
 });

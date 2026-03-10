@@ -4,7 +4,7 @@ import {
   getCobuildAiContextSnapshot,
   getCobuildAiContextUrl,
 } from "../../src/infra/cobuild-ai-context";
-import { formatErrorMessage } from "../../src/infra/errors";
+import { formatErrorLogMessage, formatErrorMessage } from "../../src/infra/errors";
 import {
   onchainParticipants,
   onchainPayEvents,
@@ -28,10 +28,14 @@ describe("cobuild ai context", () => {
   });
 
   it("formats errors consistently", () => {
-    expect(formatErrorMessage(new Error("boom"))).toBe("boom");
-    expect(formatErrorMessage("fail")).toBe("fail");
-    expect(formatErrorMessage({})).toBe("Unknown error");
-    expect(formatErrorMessage("x".repeat(200))).toHaveLength(120);
+    expect(formatErrorMessage(new Error("boom"))).toBe("Request failed.");
+    expect(formatErrorMessage("fail", 120, "Cobuild AI context unavailable.")).toBe(
+      "Cobuild AI context unavailable.",
+    );
+    expect(formatErrorLogMessage(new Error("boom"))).toBe("boom");
+    expect(formatErrorLogMessage("fail")).toBe("fail");
+    expect(formatErrorLogMessage({})).toBe("Unknown error");
+    expect(formatErrorMessage("x".repeat(200), 120, "y".repeat(200))).toHaveLength(120);
     expect(getCobuildAiContextUrl()).toBe("/api/cobuild/ai-context");
   });
 
@@ -106,7 +110,7 @@ describe("cobuild ai context", () => {
     setCobuildDbResponse(onchainProjects, []);
     const snapshot = await getCobuildAiContextSnapshot();
     expect(snapshot.data).toBeNull();
-    expect(snapshot.error).toContain("project not found");
+    expect(snapshot.error).toBe("Cobuild AI context unavailable.");
   });
 
   it("handles sparse mint/distribution data without numeric artifacts", async () => {
@@ -154,5 +158,246 @@ describe("cobuild ai context", () => {
     expect(snapshot.data.mints.medianPrice.last30d?.basePerToken ?? null).toBeNull();
     expect(snapshot.data.distribution.top10Tokens).toBeNull();
     expect(snapshot.data.distribution.top10Share).toBeNull();
+  });
+
+  it("drops scaled values that exceed JS safe integer range instead of returning imprecise numbers", async () => {
+    setCobuildDbResponse(onchainProjects, [
+      {
+        suckerGroupId: "group-1",
+        accountingToken: "0xabc",
+        accountingDecimals: 18,
+        accountingTokenSymbol: "ETH",
+        erc20Symbol: "COBUILD",
+        currentRulesetId: 1n,
+        erc20Supply: "9007199254740992000000000000000000",
+      },
+    ]);
+    setCobuildDbResponse(tokenMetadata, [{ priceUsdc: "2000" }]);
+    queueCobuildDbResponse(onchainPayEvents, [
+      { lifetimeAmountRaw: "9007199254740992000000000000000000" },
+    ]);
+    queueCobuildDbResponse(onchainPayEvents, []);
+    queueCobuildDbResponse(onchainParticipants, [
+      { total: 0, newLast6h: 0, newLast24h: 0, newLast7d: 0, newLast30d: 0 },
+    ]);
+    queueCobuildDbResponse(onchainParticipants, []);
+    queueCobuildDbResponse(onchainRulesets, [
+      {
+        rulesetId: 1n,
+        start: 1_700_000_000n,
+        weight: "5",
+        reservedPercent: 5000,
+        cashOutTaxRate: 2500,
+      },
+    ]);
+    queueCobuildDbResponse(onchainRulesets, []);
+    queueCobuildDbResponse(onchainRulesets, [{ count: 1 }]);
+
+    const snapshot = await fetchCobuildAiContextFresh();
+
+    expect(snapshot.data.treasury.inflow.lifetime).toBeNull();
+    expect(snapshot.data.distribution.totalSupply).toBeNull();
+  });
+
+  it("drops aggregated holder balances that would overflow JS precision even when each row is individually safe", async () => {
+    setCobuildDbResponse(onchainProjects, [
+      {
+        suckerGroupId: "group-1",
+        accountingToken: "0xabc",
+        accountingDecimals: 18,
+        accountingTokenSymbol: "ETH",
+        erc20Symbol: "COBUILD",
+        currentRulesetId: 1n,
+        erc20Supply: "90071992547409910000000000000000000",
+      },
+    ]);
+    setCobuildDbResponse(tokenMetadata, [{ priceUsdc: "2000" }]);
+    queueCobuildDbResponse(onchainPayEvents, [{ lifetimeAmountRaw: "50000000000000000000" }]);
+    queueCobuildDbResponse(onchainPayEvents, []);
+    queueCobuildDbResponse(onchainParticipants, [
+      { total: 10, newLast6h: 0, newLast24h: 0, newLast7d: 0, newLast30d: 0 },
+    ]);
+    queueCobuildDbResponse(onchainParticipants, Array.from({ length: 10 }, () => ({
+      balance: "9007199254740991000000000000000000",
+    })));
+    queueCobuildDbResponse(onchainRulesets, [
+      {
+        rulesetId: 1n,
+        start: 1_700_000_000n,
+        weight: "5",
+        reservedPercent: 5000,
+        cashOutTaxRate: 2500,
+      },
+    ]);
+    queueCobuildDbResponse(onchainRulesets, []);
+    queueCobuildDbResponse(onchainRulesets, [{ count: 1 }]);
+
+    const snapshot = await fetchCobuildAiContextFresh();
+
+    expect(snapshot.data.distribution.top1Tokens).toBe(9007199254740991);
+    expect(snapshot.data.distribution.top10Tokens).toBeNull();
+    expect(snapshot.data.distribution.top10Share).toBeNull();
+  });
+
+  it("returns a cached snapshot with fractional conversions and stage transitions", async () => {
+    setCobuildDbResponse(onchainProjects, [
+      {
+        suckerGroupId: null,
+        accountingToken: "0xabc",
+        accountingDecimals: 6,
+        accountingTokenSymbol: "USDC",
+        erc20Symbol: "COBUILD",
+        currentRulesetId: 1n,
+        erc20Supply: "2500000",
+      },
+    ]);
+    setCobuildDbResponse(tokenMetadata, [{ priceUsdc: "1" }]);
+    queueCobuildDbResponse(onchainPayEvents, [{ lifetimeAmountRaw: "1500000" }]);
+    queueCobuildDbResponse(onchainPayEvents, [
+      {
+        timestamp: Math.floor(new Date("2026-03-01T23:00:00.000Z").getTime() / 1000),
+        payer: "0x1",
+        amount: "1500000",
+        newlyIssuedTokenCount: "1",
+        effectiveTokenCount: "3000000000000000000",
+      },
+    ]);
+    queueCobuildDbResponse(onchainParticipants, [
+      { total: 1, newLast6h: 1, newLast24h: 1, newLast7d: 1, newLast30d: 1 },
+    ]);
+    queueCobuildDbResponse(onchainParticipants, [{ balance: "2500000000000000000" }]);
+    queueCobuildDbResponse(onchainRulesets, [
+      {
+        rulesetId: 1n,
+        start: 1_700_000_000n,
+        weight: "5",
+        reservedPercent: 2500,
+        cashOutTaxRate: 1000,
+      },
+    ]);
+    queueCobuildDbResponse(onchainRulesets, [
+      {
+        rulesetId: 2n,
+        start: 1_800_000_000n,
+        weight: "5",
+      },
+    ]);
+    queueCobuildDbResponse(onchainRulesets, [{ count: 2 }]);
+
+    const snapshot = await getCobuildAiContextSnapshot();
+
+    expect(snapshot.error).toBeUndefined();
+    expect(snapshot.data).not.toBeNull();
+    expect(snapshot.data?.data.treasury.inflow.lifetime).toBe(1.5);
+    expect(snapshot.data?.data.treasury.balance.usd).toBe(1.5);
+    expect(snapshot.data?.data.mints.medianPrice.last30d?.basePerToken).toBe(0.5);
+    expect(snapshot.data?.data.issuance.nextChangeType).toBe("stage");
+    expect(snapshot.data?.data.issuance.nextStage).toBe(3);
+  });
+
+  it("derives staged price transitions and null holder counters when holder aggregates are missing", async () => {
+    setCobuildDbResponse(onchainProjects, [
+      {
+        suckerGroupId: null,
+        accountingToken: "0xabc",
+        accountingDecimals: 6,
+        accountingTokenSymbol: "USDC",
+        erc20Symbol: "COBUILD",
+        currentRulesetId: 11n,
+        erc20Supply: "5000000000000000000",
+      },
+    ]);
+    setCobuildDbResponse(tokenMetadata, [{ priceUsdc: "1" }]);
+    queueCobuildDbResponse(onchainPayEvents, [{ lifetimeAmountRaw: "4200000" }]);
+    queueCobuildDbResponse(onchainPayEvents, [
+      {
+        timestamp: Math.floor(new Date("2026-03-01T22:00:00.000Z").getTime() / 1000),
+        payer: "0x1",
+        amount: "2100000",
+        newlyIssuedTokenCount: "1",
+        effectiveTokenCount: "1000000000000000000",
+      },
+    ]);
+    queueCobuildDbResponse(onchainParticipants, []);
+    queueCobuildDbResponse(onchainParticipants, [
+      { balance: "1000000000000000000" },
+    ]);
+    queueCobuildDbResponse(onchainRulesets, [
+      {
+        rulesetId: 11n,
+        start: 1_700_000_000n,
+        weight: "5",
+        reservedPercent: 2500,
+        cashOutTaxRate: 1000,
+      },
+    ]);
+    queueCobuildDbResponse(onchainRulesets, [
+      {
+        rulesetId: 12n,
+        start: 1_800_000_000n,
+        weight: "5",
+      },
+    ]);
+    queueCobuildDbResponse(onchainRulesets, [{ count: 2 }]);
+
+    const snapshot = await fetchCobuildAiContextFresh();
+
+    expect(snapshot.data.issuance.nextChangeType).toBe("stage");
+    expect(snapshot.data.issuance.activeStage).toBe(2);
+    expect(snapshot.data.issuance.nextStage).toBe(3);
+    expect(snapshot.data.holders.total).toBeNull();
+    expect(snapshot.data.holders.new).toEqual({
+      last6h: null,
+      last24h: null,
+      last7d: null,
+      last30d: null,
+    });
+  });
+
+  it("supports zero-decimal accounting values and non-positive ruleset weights", async () => {
+    setCobuildDbResponse(onchainProjects, [
+      {
+        suckerGroupId: "group-1",
+        accountingToken: "0xabc",
+        accountingDecimals: 0,
+        accountingTokenSymbol: "POINTS",
+        erc20Symbol: "COBUILD",
+        currentRulesetId: 1n,
+        erc20Supply: "0",
+      },
+    ]);
+    setCobuildDbResponse(tokenMetadata, [{ priceUsdc: null }]);
+    queueCobuildDbResponse(onchainPayEvents, [{ lifetimeAmountRaw: "-42" }]);
+    queueCobuildDbResponse(onchainPayEvents, []);
+    queueCobuildDbResponse(onchainParticipants, [
+      { total: 0, newLast6h: 0, newLast24h: 0, newLast7d: 0, newLast30d: 0 },
+    ]);
+    queueCobuildDbResponse(onchainParticipants, []);
+    queueCobuildDbResponse(onchainRulesets, [
+      {
+        rulesetId: 1n,
+        start: 1_700_000_000n,
+        weight: "0",
+        reservedPercent: 0,
+        cashOutTaxRate: 0,
+      },
+    ]);
+    queueCobuildDbResponse(onchainRulesets, [
+      {
+        rulesetId: 2n,
+        start: 1_800_000_000n,
+        weight: "0",
+      },
+    ]);
+    queueCobuildDbResponse(onchainRulesets, [{ count: 0 }]);
+
+    const snapshot = await fetchCobuildAiContextFresh();
+
+    expect(snapshot.data.treasury.balance.base).toBe(-42);
+    expect(snapshot.data.treasury.balance.usd).toBeNull();
+    expect(snapshot.data.issuance.currentPrice.basePerToken).toBeNull();
+    expect(snapshot.data.issuance.nextPrice.basePerToken).toBeNull();
+    expect(snapshot.data.issuance.nextChangeType).toBe("stage");
+    expect(snapshot.data.issuance.activeStage).toBeNull();
   });
 });

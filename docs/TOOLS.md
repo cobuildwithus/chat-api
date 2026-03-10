@@ -45,13 +45,16 @@ Example canonical-only CLI tool:
 - `get-wallet-balances` (aliases: `getWalletBalances`, `walletBalances`) is exposed via `/v1/tool-executions` for CLI balance reads and is not registered as a model wrapper.
 - `get-wallet-balances` currently supports `base` only for protocol-adjacent wallet reads.
 - `list-wallet-notifications` (aliases: `listWalletNotifications`, `walletNotifications`) is exposed via `/v1/tool-executions` for subject-wallet inbox reads and is not registered as a model wrapper.
+- `list-wallet-notifications` returns shaped public payload DTOs only: discussion payloads are omitted, payment payloads expose the allowlisted payment fields, and protocol payloads are parsed through the shared wire notification DTO.
 
 Example canonical + AI-wrapper inspect tools:
 - `get-goal` (aliases: `getGoal`, `goal.inspect`) reads indexed scaffold tables directly and returns concise goal, treasury, route, flow, stake, governance, and budget summary data.
+- `get-goal` returns a stable `409` error when a canonical route identifier matches more than one indexed goal; callers should retry with the goal treasury address.
 - `get-budget` (aliases: `getBudget`, `budget.inspect`) reads indexed scaffold tables directly and returns concise budget, parent-goal, treasury, flow, and governance data.
 - `get-tcr-request` (aliases: `getTcrRequest`, `tcr.request`) reads indexed protocol tables directly and returns concise TCR request, dispute, goal, and budget context by composite request id.
 - `get-dispute` (aliases: `getDispute`, `dispute.inspect`) reads indexed protocol tables directly and returns concise arbitrator dispute state, request context, and optional juror detail by composite dispute id.
 - `get-stake-position` (aliases: `getStakePosition`, `stake.inspect`) reads indexed protocol tables directly and returns compact stake-vault totals plus goal/cobuild account state for a resolved entity or vault.
+- `get-stake-position` returns a stable `409` error when a goal route identifier is ambiguous; callers should retry with the goal treasury, budget treasury, or stake-vault address.
 - `get-premium-escrow` (aliases: `getPremiumEscrow`, `premiumEscrow.inspect`) reads indexed protocol tables directly and returns compact premium escrow, budget stack, and optional account checkpoint state.
 
 ## Prompt guidance

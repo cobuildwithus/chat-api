@@ -10,20 +10,17 @@ import {
 import {
   fetchBudgetById,
   fetchBudgetByRecipientId,
+  fetchBudgetGoalContextBundle,
   fetchBudgetRecipientLookup,
-  fetchBudgetStackById,
   fetchDisputeById,
   fetchDisputeByTcrAndDisputeId,
   fetchGoalById,
-  fetchGoalByRouteKey,
+  fetchGoalRouteLookup,
   fetchGoalContextByArbitratorId,
-  fetchGoalContextByBudgetId,
   fetchGoalContextByBudgetTcrId,
   fetchMechanismBudgetContextByArbitratorId,
   fetchMechanismBudgetContextByTcrId,
-  fetchPremiumEscrowByBudgetId,
-  fetchPremiumEscrowByBudgetStackId,
-  fetchPremiumEscrowById,
+  fetchPremiumEscrowLookupBundle,
   fetchStakeVaultById,
   fetchTcrItemById,
   fetchTcrRequestById,
@@ -39,6 +36,13 @@ import type {
   TcrRequestRow,
 } from "./types";
 
+export class AmbiguousGoalRouteLookupError extends Error {
+  constructor(identifier: string) {
+    super(`Goal identifier "${identifier}" matched multiple canonical routes.`);
+    this.name = "AmbiguousGoalRouteLookupError";
+  }
+}
+
 export async function resolveGoal(identifier: string): Promise<GoalTreasuryRow | null> {
   const normalized = normalizeLookupIdentifier(identifier);
   if (normalized.length === 0) return null;
@@ -47,7 +51,11 @@ export async function resolveGoal(identifier: string): Promise<GoalTreasuryRow |
     return fetchGoalById(normalizeHexAddress(normalized));
   }
 
-  return fetchGoalByRouteKey(normalizeGoalLookupKey(normalized));
+  const routeLookup = await fetchGoalRouteLookup(normalizeGoalLookupKey(normalized));
+  if (routeLookup.kind === "ambiguous") {
+    throw new AmbiguousGoalRouteLookupError(normalized);
+  }
+  return routeLookup.kind === "resolved" ? routeLookup.goalRow : null;
 }
 
 export async function resolveBudget(identifier: string): Promise<BudgetTreasuryRow | null> {
@@ -103,16 +111,15 @@ export async function resolveStakeContext(identifier: string): Promise<StakeCont
   }
 
   if (budgetRow) {
-    const goalContext = await fetchGoalContextByBudgetId(budgetRow.id);
-    const goalRowFromBudget = goalContext?.goalTreasury ? await fetchGoalById(goalContext.goalTreasury) : null;
-    const stakeVaultAddress = goalContext?.stakeVault ?? goalRowFromBudget?.stakeVault ?? null;
+    const budgetGoalContext = await fetchBudgetGoalContextBundle(budgetRow.id);
+    const stakeVaultAddress = budgetGoalContext.goalContext?.stakeVault ?? budgetGoalContext.goalRow?.stakeVault ?? null;
     const stakeVaultRow = stakeVaultAddress ? await fetchStakeVaultById(stakeVaultAddress) : null;
 
     return {
       stakeVaultRow,
-      goalRow: goalRowFromBudget,
+      goalRow: budgetGoalContext.goalRow,
       budgetRow,
-      goalAddress: goalRowFromBudget?.id ?? goalContext?.goalTreasury ?? null,
+      goalAddress: budgetGoalContext.goalRow?.id ?? budgetGoalContext.goalAddress,
       budgetAddress: budgetRow.id,
       stakeVaultAddress,
     };
@@ -148,46 +155,37 @@ export async function resolvePremiumEscrowContext(identifier: string): Promise<P
   if (normalized.length === 0 || !normalized.startsWith("0x")) return null;
 
   const lookupKey = normalized.toLowerCase();
-  let stackRow = await fetchBudgetStackById(lookupKey);
-  const budgetRowFromStack = stackRow?.budgetTreasury ? await fetchBudgetById(stackRow.budgetTreasury) : null;
+  const premiumLookup = await fetchPremiumEscrowLookupBundle(lookupKey);
+  if (!premiumLookup) return null;
 
-  let premiumRow = stackRow?.premiumEscrow ? await fetchPremiumEscrowById(stackRow.premiumEscrow) : null;
-  if (!premiumRow) premiumRow = await fetchPremiumEscrowById(lookupKey);
-  if (!premiumRow) premiumRow = await fetchPremiumEscrowByBudgetId(lookupKey);
-  if (!premiumRow) premiumRow = await fetchPremiumEscrowByBudgetStackId(lookupKey);
-  if (!premiumRow) return null;
-
-  if (!stackRow && premiumRow.budgetStackId) {
-    stackRow = await fetchBudgetStackById(premiumRow.budgetStackId);
-  }
-
-  const budgetAddress = budgetRowFromStack?.id ?? premiumRow.budgetTreasury ?? stackRow?.budgetTreasury ?? null;
-  const budgetRow = budgetRowFromStack ?? (budgetAddress ? await fetchBudgetById(budgetAddress) : null);
-  const goalContext = budgetAddress ? await fetchGoalContextByBudgetId(budgetAddress) : null;
-  const goalRow = goalContext?.goalTreasury ? await fetchGoalById(goalContext.goalTreasury) : null;
+  const goalContext = premiumLookup.budgetAddress
+    ? await fetchBudgetGoalContextBundle(premiumLookup.budgetAddress)
+    : {
+        goalRow: null,
+        goalAddress: null,
+      };
 
   return {
-    premiumRow,
-    stackRow,
-    budgetRow,
-    goalRow,
-    goalAddress: goalRow?.id ?? goalContext?.goalTreasury ?? null,
+    premiumRow: premiumLookup.premiumRow,
+    stackRow: premiumLookup.stackRow,
+    budgetRow: premiumLookup.budgetRow,
+    goalRow: goalContext.goalRow,
+    goalAddress: goalContext.goalRow?.id ?? goalContext.goalAddress,
   };
 }
 
 export async function resolveTcrRequestContext(requestRow: TcrRequestRow): Promise<TcrRequestContext> {
-  const itemRow =
+  const [itemRow, budgetGoalContext, mechanismContext] = await Promise.all([
     requestRow.tcrAddress && requestRow.itemId
-      ? await fetchTcrItemById(buildTcrItemId(requestRow.tcrAddress, requestRow.itemId))
-      : null;
-  const budgetGoalContext =
+      ? fetchTcrItemById(buildTcrItemId(requestRow.tcrAddress, requestRow.itemId))
+      : Promise.resolve(null),
     !requestRow.goalTreasury && requestRow.tcrKind === "budget" && requestRow.tcrAddress
-      ? await fetchGoalContextByBudgetTcrId(requestRow.tcrAddress)
-      : null;
-  const mechanismContext =
+      ? fetchGoalContextByBudgetTcrId(requestRow.tcrAddress)
+      : Promise.resolve(null),
     requestRow.tcrKind === "mechanism" && requestRow.tcrAddress
-      ? await fetchMechanismBudgetContextByTcrId(requestRow.tcrAddress)
-      : null;
+      ? fetchMechanismBudgetContextByTcrId(requestRow.tcrAddress)
+      : Promise.resolve(null),
+  ]);
 
   const goalAddress =
     requestRow.goalTreasury ??
@@ -218,16 +216,17 @@ export async function resolveTcrRequestContext(requestRow: TcrRequestRow): Promi
 }
 
 export async function resolveDisputeContext(disputeRow: ArbitratorDisputeRow): Promise<DisputeContext> {
-  const requestRow =
+  const [requestRow, goalContext, mechanismContext] = await Promise.all([
     disputeRow.tcrAddress && disputeRow.itemId && disputeRow.requestIndex
-      ? await fetchTcrRequestById(buildTcrRequestId(disputeRow.tcrAddress, disputeRow.itemId, disputeRow.requestIndex))
-      : null;
-  const goalContext =
-    !disputeRow.goalTreasury && disputeRow.arbitrator ? await fetchGoalContextByArbitratorId(disputeRow.arbitrator) : null;
-  const mechanismContext =
+      ? fetchTcrRequestById(buildTcrRequestId(disputeRow.tcrAddress, disputeRow.itemId, disputeRow.requestIndex))
+      : Promise.resolve(null),
+    !disputeRow.goalTreasury && disputeRow.arbitrator
+      ? fetchGoalContextByArbitratorId(disputeRow.arbitrator)
+      : Promise.resolve(null),
     disputeRow.tcrKind === "mechanism" && disputeRow.arbitrator
-      ? await fetchMechanismBudgetContextByArbitratorId(disputeRow.arbitrator)
-      : null;
+      ? fetchMechanismBudgetContextByArbitratorId(disputeRow.arbitrator)
+      : Promise.resolve(null),
+  ]);
 
   const goalAddress =
     disputeRow.goalTreasury ??

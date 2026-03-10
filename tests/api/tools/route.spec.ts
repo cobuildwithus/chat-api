@@ -10,12 +10,14 @@ import { createReply } from "../../utils/fastify";
 const mocks = vi.hoisted(() => ({
   listToolMetadata: vi.fn(),
   resolveToolMetadata: vi.fn(),
+  resolveToolInputSchema: vi.fn(),
   executeTool: vi.fn(),
 }));
 
 vi.mock("../../../src/tools/registry", () => ({
   listToolMetadata: mocks.listToolMetadata,
   resolveToolMetadata: mocks.resolveToolMetadata,
+  resolveToolInputSchema: mocks.resolveToolInputSchema,
   executeTool: mocks.executeTool,
 }));
 
@@ -32,6 +34,7 @@ describe("tools v1 handlers", () => {
         inputSchema: { type: "object" },
         scopes: ["cli-tools"],
         authPolicy: { requiredScopes: ["tools:read"], walletBinding: "none" },
+        exposure: "chat-safe",
         sideEffects: "read",
         version: "1.0.0",
         deprecated: false,
@@ -49,6 +52,7 @@ describe("tools v1 handlers", () => {
           inputSchema: { type: "object" },
           scopes: ["cli-tools"],
           authPolicy: { requiredScopes: ["tools:read"], walletBinding: "none" },
+          exposure: "chat-safe",
           sideEffects: "read",
           version: "1.0.0",
           deprecated: false,
@@ -64,6 +68,7 @@ describe("tools v1 handlers", () => {
       inputSchema: { type: "object" },
       scopes: ["docs"],
       authPolicy: { requiredScopes: ["tools:read"], walletBinding: "none" },
+      exposure: "bearer-only",
       sideEffects: "network-read",
       version: "1.0.0",
       deprecated: false,
@@ -86,6 +91,7 @@ describe("tools v1 handlers", () => {
         inputSchema: { type: "object" },
         scopes: ["docs"],
         authPolicy: { requiredScopes: ["tools:read"], walletBinding: "none" },
+        exposure: "bearer-only",
         sideEffects: "network-read",
         version: "1.0.0",
         deprecated: false,

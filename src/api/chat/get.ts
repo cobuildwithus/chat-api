@@ -1,16 +1,12 @@
 import type { UIMessage } from "ai";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { chat, chatMessage } from "../../infra/db/schema";
-import { cobuildDb } from "../../infra/db/cobuildDb";
-import { isSameAddress } from "../../chat/address";
+import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
 import { parseJson } from "../../chat/parse";
-import { signChatGrant } from "../../chat/grant";
+import { getPublicError, toPublicErrorBody } from "../../public-errors";
 import { getChatUserOrThrow } from "../auth/validate-chat-user";
-
-type ChatParams = {
-  chatId: string;
-};
+import { parseChatGetParams } from "./schema";
 
 type UiMessage = UIMessage<{ reasoningDurationMs?: number }>;
 
@@ -20,27 +16,23 @@ export async function handleChatGetRequest(
 ) {
   try {
     const user = getChatUserOrThrow();
-    const { chatId } = request.params as ChatParams;
+    const { chatId } = parseChatGetParams(request.params);
 
-    const existing = await cobuildDb
+    const existing = await cobuildPrimaryDb()
       .select({
         type: chat.type,
         data: chat.data,
-        user: chat.user,
       })
       .from(chat)
-      .where(eq(chat.id, chatId))
+      .where(and(eq(chat.id, chatId), eq(chat.user, user.address)))
       .limit(1);
 
     if (!existing.length) {
-      return reply.status(404).send({ error: "Chat not found" });
+      const error = getPublicError("chatNotFound");
+      return reply.status(error.statusCode).send(toPublicErrorBody("chatNotFound"));
     }
 
-    if (!isSameAddress(existing[0].user, user.address)) {
-      return reply.status(404).send({ error: "Chat not found" });
-    }
-
-    const messageRows = await cobuildDb
+    const messageRows = await cobuildPrimaryDb()
       .select({
         id: chatMessage.id,
         role: chatMessage.role,
@@ -58,9 +50,6 @@ export async function handleChatGetRequest(
       ...(isUiMetadata(row.metadata) ? { metadata: row.metadata } : {}),
     }));
     const data = parseJson(existing[0].data) ?? {};
-    const chatGrant = await signChatGrant(chatId, user.address);
-
-    reply.header("x-chat-grant", chatGrant);
 
     return reply.send({
       chatId,

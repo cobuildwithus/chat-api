@@ -5,6 +5,7 @@ import {
   stepCountIs,
   streamText,
 } from "ai";
+import { isSameEvmAddress } from "@cobuild/wire";
 import { eq } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -12,7 +13,6 @@ import type { AgentType } from "../../ai/agents/agent";
 import { getAgent } from "../../ai/agents/agent";
 import { admitAiGeneration } from "../../ai/ai-rate.limit";
 import type { ChatData } from "../../ai/types";
-import { isSameAddress } from "../../chat/address";
 import {
   ChatMessageAlreadyProcessedError,
   ChatMessageInProgressError,
@@ -65,7 +65,7 @@ export async function handleChatPostRequest(
       return reply.status(error.statusCode).send(toPublicErrorBody("chatNotFound"));
     }
 
-    if (!isSameAddress(existing[0].user, user.address)) {
+    if (!isSameEvmAddress(existing[0].user, user.address)) {
       const error = getPublicError("chatNotFound");
       return reply.status(error.statusCode).send(toPublicErrorBody("chatNotFound"));
     }
@@ -148,25 +148,46 @@ export async function handleChatPostRequest(
 
     const abortController = new AbortController();
     let settled = false;
-    const settleGeneration = async (totalTokens?: number) => {
+    const settleGeneration = async (options: {
+      totalTokens?: number;
+      chargeReservation?: boolean;
+    } = {}) => {
       if (settled) {
         return;
       }
       settled = true;
       detachAbortListeners();
       try {
-        if (typeof totalTokens === "number" && Number.isFinite(totalTokens)) {
-          await admission.finalizeUsage(totalTokens);
+        if (
+          typeof options.totalTokens === "number" &&
+          Number.isFinite(options.totalTokens)
+        ) {
+          await admission.finalizeUsage(options.totalTokens);
+        } else if (options.chargeReservation) {
+          await admission.finalizeUsage(admission.reservedUsage);
         }
       } finally {
         await admission.release();
       }
     };
 
+    const settleGenerationInBackground = (options: {
+      totalTokens?: number;
+      chargeReservation?: boolean;
+    } = {}) => {
+      void settleGeneration(options).catch((error) => {
+        console.error("Failed to settle chat generation admission", {
+          chatId,
+          user: user.address,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+    };
+
     const handleDisconnect = () => {
       abortController.abort(new Error("Chat client disconnected"));
       void clearPendingAssistantIfUnclaimed(chatId, pendingAssistantId, []);
-      void settleGeneration();
+      settleGenerationInBackground({ chargeReservation: true });
     };
 
     const detachAbortListeners = () => {
@@ -232,7 +253,10 @@ export async function handleChatPostRequest(
           });
           await clearPendingAssistantIfUnclaimed(chatId, pendingAssistantId, assistantMessages);
           const usage = await Promise.resolve(result.usage).catch(() => null);
-          await settleGeneration(usage?.totalTokens);
+          await settleGeneration({
+            totalTokens: usage?.totalTokens,
+            chargeReservation: true,
+          });
           if (isChatDebugEnabled()) {
             console.info("Stored chat messages", {
               chatId,
@@ -240,7 +264,7 @@ export async function handleChatPostRequest(
             });
           }
         } catch (error) {
-          await settleGeneration();
+          await settleGeneration({ chargeReservation: true });
           console.error("Failed to store chat messages", {
             chatId,
             user: user.address,
@@ -251,7 +275,7 @@ export async function handleChatPostRequest(
       },
       onError: (error) => {
         const message = streamErrorMessage(error);
-        void settleGeneration();
+        settleGenerationInBackground({ chargeReservation: true });
         void Promise.resolve(
           markAssistantMessageFailed(chatId, pendingAssistantId, message),
         );

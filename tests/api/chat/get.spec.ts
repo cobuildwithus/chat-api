@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleChatGetRequest } from "../../../src/api/chat/get";
 import { chat, chatMessage } from "../../../src/infra/db/schema";
 import { getChatUserOrThrow } from "../../../src/api/auth/validate-chat-user";
-import { signChatGrant } from "../../../src/chat/grant";
 import { createReply } from "../../utils/fastify";
 import { buildChatUser } from "../../utils/fixtures/chat-user";
 import { resetAllMocks, setCobuildDbResponse } from "../../utils/mocks/db";
@@ -12,12 +11,7 @@ vi.mock("../../../src/api/auth/validate-chat-user", () => ({
   getChatUserOrThrow: vi.fn(),
 }));
 
-vi.mock("../../../src/chat/grant", () => ({
-  signChatGrant: vi.fn(),
-}));
-
 const getChatUserOrThrowMock = vi.mocked(getChatUserOrThrow);
-const signChatGrantMock = vi.mocked(signChatGrant);
 
 const buildRequest = (chatId: string) =>
   ({ params: { chatId } } as unknown as FastifyRequest);
@@ -26,7 +20,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetAllMocks();
   getChatUserOrThrowMock.mockReturnValue(buildChatUser());
-  signChatGrantMock.mockResolvedValue("chat-grant");
 });
 
 describe("handleChatGetRequest", () => {
@@ -40,10 +33,8 @@ describe("handleChatGetRequest", () => {
     expect(reply.send).toHaveBeenCalledWith({ error: "Chat not found" });
   });
 
-  it("returns 404 when chat belongs to another user", async () => {
-    setCobuildDbResponse(chat, [
-      { user: "0xdef0000000000000000000000000000000000000", type: "chat-default", data: "{}" },
-    ]);
+  it("returns 404 when the owner-scoped lookup finds no matching chat", async () => {
+    setCobuildDbResponse(chat, []);
 
     const reply = createReply();
     await handleChatGetRequest(buildRequest("chat-2"), reply);
@@ -52,7 +43,7 @@ describe("handleChatGetRequest", () => {
     expect(reply.send).toHaveBeenCalledWith({ error: "Chat not found" });
   });
 
-  it("returns chat messages and sets a grant header", async () => {
+  it("returns chat messages", async () => {
     setCobuildDbResponse(chat, [
       {
         user: "0xabc0000000000000000000000000000000000000",
@@ -73,7 +64,6 @@ describe("handleChatGetRequest", () => {
     const reply = createReply();
     await handleChatGetRequest(buildRequest("chat-3"), reply);
 
-    expect(reply.header).toHaveBeenCalledWith("x-chat-grant", "chat-grant");
     expect(reply.send).toHaveBeenCalledWith({
       chatId: "chat-3",
       type: "chat-default",

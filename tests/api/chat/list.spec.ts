@@ -99,4 +99,33 @@ describe("handleChatListRequest", () => {
       ],
     });
   });
+
+  it("coerces string limits through the shared runtime parser", async () => {
+    const now = new Date("2025-03-01T00:00:00Z");
+    setCobuildDbResponse(chat, [
+      {
+        id: "chat-1",
+        title: "One",
+        data: {},
+        type: "chat-default",
+        updatedAt: now,
+        createdAt: now,
+      },
+    ]);
+
+    const reply = createReply();
+    await handleChatListRequest(buildRequest({ limit: "5" }), reply);
+
+    expect(reply.send).toHaveBeenCalledWith({
+      chats: [
+        {
+          id: "chat-1",
+          title: "One",
+          type: "chat-default",
+          updatedAt: now.toISOString(),
+          createdAt: now.toISOString(),
+        },
+      ],
+    });
+  });
 });

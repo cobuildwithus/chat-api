@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  normalizeAddress: vi.fn(),
+  normalizeEvmAddress: vi.fn(),
   cobuildPrimaryDb: vi.fn(),
   createAuthCode: vi.fn(),
   createRefreshToken: vi.fn(),
@@ -16,8 +16,8 @@ vi.mock("drizzle-orm", () => ({
   isNull: (...args: unknown[]) => ({ isNull: args }),
 }));
 
-vi.mock("../../../src/chat/address", () => ({
-  normalizeAddress: (...args: unknown[]) => mocks.normalizeAddress(...args),
+vi.mock("@cobuild/wire", () => ({
+  normalizeEvmAddress: (...args: unknown[]) => mocks.normalizeEvmAddress(...args),
 }));
 
 vi.mock("../../../src/infra/db/cobuildDb", () => ({
@@ -126,11 +126,12 @@ describe("oauth store", () => {
     vi.clearAllMocks();
     dbMock = createDbMock();
     mocks.cobuildPrimaryDb.mockReturnValue(dbMock.db);
-    mocks.normalizeAddress.mockImplementation((value: string) =>
-      typeof value === "string" && value.toLowerCase().startsWith("0x")
-        ? value.toLowerCase()
-        : null
-    );
+    mocks.normalizeEvmAddress.mockImplementation((value: string) => {
+      if (typeof value === "string" && value.toLowerCase().startsWith("0x")) {
+        return value.toLowerCase();
+      }
+      throw new Error("invalid");
+    });
     mocks.createAuthCode.mockReturnValue("auth-code");
     mocks.createRefreshToken.mockReturnValue("rfr_next");
     mocks.digestOAuthSecret.mockImplementation((value: string) => `digest:${value}`);
@@ -160,7 +161,9 @@ describe("oauth store", () => {
   });
 
   it("throws when owner address cannot be normalized", async () => {
-    mocks.normalizeAddress.mockReturnValueOnce(null);
+    mocks.normalizeEvmAddress.mockImplementationOnce(() => {
+      throw new Error("invalid");
+    });
     await expect(
       createAuthorizationCode({
         ownerAddress: "not-an-address",

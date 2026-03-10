@@ -26,22 +26,25 @@ import {
 import { buildPremiumAccountId, compositeIdEndsWithAddress, normalizeAccountLookup } from "./identifiers";
 import type {
   ArbitratorDisputeRow,
+  BudgetGoalContextBundle,
   BudgetInspectReadBundle,
   BudgetStackRow,
-  BudgetTreasuryByRecipientRow,
   BudgetTreasuryRow,
+  BudgetTreasuryByRecipientRow,
   DisputeJurorReadBundle,
   FlowRecipientRow,
   GoalContextByArbitratorRow,
   GoalContextByBudgetTcrRow,
   GoalContextByBudgetTreasuryRow,
   GoalFactoryDeploymentRow,
+  GoalRouteLookupResult,
   GoalInspectReadBundle,
   GoalTreasuryRow,
   JurorDisputeMemberRow,
   JurorRow,
   JurorVoteReceiptRow,
   PremiumAccountReadBundle,
+  PremiumEscrowLookupBundle,
   PremiumEscrowRow,
   StakeAccountReadBundle,
   StakePositionRow,
@@ -61,13 +64,31 @@ export async function fetchGoalById(id: string): Promise<GoalTreasuryRow | null>
   return takeFirst(cobuildDb.select().from(goalTreasury).where(eq(goalTreasury.id, id)));
 }
 
-export async function fetchGoalByRouteKey(routeKey: string): Promise<GoalTreasuryRow | null> {
-  return takeFirst(
-    cobuildDb
-      .select()
-      .from(goalTreasury)
-      .where(or(eq(goalTreasury.canonicalRouteSlug, routeKey), eq(goalTreasury.canonicalRouteDomain, routeKey))),
-  );
+export async function fetchGoalRouteLookup(routeKey: string): Promise<GoalRouteLookupResult> {
+  const matches = await cobuildDb
+    .select()
+    .from(goalTreasury)
+    .where(or(eq(goalTreasury.canonicalRouteSlug, routeKey), eq(goalTreasury.canonicalRouteDomain, routeKey)));
+
+  if (matches.length === 0) {
+    return {
+      kind: "missing",
+      goalRow: null,
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      kind: "ambiguous",
+      goalRow: null,
+      matches,
+    };
+  }
+
+  return {
+    kind: "resolved",
+    goalRow: matches[0]!,
+  };
 }
 
 export async function fetchBudgetById(id: string): Promise<BudgetTreasuryRow | null> {
@@ -151,6 +172,73 @@ export async function fetchPremiumEscrowByBudgetId(budgetId: string): Promise<Pr
 
 export async function fetchPremiumEscrowByBudgetStackId(stackId: string): Promise<PremiumEscrowRow | null> {
   return takeFirst(cobuildDb.select().from(premiumEscrow).where(eq(premiumEscrow.budgetStackId, stackId)));
+}
+
+function toNonEmptyString(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+export async function fetchBudgetGoalContextBundle(
+  budgetId: string,
+  options: {
+    includeDeployment?: boolean;
+  } = {},
+): Promise<BudgetGoalContextBundle> {
+  const goalContext = await fetchGoalContextByBudgetId(budgetId);
+  const goalAddress = toNonEmptyString(goalContext?.goalTreasury);
+
+  if (!goalAddress) {
+    return {
+      goalContext,
+      goalRow: null,
+      goalAddress: null,
+      deployment: null,
+    };
+  }
+
+  const [goalRow, deployment] = await Promise.all([
+    fetchGoalById(goalAddress),
+    options.includeDeployment ? fetchGoalFactoryDeploymentByGoalId(goalAddress) : Promise.resolve(null),
+  ]);
+
+  return {
+    goalContext,
+    goalRow,
+    goalAddress,
+    deployment,
+  };
+}
+
+export async function fetchPremiumEscrowLookupBundle(lookupKey: string): Promise<PremiumEscrowLookupBundle | null> {
+  let stackRow = await fetchBudgetStackById(lookupKey);
+  let budgetRowFromStack: BudgetTreasuryRow | null = null;
+  let premiumRow: PremiumEscrowRow | null = null;
+
+  if (stackRow) {
+    [budgetRowFromStack, premiumRow] = await Promise.all([
+      stackRow.budgetTreasury ? fetchBudgetById(stackRow.budgetTreasury) : Promise.resolve(null),
+      stackRow.premiumEscrow ? fetchPremiumEscrowById(stackRow.premiumEscrow) : Promise.resolve(null),
+    ]);
+  }
+
+  if (!premiumRow) premiumRow = await fetchPremiumEscrowById(lookupKey);
+  if (!premiumRow) premiumRow = await fetchPremiumEscrowByBudgetId(lookupKey);
+  if (!premiumRow) premiumRow = await fetchPremiumEscrowByBudgetStackId(lookupKey);
+  if (!premiumRow) return null;
+
+  if (!stackRow && premiumRow.budgetStackId) {
+    stackRow = await fetchBudgetStackById(premiumRow.budgetStackId);
+  }
+
+  const budgetAddress = budgetRowFromStack?.id ?? premiumRow.budgetTreasury ?? stackRow?.budgetTreasury ?? null;
+  const budgetRow = budgetRowFromStack ?? (budgetAddress ? await fetchBudgetById(budgetAddress) : null);
+
+  return {
+    premiumRow,
+    stackRow,
+    budgetRow,
+    budgetAddress,
+  };
 }
 
 export async function fetchTcrRequestById(id: string): Promise<TcrRequestRow | null> {
@@ -262,27 +350,18 @@ export async function fetchGoalInspectBundle(goalRow: GoalTreasuryRow): Promise<
 }
 
 export async function fetchBudgetInspectBundle(budgetRow: BudgetTreasuryRow): Promise<BudgetInspectReadBundle> {
-  const [goalContext, recipientRows, premiumRow] = await Promise.all([
-    fetchGoalContextByBudgetId(budgetRow.id),
+  const [goalBundle, recipientRows, premiumRow] = await Promise.all([
+    fetchBudgetGoalContextBundle(budgetRow.id, { includeDeployment: true }),
     fetchFlowRecipientsByBudgetId(budgetRow.id),
     budgetRow.premiumEscrow ? fetchPremiumEscrowById(budgetRow.premiumEscrow) : Promise.resolve(null),
   ]);
 
-  const goalContextAddress =
-    typeof goalContext?.goalTreasury === "string" && goalContext.goalTreasury.length > 0 ? goalContext.goalTreasury : null;
-  const [goalRow, deployment] = goalContextAddress
-    ? await Promise.all([
-        fetchGoalById(goalContextAddress),
-        fetchGoalFactoryDeploymentByGoalId(goalContextAddress),
-      ])
-    : [null, null];
-
   return {
-    goalContext,
+    goalContext: goalBundle.goalContext,
     recipientRows,
     premiumRow,
-    goalRow,
-    deployment,
+    goalRow: goalBundle.goalRow,
+    deployment: goalBundle.deployment,
   };
 }
 
@@ -293,20 +372,25 @@ export async function fetchDisputeJurorBundle(
   jurorAddress?: string,
 ): Promise<DisputeJurorReadBundle> {
   const normalizedJuror = jurorAddress ? normalizeAccountLookup(jurorAddress) : null;
-  const memberRows: JurorDisputeMemberRow[] = arbitrator && disputeId ? await fetchJurorDisputeMembers(arbitrator, disputeId) : [];
+  const [memberRows, currentJurorRow, receiptRows]: [
+    JurorDisputeMemberRow[],
+    JurorRow | null,
+    JurorVoteReceiptRow[],
+  ] = await Promise.all([
+    arbitrator && disputeId ? fetchJurorDisputeMembers(arbitrator, disputeId) : Promise.resolve([]),
+    normalizedJuror && arbitrator && disputeId && stakeVaultAddress
+      ? fetchJurorByVaultAndAddress(stakeVaultAddress, normalizedJuror)
+      : Promise.resolve(null),
+    normalizedJuror && arbitrator && disputeId
+      ? fetchJurorVoteReceipts(arbitrator, disputeId, normalizedJuror)
+      : Promise.resolve([]),
+  ]);
   const selectedMember = normalizedJuror
     ? memberRows.find(
         (row) =>
           row.jurorAddress?.toLowerCase() === normalizedJuror || compositeIdEndsWithAddress(row.id, normalizedJuror),
       ) ?? null
     : null;
-  const [currentJurorRow, receiptRows]: [JurorRow | null, JurorVoteReceiptRow[]] =
-    normalizedJuror && arbitrator && disputeId && stakeVaultAddress
-      ? await Promise.all([
-          fetchJurorByVaultAndAddress(stakeVaultAddress, normalizedJuror),
-          fetchJurorVoteReceipts(arbitrator, disputeId, normalizedJuror),
-        ])
-      : [null, []];
 
   return {
     normalizedJuror,

@@ -1,6 +1,7 @@
 import type { FastifyRequest } from "fastify";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { enforceToolsBearerAuth } from "../../../src/api/tools/internal-auth";
+import { resetEnvCacheForTests } from "../../../src/config/env";
 import { createReply } from "../../utils/fastify";
 
 const mocks = vi.hoisted(() => ({
@@ -19,6 +20,15 @@ vi.mock("@fastify/request-context", () => ({
 }));
 
 describe("enforceToolsBearerAuth", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = { ...originalEnv };
+    delete process.env.CHAT_TRUST_PROXY;
+    resetEnvCacheForTests();
+  });
+
   it("returns 401 when authorization header is missing", async () => {
     mocks.authenticateToolsBearerToken.mockReset();
     const request = {
@@ -124,7 +134,9 @@ describe("enforceToolsBearerAuth", () => {
     expect(reply.send).not.toHaveBeenCalled();
   });
 
-  it("stores geo/user-agent metadata when headers are present", async () => {
+  it("stores geo metadata only when headers come through a trusted proxy", async () => {
+    process.env.CHAT_TRUST_PROXY = "1";
+    resetEnvCacheForTests();
     mocks.authenticateToolsBearerToken.mockReset();
     const request = {
       ip: "127.0.0.1",

@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, isNull } from "drizzle-orm";
-import { normalizeAddress } from "../../chat/address";
+import { normalizeEvmAddress } from "@cobuild/wire";
 import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
 import { cliOauthCodes, cliSessions } from "../../infra/db/schema";
 import {
@@ -46,11 +46,11 @@ type OAuthCodeRow = {
 type OAuthDbClient = ReturnType<typeof cobuildPrimaryDb>;
 
 function normalizeOwnerAddressOrThrow(ownerAddress: string): `0x${string}` {
-  const normalized = normalizeAddress(ownerAddress);
-  if (!normalized) {
+  try {
+    return normalizeEvmAddress(ownerAddress, "ownerAddress");
+  } catch {
     throw new Error("Invalid owner address");
   }
-  return normalized as `0x${string}`;
 }
 
 function parseSessionId(value: string): bigint | null {

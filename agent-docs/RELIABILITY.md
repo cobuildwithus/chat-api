@@ -3,11 +3,10 @@
 ## Core Invariants
 
 1. Chat ownership is verified before read or write for protected routes.
-2. `x-chat-grant` must stay scoped to chat id + sender identity + short TTL.
-3. Streaming writes always begin with a pending assistant message and end with either:
+2. Streaming writes always begin with a pending assistant message and end with either:
 - persisted final messages, or
 - explicit failed status on error.
-4. Read-after-write sensitive reads should use primary-safe DB access paths.
+3. Read-after-write sensitive reads should use primary-safe DB access paths.
 
 ## Request Reliability Model
 
@@ -16,7 +15,7 @@
 - Request timeout/keepalive settings at server bootstrap
 - Workload-level controls:
 - Token-usage rate limiter per address over Redis sorted-set window
-- Async usage recording after successful stream finish
+- Atomic quota reservation before model work begins, with the reserved quota retained once generation has started even if the client disconnects or final persistence fails
 - Route-local docs-search limiter and cli-tools limiter (Redis-backed)
 
 ## Timeout Matrix
@@ -33,7 +32,7 @@
 
 ## Failure Handling Patterns
 
-- Missing/invalid grant: fallback ownership DB check, then refresh grant.
+- Missing/inaccessible chat: return `404` after ownership lookup.
 - Stream failure: pending assistant record is marked failed.
 - Message-store treats non-user ids as server-authoritative, with explicit trusted-id allowlisting for server-generated pending/stream ids.
 - Optional external dependency failure:
@@ -45,8 +44,7 @@
 ## Known Reliability Gaps
 
 1. Route schemas do not define `response` contracts, so response-shape regressions are easier to introduce.
-2. API schema accepts free-form `type`, while runtime agent resolver supports only `chat-default`.
-3. Usage recording is non-blocking and can undercount during transient Redis failures.
+2. Usage recording is non-blocking and can undercount during transient Redis failures.
 
 ## Verification Baseline
 

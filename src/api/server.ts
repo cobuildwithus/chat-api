@@ -198,7 +198,6 @@ export const setupServer = async () => {
       "authorization",
       "content-type",
       "privy-id-token",
-      "x-chat-grant",
       "x-client-device",
       "x-chat-user",
       "x-chat-auth",
@@ -206,7 +205,6 @@ export const setupServer = async () => {
       "country",
       "country-region",
     ],
-    exposedHeaders: ["x-chat-grant"],
   });
 
   server.post(

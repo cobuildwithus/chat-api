@@ -10,11 +10,17 @@ import {
   type Address,
 } from "viem";
 import {
+  LIST_WALLET_NOTIFICATIONS_CURSOR_MAX_LENGTH,
+  LIST_WALLET_NOTIFICATIONS_DEFAULT_LIMIT,
+  LIST_WALLET_NOTIFICATIONS_LIMIT_MAX,
+  LIST_WALLET_NOTIFICATIONS_LIMIT_MIN,
+  NOTIFICATION_KINDS,
+} from "../../domains/notifications/types";
+import {
   InvalidWalletNotificationsCursorError,
   WalletNotificationsSubjectRequiredError,
   listWalletNotifications,
 } from "../../domains/notifications/service";
-import { NOTIFICATION_KINDS } from "../../domains/notifications/types";
 import { getToolsPrincipalFromContext } from "../../domains/notifications/wallet-subject";
 import { getOrSetCachedResultWithLock } from "../../infra/cache/cacheResult";
 import {
@@ -44,11 +50,141 @@ const getWalletBalancesInputSchema = z.object({
 }).strict();
 
 const listWalletNotificationsInputSchema = z.object({
-  limit: z.number().int().min(1).max(50).default(20),
-  cursor: z.string().trim().min(1).max(512).optional(),
+  limit: z.number()
+    .int()
+    .min(LIST_WALLET_NOTIFICATIONS_LIMIT_MIN)
+    .max(LIST_WALLET_NOTIFICATIONS_LIMIT_MAX)
+    .default(LIST_WALLET_NOTIFICATIONS_DEFAULT_LIMIT),
+  cursor: z.string().trim().min(1).max(LIST_WALLET_NOTIFICATIONS_CURSOR_MAX_LENGTH).optional(),
   unreadOnly: z.boolean().default(false),
   kinds: z.array(z.enum(NOTIFICATION_KINDS)).min(1).max(NOTIFICATION_KINDS.length).optional(),
 }).strict();
+
+const nullableStringSchema = {
+  anyOf: [{ type: "string" }, { type: "null" }],
+};
+
+const protocolNotificationPayloadSchema = {
+  type: "object",
+  required: ["role", "resource", "actor", "labels", "schedule", "amounts"],
+  properties: {
+    role: nullableStringSchema,
+    resource: {
+      anyOf: [
+        {
+          type: "object",
+          required: [
+            "kind",
+            "goalTreasury",
+            "budgetTreasury",
+            "itemId",
+            "requestIndex",
+            "arbitrator",
+            "disputeId",
+          ],
+          properties: {
+            kind: nullableStringSchema,
+            goalTreasury: nullableStringSchema,
+            budgetTreasury: nullableStringSchema,
+            itemId: nullableStringSchema,
+            requestIndex: nullableStringSchema,
+            arbitrator: nullableStringSchema,
+            disputeId: nullableStringSchema,
+          },
+          additionalProperties: true,
+        },
+        { type: "null" },
+      ],
+    },
+    actor: {
+      anyOf: [
+        {
+          type: "object",
+          required: ["walletAddress"],
+          properties: {
+            walletAddress: nullableStringSchema,
+          },
+          additionalProperties: true,
+        },
+        { type: "null" },
+      ],
+    },
+    labels: {
+      anyOf: [
+        {
+          type: "object",
+          required: ["goalName", "budgetName", "mechanismName"],
+          properties: {
+            goalName: nullableStringSchema,
+            budgetName: nullableStringSchema,
+            mechanismName: nullableStringSchema,
+          },
+          additionalProperties: true,
+        },
+        { type: "null" },
+      ],
+    },
+    schedule: {
+      anyOf: [
+        {
+          type: "object",
+          required: ["deliverAt", "votingStartAt", "votingEndAt", "revealEndAt"],
+          properties: {
+            deliverAt: nullableStringSchema,
+            votingStartAt: nullableStringSchema,
+            votingEndAt: nullableStringSchema,
+            revealEndAt: nullableStringSchema,
+          },
+          additionalProperties: true,
+        },
+        { type: "null" },
+      ],
+    },
+    amounts: {
+      anyOf: [
+        {
+          type: "object",
+          required: [
+            "allocatedStake",
+            "claimable",
+            "claimedAmount",
+            "snapshotWeight",
+            "snapshotVotes",
+            "slashWeight",
+          ],
+          properties: {
+            allocatedStake: nullableStringSchema,
+            claimable: nullableStringSchema,
+            claimedAmount: nullableStringSchema,
+            snapshotWeight: nullableStringSchema,
+            snapshotVotes: nullableStringSchema,
+            slashWeight: nullableStringSchema,
+          },
+          additionalProperties: true,
+        },
+        { type: "null" },
+      ],
+    },
+  },
+  additionalProperties: true,
+};
+
+const paymentNotificationPayloadSchema = {
+  type: "object",
+  required: ["amount"],
+  properties: {
+    amount: nullableStringSchema,
+  },
+  additionalProperties: false,
+};
+
+const walletNotificationPayloadSchema = {
+  anyOf: [
+    protocolNotificationPayloadSchema,
+    paymentNotificationPayloadSchema,
+    { type: "null" },
+  ],
+};
 
 function getWalletBalanceRpcUrl(): string {
   const configured = process.env[BASE_RPC_URL_ENV]?.trim();
@@ -300,13 +436,7 @@ export const walletToolDefinitions: RawRegisteredTool[] = [
                 additionalProperties: false,
               },
               payload: {
-                anyOf: [
-                  {
-                    type: "object",
-                    additionalProperties: true,
-                  },
-                  { type: "null" },
-                ],
+                ...walletNotificationPayloadSchema,
               },
             },
             additionalProperties: false,

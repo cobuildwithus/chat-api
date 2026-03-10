@@ -1,21 +1,18 @@
-import { requestContext } from "@fastify/request-context";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { timingSafeEqual } from "node:crypto";
-import type { ChatUser } from "../../ai/types";
-import { normalizeAddress } from "../../chat/address";
 import {
   getSelfHostedDefaultAddress,
+  isSelfHostedModeAllowedAtRuntime,
   getSelfHostedSharedSecret,
   isSelfHostedMode,
 } from "../../config/env";
+import { getPublicError, toPublicErrorBody } from "../../public-errors";
 import { getUserAddressFromToken } from "./get-user-from-token";
-import { setRequestUserFromHeaders } from "./set-request-user";
-
-declare module "@fastify/request-context" {
-  interface RequestContextData {
-    user: ChatUser;
-  }
-}
+import {
+  getChatUserPrincipalOrThrow,
+  normalizeSubjectWallet,
+  setChatUserPrincipalFromRequest,
+} from "./principals";
 
 function isValidSharedSecret(authHeader: string, sharedSecret: string): boolean {
   const authBuffer = Buffer.from(authHeader, "utf8");
@@ -42,16 +39,23 @@ function normalizePrivyToken(rawToken: unknown): string | undefined {
 export async function validateChatUser(request: FastifyRequest, reply: FastifyReply) {
   try {
     if (isSelfHostedMode()) {
+      if (!isSelfHostedModeAllowedAtRuntime()) {
+        const error = getPublicError("chatAuthMisconfigured");
+        return reply.code(error.statusCode).send(toPublicErrorBody("chatAuthMisconfigured"));
+      }
       const sharedSecret = getSelfHostedSharedSecret();
       if (!sharedSecret) {
-        return reply.code(503).send({ error: "Self-hosted auth is misconfigured." });
+        const error = getPublicError("chatAuthMisconfigured");
+        return reply.code(error.statusCode).send(toPublicErrorBody("chatAuthMisconfigured"));
       }
       const authHeader = request.headers["x-chat-auth"];
       if (!authHeader || typeof authHeader !== "string") {
-        return reply.code(401).send({ error: "Missing chat auth" });
+        const error = getPublicError("chatAuthRequired");
+        return reply.code(error.statusCode).send(toPublicErrorBody("chatAuthRequired"));
       }
       if (!isValidSharedSecret(authHeader, sharedSecret)) {
-        return reply.code(401).send({ error: "Invalid chat auth" });
+        const error = getPublicError("chatAuthInvalid");
+        return reply.code(error.statusCode).send(toPublicErrorBody("chatAuthInvalid"));
       }
 
       const headerAddress = request.headers["x-chat-user"];
@@ -60,29 +64,33 @@ export async function validateChatUser(request: FastifyRequest, reply: FastifyRe
         getSelfHostedDefaultAddress() ??
         null;
       if (!rawAddress) {
-        return reply.code(401).send({ error: "Missing chat user" });
+        const error = getPublicError("chatUserRequired");
+        return reply.code(error.statusCode).send(toPublicErrorBody("chatUserRequired"));
       }
-      const normalizedAddress = normalizeAddress(rawAddress);
+      const normalizedAddress = normalizeSubjectWallet(rawAddress);
       if (!normalizedAddress) {
-        return reply.code(401).send({ error: "Invalid chat user" });
+        const error = getPublicError("chatUserInvalid");
+        return reply.code(error.statusCode).send(toPublicErrorBody("chatUserInvalid"));
       }
 
-      setRequestUserFromHeaders(normalizedAddress, request);
+      setChatUserPrincipalFromRequest(normalizedAddress, request);
       return;
     }
 
     const token = normalizePrivyToken(request.headers["privy-id-token"]);
     if (!token) {
-      return reply.code(401).send({ error: "Missing privy id token" });
+      const error = getPublicError("chatTokenRequired");
+      return reply.code(error.statusCode).send(toPublicErrorBody("chatTokenRequired"));
     }
 
     const address = await getUserAddressFromToken(token);
-    const normalizedAddress = normalizeAddress(address);
+    const normalizedAddress = normalizeSubjectWallet(address);
     if (!normalizedAddress) {
-      return reply.code(401).send({ error: "Invalid chat user" });
+      const error = getPublicError("chatUserInvalid");
+      return reply.code(error.statusCode).send(toPublicErrorBody("chatUserInvalid"));
     }
 
-    setRequestUserFromHeaders(normalizedAddress, request);
+    setChatUserPrincipalFromRequest(normalizedAddress, request);
   } catch (error) {
     console.error("Error in validateChatUser middleware:", error);
     throw error;
@@ -90,7 +98,5 @@ export async function validateChatUser(request: FastifyRequest, reply: FastifyRe
 }
 
 export function getChatUserOrThrow() {
-  const user = requestContext.get("user");
-  if (!user) throw new Error("User not found");
-  return user;
+  return getChatUserPrincipalOrThrow();
 }

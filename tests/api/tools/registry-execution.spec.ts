@@ -1314,6 +1314,55 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("returns 409 when a goal identifier matches multiple canonical routes", async () => {
+    queueSelectRows([
+      {
+        id: "0xgoal1",
+        canonicalRouteSlug: "alpha",
+        canonicalRouteDomain: "goal-one.cobuild.eth",
+      },
+      {
+        id: "0xgoal2",
+        canonicalRouteSlug: "beta",
+        canonicalRouteDomain: "alpha",
+      },
+    ]);
+
+    expect(await executeTool("get-goal", { identifier: "alpha" })).toEqual({
+      ok: false,
+      name: "get-goal",
+      statusCode: 409,
+      error: "Goal identifier is ambiguous. Use a canonical address instead.",
+    });
+  });
+
+  it("returns 409 when stake inspection receives an ambiguous goal route identifier", async () => {
+    queueSelectRows([
+      {
+        id: "0xgoal1",
+        canonicalRouteSlug: "alpha",
+        canonicalRouteDomain: "goal-one.cobuild.eth",
+      },
+      {
+        id: "0xgoal2",
+        canonicalRouteSlug: "beta",
+        canonicalRouteDomain: "alpha",
+      },
+    ]);
+
+    expect(
+      await executeTool("get-stake-position", {
+        identifier: "alpha",
+        account: "0x00000000000000000000000000000000000000aa",
+      }),
+    ).toEqual({
+      ok: false,
+      name: "get-stake-position",
+      statusCode: 409,
+      error: "Goal identifier is ambiguous. Use a canonical address instead.",
+    });
+  });
+
   it("validates indexed protocol inspect identifiers before hitting the database", async () => {
     expect(await executeTool("get-goal", {})).toEqual({
       ok: false,
@@ -1480,7 +1529,7 @@ describe("tool registry execution", () => {
             actorAvatarUrl: "https://example.com/a.png",
             sourceText: "Alice mentioned you in a reply",
             rootText: "Root post title",
-            payload: { foo: "bar" },
+            payload: null,
           },
           {
             id: "10",
@@ -1546,7 +1595,7 @@ describe("tool registry execution", () => {
               targetHash: `0x${"c".repeat(40)}`,
               appPath: `/cast/0x${"b".repeat(40)}?post=0x${"a".repeat(40)}`,
             },
-            payload: { foo: "bar" },
+            payload: null,
           },
         ],
         pageInfo: {

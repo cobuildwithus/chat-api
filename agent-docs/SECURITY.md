@@ -3,7 +3,7 @@
 ## Hard Constraints
 
 - Never access `.env` or `.env*` files.
-- Treat auth validation and grant signing/verification as high-sensitivity boundaries.
+- Treat auth validation and ownership enforcement as high-sensitivity boundaries.
 - Validate request payloads and tool inputs with explicit schemas.
 - Avoid exposing secrets or excessive internals in logs/error payloads.
 
@@ -21,7 +21,6 @@
 - Self-hosted header/shared-secret mode
 4. API -> Data boundary (`src/infra/db/**`, `src/infra/redis.ts`)
 - Ownership checks
-- grant validation + issuance
 5. API -> External services (`OpenAI`, `co.build`)
 - timeout-bounded requests
 - constrained tool surfaces
@@ -32,14 +31,14 @@
 - Self-hosted mode can rely on:
 - `x-chat-user` / default address
 - `x-chat-auth` shared secret
-- Production self-hosted mode requires `SELF_HOSTED_SHARED_SECRET` at startup and middleware level.
+- Production self-hosted mode requires `SELF_HOSTED_SHARED_SECRET` and `SELF_HOSTED_PRODUCTION_ENABLED=1` at startup; middleware rejects misconfigured runtime use as well.
+- Request geo headers are treated as untrusted and ignored unless `CHAT_TRUST_PROXY` is configured for a trusted upstream proxy.
 - Auth for chat/tools/token routes runs in `preValidation`, so authenticated principals are available to `preHandler` rate-limit key generation.
 
-## Grant Security Notes
+## Chat Access Notes
 
-- Grants are signed JWTs with short TTL and scoped claims.
-- `/api/chat` enforces grant consistency, with DB ownership fallback.
-- Grant refresh happens on read (`GET /api/chat/:chatId`) and on write when needed.
+- Chat read/write authorization is enforced by matching the authenticated wallet to the stored chat owner.
+- Unauthorized or missing chats intentionally resolve to `404` to reduce enumeration signal.
 
 ## Defensive Behavior
 
@@ -53,7 +52,7 @@
 
 ## Security Review Checklist (Per PR)
 
-1. Are auth/grant flows changed? If yes, update this doc and `agent-docs/product-specs/chat-api-behavior.md`.
+1. Are auth or ownership-enforcement flows changed? If yes, update this doc and `agent-docs/product-specs/chat-api-behavior.md`.
 2. Are new headers/log fields introduced? If yes, verify redaction requirements.
 3. Are new external calls added? If yes, set explicit timeout and bounded error behavior.
 4. Are ownership checks preserved on all chat read/write paths?
@@ -65,6 +64,5 @@
 Escalate to humans for:
 
 - auth model or claim/issuer/audience changes,
-- grant format/signature/TTL changes,
 - permission model changes,
 - legal/compliance-sensitive copy or behavior.

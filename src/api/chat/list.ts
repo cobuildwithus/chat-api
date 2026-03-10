@@ -1,18 +1,13 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { parseEvmAddress } from "@cobuild/wire";
 import { chat } from "../../infra/db/schema";
-import { cobuildDb } from "../../infra/db/cobuildDb";
-import { normalizeAddress } from "../../chat/address";
+import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
 import { parseJson } from "../../chat/parse";
 import { getChatUserOrThrow } from "../auth/validate-chat-user";
+import { parseChatListQuery } from "./schema";
 
 const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 100;
-
-type ChatListQuery = {
-  goalAddress?: string;
-  limit?: string | number;
-};
 
 export async function handleChatListRequest(
   request: FastifyRequest,
@@ -20,12 +15,9 @@ export async function handleChatListRequest(
 ) {
   try {
     const user = getChatUserOrThrow();
-    const { goalAddress, limit } = request.query as ChatListQuery;
-    const resolvedLimit = Math.min(
-      Math.max(Number(limit) || DEFAULT_LIMIT, 1),
-      MAX_LIMIT,
-    );
-    const normalizedGoal = normalizeAddress(goalAddress);
+    const { goalAddress, limit } = parseChatListQuery(request.query);
+    const resolvedLimit = limit ?? DEFAULT_LIMIT;
+    const normalizedGoal = parseEvmAddress(goalAddress);
     const whereClause = normalizedGoal
       ? and(
           eq(chat.user, user.address),
@@ -33,7 +25,7 @@ export async function handleChatListRequest(
         )
       : eq(chat.user, user.address);
 
-    const chats = await cobuildDb
+    const chats = await cobuildPrimaryDb()
       .select({
         id: chat.id,
         title: chat.title,
@@ -50,8 +42,7 @@ export async function handleChatListRequest(
     const items = chats.flatMap((entry) => {
       if (normalizedGoal) {
         const data = parseJson(entry.data) as Record<string, unknown> | null;
-        const entryGoal =
-          typeof data?.goalAddress === "string" ? normalizeAddress(data.goalAddress) : null;
+        const entryGoal = parseEvmAddress(data?.goalAddress);
         if (!entryGoal || entryGoal !== normalizedGoal) return [];
       }
 

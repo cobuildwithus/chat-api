@@ -1,7 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getChatInternalServiceKey,
-  getChatGrantSecret,
   getCliJwtAudience,
   getCliJwtIssuer,
   getCliJwtPrivateKey,
@@ -25,7 +24,6 @@ const baseEnv = {
   REDIS_URL: "redis://localhost",
   POSTGRES_URL: "postgres://localhost",
   PRIVY_APP_ID: "privy",
-  CHAT_GRANT_SECRET: "secret",
   CHAT_INTERNAL_SERVICE_KEY: "internal-secret",
   CLI_TOKEN_PEPPER: "pepper",
   CLI_JWT_PRIVATE_KEY: "private-key",
@@ -50,7 +48,6 @@ describe("env helpers", () => {
   it("validates env variables in development", () => {
     process.env = { ...process.env, ...baseEnv };
     expect(validateEnvVariables().PRIVY_APP_ID).toBe("privy");
-    expect(getChatGrantSecret()).toBe("secret");
     expect(getPrivyAppId()).toBe("privy");
     expect(getChatInternalServiceKey()).toBe("internal-secret");
     expect(getCliJwtPrivateKey()).toBe("private-key");
@@ -194,6 +191,46 @@ describe("env helpers", () => {
     delete process.env.PRIVY_APP_ID;
     delete process.env.PRIVY_VERIFICATION_KEY;
     expect(() => validateEnvVariables()).not.toThrow();
+  });
+
+  it("requires explicit production opt-in for self-hosted mode", () => {
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      NODE_ENV: "production",
+      SELF_HOSTED_MODE: "true",
+      SELF_HOSTED_SHARED_SECRET: "self-hosted-secret",
+    };
+    delete process.env.PRIVY_APP_ID;
+    delete process.env.PRIVY_VERIFICATION_KEY;
+
+    expect(() => validateEnvVariables()).toThrow(
+      "Refusing production SELF_HOSTED_MODE without SELF_HOSTED_PRODUCTION_ENABLED=1",
+    );
+  });
+
+  it("warns once when production self-hosted mode is explicitly enabled", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    process.env = {
+      ...process.env,
+      ...baseEnv,
+      NODE_ENV: "production",
+      SELF_HOSTED_MODE: "true",
+      SELF_HOSTED_PRODUCTION_ENABLED: "1",
+      SELF_HOSTED_SHARED_SECRET: "self-hosted-secret",
+      CLI_TOKEN_PEPPER: "pepper",
+      CLI_JWT_PRIVATE_KEY: "private-key",
+      CLI_JWT_PUBLIC_KEY: "public-key",
+      CLI_JWT_ISSUER: "issuer",
+      CLI_JWT_AUDIENCE: "audience",
+    };
+    delete process.env.PRIVY_APP_ID;
+    delete process.env.PRIVY_VERIFICATION_KEY;
+
+    expect(() => validateEnvVariables()).not.toThrow();
+    expect(() => validateEnvVariables()).not.toThrow();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
   });
 
   it("requires self-hosted shared secret whenever self-hosted mode is enabled", () => {

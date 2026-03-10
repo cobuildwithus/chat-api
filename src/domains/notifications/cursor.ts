@@ -1,4 +1,8 @@
-import type { WalletNotificationsCursor } from "./types";
+export type WalletNotificationsCursor = {
+  eventAt: string | null;
+  createdAt: string;
+  id: string;
+};
 
 const CURSOR_TIMESTAMP_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3,6}Z$/;

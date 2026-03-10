@@ -2,14 +2,9 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { randomUUID } from "node:crypto";
 import { chat } from "../../infra/db/schema";
 import { cobuildDb } from "../../infra/db/cobuildDb";
-import { signChatGrant } from "../../chat/grant";
+import { getPublicError, toPublicErrorBody } from "../../public-errors";
 import { getChatUserOrThrow } from "../auth/validate-chat-user";
-import type { ChatData } from "../../ai/types";
-
-type CreateChatBody = {
-  type: string;
-  data?: ChatData;
-};
+import { parseChatCreateBody } from "./schema";
 
 export async function handleChatCreateRequest(
   request: FastifyRequest,
@@ -17,7 +12,7 @@ export async function handleChatCreateRequest(
 ) {
   try {
     const user = getChatUserOrThrow();
-    const { type, data } = request.body as CreateChatBody;
+    const { type, data } = parseChatCreateBody(request.body);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const chatId = randomUUID();
@@ -34,12 +29,12 @@ export async function handleChatCreateRequest(
         .returning({ id: chat.id });
 
       if (result.length > 0) {
-        const chatGrant = await signChatGrant(chatId, user.address);
-        return reply.send({ chatId, chatGrant });
+        return reply.send({ chatId });
       }
     }
 
-    return reply.status(500).send({ error: "Failed to create chat" });
+    const error = getPublicError("chatCreateFailed");
+    return reply.status(error.statusCode).send(toPublicErrorBody("chatCreateFailed"));
   } catch (error) {
     console.error("Chat create handler error:", error);
     throw error;

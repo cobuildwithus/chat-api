@@ -66,6 +66,7 @@ Validation source of truth:
 - Purpose: inspect indexed goal state by goal treasury address, canonical route slug, or canonical route domain.
 - Output: concise DB-derived goal summary including `goalAddress`, `goalRevnetId`, lifecycle state/finalization, canonical project/route linkage, flow/stake relationships, treasury summary, governance linkage, and a compact budgets summary.
 - Dependencies: `cobuild-onchain.goal_treasury`, `goal_factory_deployment`, `goal_context_by_budget_treasury`, `budget_treasury`, `flow_recipient`, `stake_vault`.
+- Error semantics: missing goals return `404` / `Goal not found.`; ambiguous canonical route identifiers return `409` / `Goal identifier is ambiguous. Use a canonical address instead.`
 
 ## `getBudget`
 
@@ -101,6 +102,7 @@ Validation source of truth:
 - AI wrapper: `getStakePosition`
 - Purpose: inspect indexed stake-vault account state by goal route/address, budget address/recipient id, or stake-vault address plus account address.
 - Output: concise DB-derived stake summary including resolved vault identity, aggregate vault totals, zero-tolerant goal/cobuild account balances, and current juror state when present.
+- Error semantics: ambiguous goal route identifiers return `409` / `Goal identifier is ambiguous. Use a canonical address instead.`
 - Dependencies: `cobuild-onchain.goal_treasury`, `goal_context_by_budget_treasury`, `budget_treasury`, `stake_vault`, `stake_position`, `juror`.
 
 ## `getPremiumEscrow`
@@ -127,6 +129,7 @@ Validation source of truth:
 - Purpose: list notification inbox items for the authenticated subject wallet with cursor pagination and unread metadata scoped to the selected `kinds` filter (and wallet-wide when no filter is provided).
 - Dependencies: `cobuild.notifications`, `cobuild.notification_state`, `farcaster.casts`, `farcaster.profiles`.
 - Cache: none (`Cache-Control: no-store`) because unread/read freshness matters.
+- Payload contract: discussion notifications expose `payload: null`; payment notifications expose a minimal DTO (`{ amount }` when present); protocol notifications expose the shared public protocol payload DTO parsed via `@cobuild/wire/protocol-notifications`.
 
 ## `file_search` (conditional)
 

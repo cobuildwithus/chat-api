@@ -1,42 +1,42 @@
-import { requestContext } from "@fastify/request-context";
 import { parseBearerToken } from "@cobuild/wire";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { setRequestUserFromHeaders } from "../auth/set-request-user";
+import { getPublicError, toPublicErrorBody } from "../../public-errors";
+import {
+  setChatUserPrincipalFromRequest,
+  setToolsPrincipal,
+} from "../auth/principals";
+import { parseToolsAuthHeaders } from "./schema";
 import { authenticateToolsBearerToken } from "./token-auth";
-
-declare module "@fastify/request-context" {
-  interface RequestContextData {
-    toolsPrincipal?: {
-      sessionId: string;
-      ownerAddress: `0x${string}`;
-      agentKey: string;
-      scope: string;
-      scopes: string[];
-      hasToolsRead: boolean;
-      hasToolsWrite: boolean;
-      hasWalletExecute: boolean;
-      hasAnyWriteScope: boolean;
-    };
-  }
-}
 
 export async function enforceToolsBearerAuth(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const rawToken = parseBearerToken(request.headers.authorization);
+  let authorization: string | undefined;
+  try {
+    authorization = parseToolsAuthHeaders(request.headers).authorization;
+  } catch {
+    authorization =
+      typeof request.headers.authorization === "string"
+        ? request.headers.authorization
+        : undefined;
+  }
+  const rawToken = parseBearerToken(authorization);
   if (!rawToken) {
-    return reply.status(401).send({ error: "Unauthorized." });
+    const error = getPublicError("toolsUnauthorized");
+    return reply.status(error.statusCode).send(toPublicErrorBody("toolsUnauthorized"));
   }
 
   const principal = await authenticateToolsBearerToken(rawToken);
   if (!principal) {
-    return reply.status(401).send({ error: "Unauthorized." });
+    const error = getPublicError("toolsUnauthorized");
+    return reply.status(error.statusCode).send(toPublicErrorBody("toolsUnauthorized"));
   }
   if (!principal.hasToolsRead) {
-    return reply.status(403).send({ error: "tools:read scope required." });
+    const error = getPublicError("toolsReadScopeRequired");
+    return reply.status(error.statusCode).send(toPublicErrorBody("toolsReadScopeRequired"));
   }
 
-  setRequestUserFromHeaders(principal.ownerAddress, request);
-  requestContext.set("toolsPrincipal", principal);
+  setChatUserPrincipalFromRequest(principal.ownerAddress, request);
+  setToolsPrincipal(principal);
 }

@@ -1,15 +1,15 @@
-import { requestContext } from "@fastify/request-context";
 import type { FastifyRequest } from "fastify";
+import {
+  setChatUserPrincipalFromRequest,
+  type ChatUserPrincipal,
+  type SubjectWallet,
+} from "./principals";
 
 export function setRequestUserFromHeaders(
-  address: string,
+  address: SubjectWallet,
   request: FastifyRequest,
 ) {
-  requestContext.set("user", {
-    address,
-    city: request.headers["city"]?.toString() ?? null,
-    country: request.headers["country"]?.toString() ?? null,
-    countryRegion: request.headers["country-region"]?.toString() ?? null,
-    userAgent: request.headers["user-agent"]?.toString() ?? null,
-  });
+  setChatUserPrincipalFromRequest(address, request);
 }
+
+export type { ChatUserPrincipal };

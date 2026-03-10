@@ -25,6 +25,7 @@ describe("tools index", () => {
   it("includes docs tool when vector store id is present", async () => {
     const { module, fileSearch } = await setup("vector-store");
     expect(module.defaultTools.some((tool) => tool.name === "file_search")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getWalletBalances")).toBe(false);
     expect(module.defaultTools.some((tool) => tool.name === "list-wallet-notifications")).toBe(false);
     expect(fileSearch).toHaveBeenCalledWith({ vectorStoreIds: ["vector-store"], maxNumResults: 8 });
     expect(module.toolsByName.getUser).toBeDefined();
@@ -42,6 +43,7 @@ describe("tools index", () => {
   it("omits docs tool when vector store id is missing", async () => {
     const { module } = await setup(undefined);
     expect(module.defaultTools.some((tool) => tool.name === "file_search")).toBe(false);
+    expect(module.defaultTools.some((tool) => tool.name === "getWalletBalances")).toBe(false);
     expect(module.defaultTools.some((tool) => tool.name === "list-wallet-notifications")).toBe(false);
     expect(module.defaultTools.some((tool) => tool.name === "getGoal")).toBe(true);
     expect(module.defaultTools.some((tool) => tool.name === "getBudget")).toBe(true);

@@ -5,7 +5,6 @@ import { handleChatCreateRequest } from "../../../src/api/chat/create";
 import { chat } from "../../../src/infra/db/schema";
 import { cobuildDb } from "../../../src/infra/db/cobuildDb";
 import { getChatUserOrThrow } from "../../../src/api/auth/validate-chat-user";
-import { signChatGrant } from "../../../src/chat/grant";
 import { createReply } from "../../utils/fastify";
 import { buildChatUser } from "../../utils/fixtures/chat-user";
 import { queueCobuildDbResponse, resetAllMocks, setCobuildDbResponse } from "../../utils/mocks/db";
@@ -18,12 +17,7 @@ vi.mock("../../../src/api/auth/validate-chat-user", () => ({
   getChatUserOrThrow: vi.fn(),
 }));
 
-vi.mock("../../../src/chat/grant", () => ({
-  signChatGrant: vi.fn(),
-}));
-
 const getChatUserOrThrowMock = vi.mocked(getChatUserOrThrow);
-const signChatGrantMock = vi.mocked(signChatGrant);
 const randomUUIDMock = vi.mocked(randomUUID);
 
 const buildRequest = (body: { type: string; data?: Record<string, unknown> }) =>
@@ -33,11 +27,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetAllMocks();
   getChatUserOrThrowMock.mockReturnValue(buildChatUser());
-  signChatGrantMock.mockResolvedValue("chat-grant");
 });
 
 describe("handleChatCreateRequest", () => {
-  it("returns a chat id and grant on success", async () => {
+  it("returns a chat id on success", async () => {
     randomUUIDMock.mockReturnValue(
       "chat-1" as `${string}-${string}-${string}-${string}-${string}`,
     );
@@ -52,7 +45,7 @@ describe("handleChatCreateRequest", () => {
       reply,
     );
 
-    expect(reply.send).toHaveBeenCalledWith({ chatId: "chat-1", chatGrant: "chat-grant" });
+    expect(reply.send).toHaveBeenCalledWith({ chatId: "chat-1" });
   });
 
   it("stores chat data as JSON object, not stringified text", async () => {
@@ -106,6 +99,5 @@ describe("handleChatCreateRequest", () => {
 
     expect(reply.status).toHaveBeenCalledWith(500);
     expect(reply.send).toHaveBeenCalledWith({ error: "Failed to create chat" });
-    expect(signChatGrantMock).not.toHaveBeenCalled();
   });
 });

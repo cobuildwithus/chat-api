@@ -1,57 +1,41 @@
 import {
-  hasAnyWriteCapability,
-  hasToolsWrite,
-  hasWalletExecute,
+  deriveCliScopeCapabilities,
   splitScope,
 } from "@cobuild/wire";
-import { normalizeAddress } from "../../chat/address";
 import { verifyCliAccessToken } from "../oauth/jwt";
+import {
+  createToolsPrincipal,
+  normalizeSubjectWallet,
+  type ToolsPrincipal,
+} from "../auth/principals";
 
-export async function authenticateToolsBearerToken(rawToken: string): Promise<{
-  sessionId: string;
-  ownerAddress: `0x${string}`;
-  agentKey: string;
-  scope: string;
-  scopes: string[];
-  hasToolsRead: boolean;
-  hasToolsWrite: boolean;
-  hasWalletExecute: boolean;
-  hasAnyWriteScope: boolean;
-} | null> {
+export async function authenticateToolsBearerToken(
+  rawToken: string,
+): Promise<ToolsPrincipal | null> {
   const claims = await verifyCliAccessToken(rawToken);
   if (!claims) {
     return null;
   }
 
-  const ownerAddress = normalizeAddress(claims.sub);
-  if (!ownerAddress) {
-    return null;
-  }
-
-  const agentKey = claims.agentKey.trim();
-  if (!agentKey) {
-    return null;
-  }
-
+  const ownerAddress = normalizeSubjectWallet(claims.sub);
   const scope = claims.scope.trim();
-  if (!scope) {
+  const agentKey = claims.agentKey.trim();
+  if (!ownerAddress || !scope || !agentKey) {
     return null;
   }
 
   const scopes = splitScope(scope);
-  const hasToolsRead = scopes.includes("tools:read");
-  const hasToolsWriteScope = hasToolsWrite(scope);
-  const hasWalletExecuteScope = hasWalletExecute(scope);
+  const capabilities = deriveCliScopeCapabilities(scope);
 
-  return {
+  return createToolsPrincipal({
     sessionId: claims.sid,
-    ownerAddress: ownerAddress as `0x${string}`,
+    ownerAddress,
     agentKey,
     scope,
     scopes,
-    hasToolsRead,
-    hasToolsWrite: hasToolsWriteScope,
-    hasWalletExecute: hasWalletExecuteScope,
-    hasAnyWriteScope: hasAnyWriteCapability(scope),
-  };
+    hasToolsRead: scopes.includes("tools:read"),
+    hasToolsWrite: capabilities.hasToolsWrite,
+    hasWalletExecute: capabilities.hasWalletExecute,
+    hasAnyWriteScope: capabilities.hasAnyWriteScope,
+  });
 }

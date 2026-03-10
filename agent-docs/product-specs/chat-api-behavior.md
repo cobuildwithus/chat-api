@@ -5,30 +5,31 @@
 ### POST `/api/chat/new`
 
 Request body:
-- required: `type` (string)
+- required: `type` (`chat-default`)
 - optional: `data` (object)
 
 Behavior:
 - creates user-owned chat row
-- returns `{ chatId, chatGrant }`
+- returns `{ chatId }`
 - on failure returns `500` with `Failed to create chat`
 
 ### POST `/api/chat`
 
 Request body:
-- required: `id`, `messages[]`, `type`
-- optional: `clientMessageId`, `context`, `data`
+- required: `chatId`, `clientMessageId`, `userMessage`
+- optional: `attachments[]`, `context`
 
 Behavior:
-- enforces auth and chat ownership/grant validity
+- enforces auth and wallet ownership for the target chat
 - applies usage limiter before streaming
+- stores the user message idempotently by `clientMessageId`
 - streams assistant output
 - persists pending + final message state
-- may return refreshed `x-chat-grant`
 
 Error behavior:
 - `404` for missing/unauthorized chat id
 - `429` when usage limit is exceeded
+- `409` when the chat request reuses an already-processed `clientMessageId`
 - stream error payload on downstream/model failures
 
 ### GET `/api/chats`
@@ -48,7 +49,6 @@ Params:
 Behavior:
 - ownership check
 - returns `{ chatId, type, data, messages }`
-- always emits refreshed `x-chat-grant`
 - returns `404` when inaccessible
 
 ### GET `/v1/tools`
@@ -86,20 +86,18 @@ Behavior:
 - executes canonical tool registry entry and returns `{ ok, name, output }`
 
 Error behavior:
-- propagates tool execution errors as `{ error }` with tool-defined HTTP status codes
+- propagates tool execution errors as stable public `{ error }` strings with tool-defined HTTP status codes
+- dependency/configuration failures use stable mapped messages (`Tool request failed.` / `Tool is unavailable.`) instead of raw upstream text
 
-## Auth + Grant Compatibility
+## Auth Compatibility
 
-- Chat grant format and semantics must remain backward compatible unless explicitly versioned.
-- Grant refresh behavior is part of client continuation contract.
-- Ownership checks are mandatory fallback even when grant is present.
+- Chat authorization is based on authenticated wallet ownership of the target chat.
 - Self-hosted mode in production requires shared-secret protection.
 
 ## Known Schema/Runtime Caveats
 
-1. Schema accepts free-form `type`, runtime currently supports only `chat-default`.
-2. `goalAddress` schema accepts any string, runtime filters only when value is valid address.
-3. Route schemas validate request bodies but currently do not define response schemas.
+1. `goalAddress` schema accepts any string, runtime filters only when value is valid address.
+2. Route schemas validate request bodies but currently do not define response schemas.
 
 ## Required Update Triggers
 
@@ -107,5 +105,5 @@ Update this document whenever changes affect:
 
 - endpoint request fields,
 - response payload shape or headers,
-- auth/grant behavior,
+- auth behavior,
 - error semantics or status-code policy.

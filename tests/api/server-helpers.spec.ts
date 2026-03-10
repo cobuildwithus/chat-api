@@ -24,7 +24,7 @@ describe("handleError", () => {
     expect(reply.status).toHaveBeenCalledWith(500);
     expect(reply.send).toHaveBeenCalledWith({
       error: "Internal Server Error",
-      message: "An unexpected error occurred",
+      message: "Internal Server Error",
       statusCode: 500,
     });
   });
@@ -44,7 +44,6 @@ describe("handleError", () => {
           cookie: "session=abc",
           "privy-id-token": "secret-token",
           "x-chat-auth": "chat-auth-secret",
-          "x-chat-grant": "grant-token",
           "x-chat-internal-key": "internal-secret",
           "x-safe-header": "safe-value",
         },
@@ -64,7 +63,6 @@ describe("handleError", () => {
           cookie: "[redacted]",
           "privy-id-token": "[redacted]",
           "x-chat-auth": "[redacted]",
-          "x-chat-grant": "[redacted]",
           "x-chat-internal-key": "[redacted]",
           "x-safe-header": "safe-value",
         },
@@ -96,6 +94,27 @@ describe("handleError", () => {
       message: "Internal Server Error",
       statusCode: 500,
       requestId: "req-prod",
+    });
+    process.env = originalEnv;
+  });
+
+  it("returns generic 500 details outside production as well", () => {
+    const originalEnv = process.env;
+    process.env = { ...originalEnv, NODE_ENV: "development" };
+    const reply = createReply();
+
+    handleError(
+      Object.assign(new Error("Database exploded"), { statusCode: 500, name: "DatabaseError" }),
+      { id: "req-dev", method: "GET", url: "/api/chat", headers: {}, body: null },
+      reply,
+    );
+
+    expect(reply.status).toHaveBeenCalledWith(500);
+    expect(reply.send).toHaveBeenCalledWith({
+      error: "Internal Server Error",
+      message: "Internal Server Error",
+      statusCode: 500,
+      requestId: "req-dev",
     });
     process.env = originalEnv;
   });

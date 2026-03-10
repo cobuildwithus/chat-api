@@ -81,7 +81,7 @@ describe("wallet notifications service", () => {
     });
     mocks.execute
       .mockResolvedValueOnce({
-        rows: [{ count: "2", watermark: "1741435200000001" }],
+        rows: [{ count: "2", watermark: "1741435200000001:101" }],
       })
       .mockResolvedValueOnce({
         rows: [
@@ -195,7 +195,7 @@ describe("wallet notifications service", () => {
     expect(result.subjectWalletAddress).toBe(subjectWalletAddress);
     expect(result.unread).toEqual({
       count: 2,
-      watermark: "1741435200000001",
+      watermark: "1741435200000001:101",
     });
     expect(result.pageInfo).toEqual({
       limit: 3,
@@ -225,7 +225,7 @@ describe("wallet notifications service", () => {
         targetHash: `0x${"c".repeat(40)}`,
         appPath: `/cast/0x${"b".repeat(40)}?post=0x${"a".repeat(40)}`,
       },
-      payload: { foo: "bar" },
+      payload: null,
     });
     expect(result.items[0].summary.title?.length).toBe(160);
     expect(result.items[0].summary.excerpt?.length).toBe(180);
@@ -266,6 +266,65 @@ describe("wallet notifications service", () => {
     });
   });
 
+  it("shapes payment payloads to the public DTO contract", async () => {
+    const subjectWalletAddress = "0x0000000000000000000000000000000000000001";
+
+    mocks.requestContextGet.mockImplementation((key: string) => {
+      if (key === "toolsPrincipal") {
+        return {
+          ownerAddress: subjectWalletAddress,
+          agentKey: "forecast-bot",
+        };
+      }
+      return undefined;
+    });
+    mocks.execute
+      .mockResolvedValueOnce({
+        rows: [{ count: "1", watermark: "1741435200000001:98" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 98n,
+            kind: "payment",
+            reason: "received",
+            eventAt: "2026-03-08T12:00:00.000001Z",
+            eventAtCursor: "2026-03-08T12:00:00.000001Z",
+            createdAt: "2026-03-08T12:00:03.000001Z",
+            createdAtCursor: "2026-03-08T12:00:03.000001Z",
+            isUnread: true,
+            sourceType: "payment",
+            sourceId: "payment-98",
+            sourceHashHex: null,
+            rootHashHex: null,
+            targetHashHex: null,
+            actorFid: null,
+            actorWalletAddress: "0x0000000000000000000000000000000000000003",
+            actorUsername: null,
+            actorDisplayName: null,
+            actorAvatarUrl: null,
+            sourceText: null,
+            rootText: null,
+            payload: { amount: 5n, ignored: "nope" },
+          },
+        ],
+      });
+
+    const result = await listWalletNotifications({
+      limit: 1,
+      unreadOnly: false,
+      kinds: ["payment"],
+    });
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: "98",
+        kind: "payment",
+        payload: { amount: "5" },
+      }),
+    ]);
+  });
+
   it("maps protocol notifications through the protocol presenter", async () => {
     const subjectWalletAddress = "0x0000000000000000000000000000000000000001";
     const goalTreasury = "0x00000000000000000000000000000000000000bb";
@@ -282,7 +341,7 @@ describe("wallet notifications service", () => {
     });
     mocks.execute
       .mockResolvedValueOnce({
-        rows: [{ count: "1", watermark: "1741435200000001" }],
+        rows: [{ count: "1", watermark: "1741435200000001:42" }],
       })
       .mockResolvedValueOnce({
         rows: [
@@ -323,14 +382,14 @@ describe("wallet notifications service", () => {
 
     expect(result.unread).toEqual({
       count: 1,
-      watermark: "1741435200000001",
+      watermark: "1741435200000001:42",
     });
     expect(result.pageInfo).toEqual({
       limit: 1,
       nextCursor: null,
       hasMore: false,
     });
-    expect(result.items).toEqual([
+    expect(result.items).toMatchObject([
       {
         id: "42",
         kind: "protocol",
@@ -365,7 +424,85 @@ describe("wallet notifications service", () => {
     ]);
   });
 
-  it("preserves full normalized protocol payloads for presentation and client parity", async () => {
+  it("prefers the row actor wallet over payload actor fallback when both are present", async () => {
+    const subjectWalletAddress = "0x0000000000000000000000000000000000000001";
+    const rowActorWalletAddress = "0x00000000000000000000000000000000000000ee";
+    const payloadActorWalletAddress = "0x00000000000000000000000000000000000000dd";
+
+    mocks.requestContextGet.mockImplementation((key: string) => {
+      if (key === "toolsPrincipal") {
+        return {
+          ownerAddress: subjectWalletAddress,
+          agentKey: "forecast-bot",
+        };
+      }
+      return undefined;
+    });
+    mocks.execute
+      .mockResolvedValueOnce({
+        rows: [{ count: "1", watermark: "1741435200000001:43" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 43n,
+            kind: "protocol",
+            reason: "budget_removal_requested",
+            eventAt: "2026-03-08T12:00:03.123456Z",
+            eventAtCursor: "2026-03-08T12:00:03.123456Z",
+            createdAt: "2026-03-08T12:00:06.123456Z",
+            createdAtCursor: "2026-03-08T12:00:06.123456Z",
+            isUnread: true,
+            sourceType: "budget_request",
+            sourceId: "proto-43",
+            sourceHashHex: null,
+            rootHashHex: null,
+            targetHashHex: null,
+            actorFid: null,
+            actorWalletAddress: rowActorWalletAddress,
+            actorUsername: null,
+            actorDisplayName: null,
+            actorAvatarUrl: null,
+            sourceText: null,
+            rootText: null,
+            payload: {
+              role: "proposer",
+              labels: { goalName: "Alpha" },
+              resource: { goalTreasury: "0x00000000000000000000000000000000000000bb" },
+              actor: { walletAddress: payloadActorWalletAddress },
+            },
+          },
+        ],
+      });
+
+    const result = await listWalletNotifications({
+      limit: 1,
+      unreadOnly: false,
+      kinds: ["protocol"],
+    });
+
+    expect(result.items[0]).toMatchObject({
+      actor: {
+        fid: null,
+        walletAddress: rowActorWalletAddress,
+        name: "0x0000...00ee",
+      },
+      summary: {
+        title: "Removal requested for your budget in Alpha.",
+        excerpt: "0x0000...00ee requested removal of your budget.",
+      },
+      payload: expect.objectContaining({
+        role: "proposer",
+        labels: expect.objectContaining({ goalName: "Alpha" }),
+        resource: expect.objectContaining({
+          goalTreasury: "0x00000000000000000000000000000000000000bb",
+        }),
+        actor: { walletAddress: payloadActorWalletAddress },
+      }),
+    });
+  });
+
+  it("preserves normalized protocol payload fields in the shared public DTO", async () => {
     mocks.requestContextGet.mockImplementation((key: string) => {
       if (key === "toolsPrincipal") {
         return {
@@ -377,7 +514,7 @@ describe("wallet notifications service", () => {
     });
     mocks.execute
       .mockResolvedValueOnce({
-        rows: [{ count: "1", watermark: "1741435200000001" }],
+        rows: [{ count: "1", watermark: "1741435200000001:43" }],
       })
       .mockResolvedValueOnce({
         rows: [
@@ -434,31 +571,41 @@ describe("wallet notifications service", () => {
     expect(result.items[0]).toMatchObject({
       actor: {
         fid: null,
+        walletAddress: "0x00000000000000000000000000000000000000dd",
         name: "0x0000...00dd",
       },
       summary: {
         title: "Removal requested for your budget in Alpha.",
         excerpt: "0x0000...00dd requested removal of your budget.",
       },
-      payload: {
+      payload: expect.objectContaining({
         role: "proposer",
         protocol: true,
-        labels: { goalName: "Alpha" },
-        resource: { goalTreasury: "0x00000000000000000000000000000000000000bb" },
+        labels: expect.objectContaining({ goalName: "Alpha" }),
+        resource: expect.objectContaining({
+          goalTreasury: "0x00000000000000000000000000000000000000bb",
+        }),
         actor: { walletAddress: "0x00000000000000000000000000000000000000dd" },
         schedule: {
           deliverAt: "2026-03-08T12:00:00.000Z",
+          votingStartAt: null,
+          votingEndAt: null,
+          revealEndAt: null,
         },
         amounts: {
-          claimable: 7,
+          allocatedStake: null,
+          claimable: "7",
+          claimedAmount: null,
           snapshotWeight: "9007199254740993",
+          snapshotVotes: null,
+          slashWeight: null,
         },
         amount: "9007199254740993",
         nested: {
           when: "2026-03-08T12:00:00.000Z",
-          entries: ["ok", 7],
+          entries: ["ok", "7"],
         },
-      },
+      }),
     });
   });
 
@@ -539,7 +686,7 @@ describe("wallet notifications service", () => {
     });
     expect(result.unread).toEqual({
       count: 0,
-      watermark: "0",
+      watermark: "0:0",
     });
     expect(result.items[0]).toMatchObject({
       kind: "payment",
@@ -555,7 +702,7 @@ describe("wallet notifications service", () => {
         sourceType: "protocol",
         appPath: null,
       },
-      payload: { protocol: true },
+      payload: null,
     });
   });
 
@@ -571,7 +718,7 @@ describe("wallet notifications service", () => {
     });
     mocks.execute
       .mockResolvedValueOnce({
-        rows: [{ count: "1", watermark: "1741435200000001" }],
+        rows: [{ count: "1", watermark: "1741435200000001:12" }],
       })
       .mockResolvedValueOnce({
         rows: [],
@@ -593,6 +740,10 @@ describe("wallet notifications service", () => {
 
     expect(unreadQuery.sql).toContain("notification.kind IN (");
     expect(unreadQuery.sql).toContain("notification.created_at > state.last_read_at");
+    expect(unreadQuery.sql).toContain(
+      "notification.id > COALESCE(state.last_read_notification_id, 0)",
+    );
+    expect(unreadQuery.sql).toContain("SELECT cursor");
     expect(unreadQuery.sql).not.toContain("notification.event_at IS NULL");
     expect(unreadQuery.params).toContain("payment");
 
@@ -625,5 +776,95 @@ describe("wallet notifications service", () => {
       }),
     ).rejects.toBeInstanceOf(WalletNotificationsSubjectRequiredError);
     expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it("maps scheduled juror protocol notifications through the shared presenter", async () => {
+    const subjectWalletAddress = "0x0000000000000000000000000000000000000001";
+    const goalTreasury = "0x00000000000000000000000000000000000000bb";
+    const budgetTreasury = "0x00000000000000000000000000000000000000cc";
+    const arbitrator = "0x00000000000000000000000000000000000000dd";
+
+    mocks.requestContextGet.mockImplementation((key: string) => {
+      if (key === "toolsPrincipal") {
+        return {
+          ownerAddress: subjectWalletAddress,
+          agentKey: "forecast-bot",
+        };
+      }
+      return undefined;
+    });
+    mocks.execute
+      .mockResolvedValueOnce({
+        rows: [{ count: "1", watermark: "1741435200000001:44" }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 44n,
+            kind: "protocol",
+            reason: "juror_voting_open",
+            eventAt: "2026-03-08T12:00:03.123456Z",
+            eventAtCursor: "2026-03-08T12:00:03.123456Z",
+            createdAt: "2026-03-08T12:00:06.123456Z",
+            createdAtCursor: "2026-03-08T12:00:06.123456Z",
+            isUnread: true,
+            sourceType: "juror_dispute_phase",
+            sourceId: `${arbitrator}:7:juror_voting_open`,
+            sourceHashHex: null,
+            rootHashHex: null,
+            targetHashHex: null,
+            actorFid: null,
+            actorWalletAddress: null,
+            actorUsername: null,
+            actorDisplayName: null,
+            actorAvatarUrl: null,
+            sourceText: null,
+            rootText: null,
+            payload: {
+              labels: { goalName: "Alpha" },
+              resource: {
+                goalTreasury,
+                budgetTreasury,
+                arbitrator,
+                disputeId: "7",
+              },
+              schedule: {
+                deliverAt: "2026-03-08T12:00:00.000Z",
+                votingStartAt: "2026-03-08T12:00:00.000Z",
+                votingEndAt: "2026-03-09T12:00:00.000Z",
+                revealEndAt: "2026-03-10T12:00:00.000Z",
+              },
+            },
+          },
+        ],
+      });
+
+    const result = await listWalletNotifications({
+      limit: 1,
+      unreadOnly: false,
+      kinds: ["protocol"],
+    });
+
+    expect(result.items[0]).toMatchObject({
+      kind: "protocol",
+      reason: "juror_voting_open",
+      summary: {
+        title: "Juror voting opened in Alpha.",
+        excerpt: "Voting is now open on this dispute.",
+      },
+      resource: {
+        sourceType: "juror_dispute_phase",
+        sourceId: `${arbitrator}:7:juror_voting_open`,
+        appPath: `/${goalTreasury}/events?budgetTreasury=${budgetTreasury}&disputeId=7&arbitrator=${arbitrator}&focus=dispute`,
+      },
+      payload: {
+        resource: {
+          goalTreasury,
+          budgetTreasury,
+          arbitrator,
+          disputeId: "7",
+        },
+      },
+    });
   });
 });

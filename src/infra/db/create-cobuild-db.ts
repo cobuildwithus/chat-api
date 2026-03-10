@@ -18,18 +18,17 @@ const logPoolError = (label: string, error: unknown) => {
   console.error(`[db] ${label} pool error`, error);
 };
 
-const applySessionSettings = (label: string, client: { query: (sql: string) => Promise<unknown> }) => {
-  const statements = [
-    `SET statement_timeout = '${STATEMENT_TIMEOUT_MS}ms'`,
-    `SET lock_timeout = '${LOCK_TIMEOUT_MS}ms'`,
-    `SET idle_in_transaction_session_timeout = '${IDLE_IN_TX_TIMEOUT_MS}ms'`,
+function buildStartupOptions(readOnly: boolean): string {
+  const parameters = [
+    `statement_timeout=${STATEMENT_TIMEOUT_MS}`,
+    `lock_timeout=${LOCK_TIMEOUT_MS}`,
+    `idle_in_transaction_session_timeout=${IDLE_IN_TX_TIMEOUT_MS}`,
   ];
-  for (const statement of statements) {
-    void Promise.resolve(client.query(statement)).catch((error) => {
-      console.warn(`[db] ${label} session setting failed`, error);
-    });
+  if (readOnly) {
+    parameters.push("default_transaction_read_only=on");
   }
-};
+  return parameters.map((parameter) => `-c ${parameter}`).join(" ");
+}
 
 const createPool = (
   label: string,
@@ -38,7 +37,11 @@ const createPool = (
   statsIntervalMs: number | null,
   readOnly = false,
 ): Pool => {
-  const pool = new Pool({ connectionString, ...options });
+  const pool = new Pool({
+    connectionString,
+    ...options,
+    options: buildStartupOptions(readOnly),
+  });
   pool.on("error", (error) => logPoolError(label, error));
   if (statsIntervalMs && statsIntervalMs > 0 && process.env.NODE_ENV !== "test") {
     const interval = setInterval(() => {
@@ -49,21 +52,6 @@ const createPool = (
       });
     }, statsIntervalMs);
     interval.unref?.();
-  }
-  if (readOnly) {
-    pool.on("connect", (client) => {
-      applySessionSettings(label, client);
-      void Promise.resolve(
-        client.query("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"),
-      )
-        .catch((error) => {
-          console.warn(`[db] ${label} read-only session setting failed`, error);
-        });
-    });
-  } else {
-    pool.on("connect", (client) => {
-      applySessionSettings(label, client);
-    });
   }
   return pool;
 };

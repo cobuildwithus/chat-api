@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isAddress } from "viem";
+import { AmbiguousGoalRouteLookupError } from "../../domains/protocol/indexed-inspect/resolvers";
 import {
   inspectBudget,
   inspectDispute,
@@ -60,7 +61,12 @@ async function executeGetGoal(
       return failureFromPublicError(name, "toolEntityNotFound", { entityName: "Goal" });
     }
     return success(name, goal, SHORT_PRIVATE_CACHE_CONTROL);
-  } catch {
+  } catch (error) {
+    if (error instanceof AmbiguousGoalRouteLookupError) {
+      return failureFromPublicError(name, "toolIdentifierAmbiguous", {
+        entityName: "Goal",
+      });
+    }
     return failureFromPublicError(name, "toolExecutionFailed");
   }
 }
@@ -124,7 +130,12 @@ async function executeGetStakePosition(
       return failureFromPublicError(name, "toolEntityNotFound", { entityName: "Stake position" });
     }
     return success(name, position, SHORT_PRIVATE_CACHE_CONTROL);
-  } catch {
+  } catch (error) {
+    if (error instanceof AmbiguousGoalRouteLookupError) {
+      return failureFromPublicError(name, "toolIdentifierAmbiguous", {
+        entityName: "Goal",
+      });
+    }
     return failureFromPublicError(name, "toolExecutionFailed");
   }
 }

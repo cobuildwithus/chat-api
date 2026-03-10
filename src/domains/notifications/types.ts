@@ -1,12 +1,11 @@
 export const NOTIFICATION_KINDS = ["discussion", "payment", "protocol"] as const;
 
-export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
+export const LIST_WALLET_NOTIFICATIONS_DEFAULT_LIMIT = 20;
+export const LIST_WALLET_NOTIFICATIONS_LIMIT_MIN = 1;
+export const LIST_WALLET_NOTIFICATIONS_LIMIT_MAX = 50;
+export const LIST_WALLET_NOTIFICATIONS_CURSOR_MAX_LENGTH = 512;
 
-export type WalletNotificationsCursor = {
-  eventAt: string | null;
-  createdAt: string;
-  id: string;
-};
+export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
 export type ListWalletNotificationsInput = {
   limit: number;
@@ -37,6 +36,12 @@ export type WalletNotificationResource = {
   appPath: string | null;
 };
 
+export type PaymentNotificationPayload = {
+  amount: string | null;
+};
+
+export type WalletNotificationPayload = Record<string, unknown> | PaymentNotificationPayload | null;
+
 export type WalletNotificationItem = {
   id: string;
   kind: string;
@@ -47,7 +52,7 @@ export type WalletNotificationItem = {
   actor: WalletNotificationActor | null;
   summary: WalletNotificationSummary;
   resource: WalletNotificationResource;
-  payload: Record<string, unknown> | null;
+  payload: WalletNotificationPayload;
 };
 
 export type WalletNotificationsUnreadState = {

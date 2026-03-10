@@ -55,12 +55,13 @@ const envSchema = z.object({
   COBUILD_AI_CONTEXT_TIMEOUT_MS: optionalPositiveIntSchema,
   PRIVY_APP_ID: z.string().min(1).optional(),
   PRIVY_VERIFICATION_KEY: z.string().min(1).optional(),
-  CHAT_GRANT_SECRET: z.string().min(1),
   DOCS_VECTOR_STORE_ID: z.string().min(1).optional(),
   DEBUG_CHAT: z.string().min(1).optional(),
   DEBUG_HTTP: z.string().min(1).optional(),
   CHAT_ALLOWED_ORIGINS: z.string().min(1).optional(),
+  CHAT_TRUST_PROXY: z.string().min(1).optional(),
   SELF_HOSTED_MODE: z.string().min(1).optional(),
+  SELF_HOSTED_PRODUCTION_ENABLED: z.string().min(1).optional(),
   SELF_HOSTED_DEFAULT_ADDRESS: z.string().min(1).optional(),
   SELF_HOSTED_SHARED_SECRET: z.string().min(1).optional(),
   CHAT_INTERNAL_SERVICE_KEY: z.string().min(1).optional(),
@@ -85,6 +86,7 @@ export type ValidatedEnv = z.infer<typeof envSchema>;
 
 let cachedEnv: Env | null = null;
 let cachedEnvKey: string | null = null;
+let hasWarnedSelfHostedProduction = false;
 const cacheKeys = Object.keys(envSchema.shape) as (keyof Env)[];
 
 function getEnvKey(source: NodeJS.ProcessEnv): string {
@@ -110,6 +112,7 @@ export function getEnv(): Env {
 export function resetEnvCacheForTests(): void {
   cachedEnv = null;
   cachedEnvKey = null;
+  hasWarnedSelfHostedProduction = false;
 }
 
 const DEFAULT_DEV_CLI_JWT_PRIVATE_KEY = [
@@ -133,10 +136,52 @@ function allowDevCliKeyFallback(env: {
   return isTruthy(env.CLI_ALLOW_DEV_KEYS?.toLowerCase());
 }
 
+function isSelfHostedModeEnabled(env: {
+  SELF_HOSTED_MODE?: string;
+}): boolean {
+  return isTruthy(env.SELF_HOSTED_MODE?.toLowerCase());
+}
+
+function isSelfHostedProductionOptInEnabled(env: {
+  SELF_HOSTED_PRODUCTION_ENABLED?: string;
+}): boolean {
+  return isTruthy(env.SELF_HOSTED_PRODUCTION_ENABLED?.toLowerCase());
+}
+
+function warnIfSelfHostedProductionEnabled(env: {
+  NODE_ENV?: string;
+  SELF_HOSTED_MODE?: string;
+  SELF_HOSTED_PRODUCTION_ENABLED?: string;
+}): void {
+  if (env.NODE_ENV !== "production") {
+    return;
+  }
+  if (!isSelfHostedModeEnabled(env) || !isSelfHostedProductionOptInEnabled(env)) {
+    return;
+  }
+  if (hasWarnedSelfHostedProduction || process.env.NODE_ENV === "test") {
+    return;
+  }
+
+  hasWarnedSelfHostedProduction = true;
+  console.warn(
+    "[auth] SELF_HOSTED_MODE is enabled in production. This bypasses Privy and should only run behind your own trusted access controls.",
+  );
+}
+
 export function validateEnvVariables(): ValidatedEnv {
   const env = envSchema.parse(process.env);
   setCachedEnv(env);
-  const selfHosted = isTruthy(env.SELF_HOSTED_MODE?.toLowerCase());
+  const selfHosted = isSelfHostedModeEnabled(env);
+  if (
+    selfHosted &&
+    env.NODE_ENV === "production" &&
+    !isSelfHostedProductionOptInEnabled(env)
+  ) {
+    throw new Error(
+      "Refusing production SELF_HOSTED_MODE without SELF_HOSTED_PRODUCTION_ENABLED=1",
+    );
+  }
   if (selfHosted && !env.SELF_HOSTED_SHARED_SECRET) {
     throw new Error("Missing required env in self-hosted mode: SELF_HOSTED_SHARED_SECRET");
   }
@@ -171,6 +216,7 @@ export function validateEnvVariables(): ValidatedEnv {
   if (env.NODE_ENV === "production" && !env.CLI_JWT_AUDIENCE) {
     throw new Error("Missing required env in production: CLI_JWT_AUDIENCE");
   }
+  warnIfSelfHostedProductionEnabled(env);
   return env;
 }
 
@@ -244,14 +290,6 @@ export function getCobuildAiContextTimeoutMs(): number {
   return env.COBUILD_AI_CONTEXT_TIMEOUT_MS ?? DEFAULT_COBUILD_AI_CONTEXT_TIMEOUT_MS;
 }
 
-export function getChatGrantSecret(): string {
-  const secret = getEnv().CHAT_GRANT_SECRET;
-  if (!secret) {
-    throw new Error("Missing CHAT_GRANT_SECRET");
-  }
-  return secret;
-}
-
 export function getPrivyAppId(): string {
   const appId = getEnv().PRIVY_APP_ID;
   if (!appId) {
@@ -275,8 +313,16 @@ export function isChatDebugEnabled(): boolean {
 }
 
 export function isSelfHostedMode(): boolean {
-  const flag = getEnv().SELF_HOSTED_MODE?.toLowerCase();
-  return isTruthy(flag);
+  return isSelfHostedModeEnabled(getEnv());
+}
+
+export function isSelfHostedModeAllowedAtRuntime(): boolean {
+  const env = getEnv();
+  return !(
+    isSelfHostedModeEnabled(env) &&
+    env.NODE_ENV === "production" &&
+    !isSelfHostedProductionOptInEnabled(env)
+  );
 }
 
 export function getSelfHostedDefaultAddress(): string | null {
@@ -285,6 +331,16 @@ export function getSelfHostedDefaultAddress(): string | null {
 
 export function getSelfHostedSharedSecret(): string | null {
   return getEnv().SELF_HOSTED_SHARED_SECRET ?? null;
+}
+
+export function isTrustedProxyConfigured(): boolean {
+  const raw = getEnv().CHAT_TRUST_PROXY?.trim();
+  if (!raw) {
+    return false;
+  }
+
+  const normalized = raw.toLowerCase();
+  return normalized !== "0" && normalized !== "false" && normalized !== "no";
 }
 
 export function getChatInternalServiceKey(): string | null {

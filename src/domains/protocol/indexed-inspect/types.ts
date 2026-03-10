@@ -50,6 +50,35 @@ export type JurorVoteReceiptRow = typeof jurorVoteReceipt.$inferSelect;
 export type PremiumEscrowRow = typeof premiumEscrow.$inferSelect;
 export type PremiumAccountRow = typeof premiumAccount.$inferSelect;
 
+export type GoalRouteLookupResult =
+  | {
+      kind: "missing";
+      goalRow: null;
+    }
+  | {
+      kind: "ambiguous";
+      goalRow: null;
+      matches: GoalTreasuryRow[];
+    }
+  | {
+      kind: "resolved";
+      goalRow: GoalTreasuryRow;
+    };
+
+export type BudgetGoalContextBundle = {
+  goalContext: GoalContextByBudgetTreasuryRow | null;
+  goalRow: GoalTreasuryRow | null;
+  goalAddress: string | null;
+  deployment: GoalFactoryDeploymentRow | null;
+};
+
+export type PremiumEscrowLookupBundle = {
+  premiumRow: PremiumEscrowRow;
+  stackRow: BudgetStackRow | null;
+  budgetRow: BudgetTreasuryRow | null;
+  budgetAddress: string | null;
+};
+
 export type StakeContext = {
   stakeVaultRow: StakeVaultRow | null;
   goalRow: GoalTreasuryRow | null;

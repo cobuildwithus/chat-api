@@ -21,17 +21,17 @@ Token management routes run `validateChatUser` as `preValidation`.
 
 ## Request Schema Summary
 
-Source: `src/api/chat/schema.ts`.
+Source: route schema modules under `src/api/**/schema.ts`, generated from shared Zod request definitions via `src/api/zod-route-schema.ts`.
 
 ### `POST /api/chat`
 
-- Requires: `id`, `messages[]`, `type`
-- Optional: `clientMessageId`, `data`, `context`
-- Message parts include text/reasoning/file/image/source/tool/data variants.
+- Requires: `chatId`, `clientMessageId`, `userMessage`
+- Optional: `attachments[]`, `context`
+- Header schema includes optional `x-client-device`
 
 ### `POST /api/chat/new`
 
-- Requires: `type`
+- Requires: `type` (`chat-default`)
 - Optional: `data`
 
 ### `GET /api/chats`
@@ -77,10 +77,10 @@ Source: `src/api/chat/schema.ts`.
 
 ## Runtime Response Summary
 
-- `POST /api/chat/new`: `{ chatId, chatGrant }`
+- `POST /api/chat/new`: `{ chatId }`
 - `GET /api/chats`: `{ chats: [...] }`
-- `GET /api/chat/:chatId`: `{ chatId, type, data, messages }` + `x-chat-grant`
-- `POST /api/chat`: streaming SSE response, may include refreshed `x-chat-grant`
+- `GET /api/chat/:chatId`: `{ chatId, type, data, messages }`
+- `POST /api/chat`: streaming SSE response
 - `GET /v1/tools`: `{ tools: ToolMetadata[] }`
 - `GET /v1/tools/:name`: `{ tool: ToolMetadata }` or `404` with `{ error }`
 - `POST /v1/tool-executions`: success `{ ok: true, name, output }`; failure `{ ok: false, name, statusCode, error }`
@@ -96,14 +96,15 @@ Source: `src/api/chat/schema.ts`.
 - Canonical tools auth returns `401` for missing/invalid bearer token.
 - Canonical tool execution returns `403` when the bearer token is missing a tool-specific required scope.
 - `GET /v1/tools/:name` returns `404` with `{ error: "Unknown tool \"...\"." }` when name/alias is not registered.
-- `semantic-search-casts` returns `503` for missing OpenAI config and `502` for upstream embedding failures.
+- Tool/config dependency failures return stable mapped public errors while preserving status codes (`503` for unavailable configuration, `502` for execution failures).
+- Ambiguous indexed goal route identifiers surface as canonical tool execution failures with `409` / `Goal identifier is ambiguous. Use a canonical address instead.`
+- Global `5xx` responses use generic public envelopes in every environment; raw exception names/messages stay in logs only.
 
 ## Schema/Runtime Mismatches (Current)
 
-1. `type` is a free-form string in schema, while runtime agent selection supports only `chat-default`.
-2. `goalAddress` accepts any string in schema; handler applies filter only if value parses as valid address.
-3. Message schema requires message ids, while storage path can generate missing ids.
-4. Request schemas exist, but route response schemas are not defined.
+1. `goalAddress` accepts any string in schema; handler applies filter only if value parses as valid address.
+2. Zod-to-JSON-Schema generation does not encode runtime-only transform/coercion behavior, so routes that rely on those paths need integration coverage.
+3. Request schemas exist, but route response schemas are not defined.
 
 ## Update Rule
 

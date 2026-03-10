@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { getOrSetCachedResultWithLock } from "./cache/cacheResult";
-import { formatErrorMessage } from "./errors";
+import { formatErrorLogMessage, formatErrorMessage } from "./errors";
 import {
   onchainParticipants,
   onchainPayEvents,
@@ -17,6 +17,8 @@ const COBUILD_CHAIN_ID = Number(process.env.COBUILD_CHAIN_ID ?? "8453");
 const COBUILD_PROJECT_ID = Number(process.env.COBUILD_JUICEBOX_PROJECT_ID ?? "6");
 const JB_TOKEN_DECIMALS = 18;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+const MIN_SAFE_INTEGER_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
 
 type WindowStats<T> = {
   last6h: T | null;
@@ -97,10 +99,65 @@ function toFiniteNumber(value: unknown): number | null {
   return asNumber;
 }
 
+function toIntegerString(value: unknown): string | null {
+  if (typeof value === "bigint") {
+    return value.toString();
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+      return null;
+    }
+    return Math.trunc(value).toString();
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return /^-?\d+$/.test(trimmed) ? trimmed : null;
+  }
+  return null;
+}
+
 function fromBaseUnits(value: unknown, decimals: number): number | null {
-  const parsed = toFiniteNumber(value);
-  if (parsed === null) return null;
-  return parsed / Math.pow(10, decimals);
+  const raw = toIntegerString(value);
+  if (raw === null) return null;
+
+  const negative = raw.startsWith("-");
+  const digits = negative ? raw.slice(1) : raw;
+  if (!digits) return null;
+
+  const padded = digits.padStart(decimals + 1, "0");
+  const wholeDigits = decimals > 0 ? padded.slice(0, padded.length - decimals) : padded;
+  const fractionalDigits = decimals > 0 ? padded.slice(-decimals).replace(/0+$/, "") : "";
+  const whole = wholeDigits === "" ? "0" : wholeDigits.replace(/^0+(?=\d)/, "");
+  const wholeValue = BigInt(`${negative ? "-" : ""}${whole}`);
+  if (wholeValue > MAX_SAFE_INTEGER_BIGINT || wholeValue < MIN_SAFE_INTEGER_BIGINT) {
+    return null;
+  }
+
+  const normalized = fractionalDigits
+    ? `${negative ? "-" : ""}${whole}.${fractionalDigits}`
+    : `${negative ? "-" : ""}${whole}`;
+  const asNumber = Number(normalized);
+  return Number.isFinite(asNumber) ? asNumber : null;
+}
+
+function sumBaseUnits(values: unknown[], decimals: number): number | null {
+  let total = 0n;
+  let hasValue = false;
+
+  for (const value of values) {
+    const raw = toIntegerString(value);
+    if (raw === null) {
+      continue;
+    }
+    total += BigInt(raw);
+    hasValue = true;
+  }
+
+  if (!hasValue) {
+    return null;
+  }
+
+  return fromBaseUnits(total, decimals);
 }
 
 function toUsd(value: number | null, priceUsd: number | null): number | null {
@@ -304,14 +361,12 @@ async function deriveCobuildAiContext(): Promise<CobuildAiContextResponse> {
     .orderBy(desc(sql`${onchainParticipants.balance}::numeric`))
     .limit(10);
 
-  const topBalancesTokens = topParticipants
-    .map((row) => fromBaseUnits(row.balance, JB_TOKEN_DECIMALS))
-    .filter((value): value is number => value !== null);
-  const top10Tokens =
-    topBalancesTokens.length > 0
-      ? roundToCents(topBalancesTokens.reduce((sum, value) => sum + value, 0))
-      : null;
-  const top1Tokens = topBalancesTokens.length > 0 ? roundToCents(topBalancesTokens[0]!) : null;
+  const top10TokensRaw = topParticipants.map((row) => row.balance);
+  const top10TokensBase = sumBaseUnits(top10TokensRaw, JB_TOKEN_DECIMALS);
+  const top1TokensBase =
+    topParticipants.length > 0 ? fromBaseUnits(topParticipants[0]?.balance, JB_TOKEN_DECIMALS) : null;
+  const top10Tokens = top10TokensBase !== null ? roundToCents(top10TokensBase) : null;
+  const top1Tokens = top1TokensBase !== null ? roundToCents(top1TokensBase) : null;
   const totalSupply = fromBaseUnits(project.erc20Supply, JB_TOKEN_DECIMALS);
   const top10Share =
     totalSupply !== null && top10Tokens !== null && totalSupply > 0 ? top10Tokens / totalSupply : null;
@@ -511,6 +566,10 @@ export async function getCobuildAiContextSnapshot(): Promise<{
     );
     return { data };
   } catch (error) {
-    return { data: null, error: formatErrorMessage(error) };
+    console.error("Cobuild AI context snapshot error:", formatErrorLogMessage(error));
+    return {
+      data: null,
+      error: formatErrorMessage(error, undefined, "Cobuild AI context unavailable."),
+    };
   }
 }

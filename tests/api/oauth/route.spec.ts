@@ -126,6 +126,7 @@ describe("oauth route handlers", () => {
         access_token: "jwt-access",
         refresh_token: "refresh",
         session_id: "22",
+        can_write: true,
       }),
     );
   });
@@ -158,6 +159,7 @@ describe("oauth route handlers", () => {
         access_token: "jwt-access-next",
         refresh_token: "refresh-next",
         session_id: "33",
+        can_write: false,
       }),
     );
     expect(mocks.rotateCliSessionAndIssueAccessToken).toHaveBeenCalledWith({

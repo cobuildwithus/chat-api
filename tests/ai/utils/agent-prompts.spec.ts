@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { Tool as AITool } from "ai";
 import { getAgentPrompts } from "../../../src/ai/utils/agent-prompts";
 import { getGoalPrompt } from "../../../src/ai/prompts/goal";
-import { cobuildAiContextPrompt } from "../../../src/ai/prompts/cobuild-ai-context";
 import type { Tool as CobuildTool } from "../../../src/ai/tools/tool";
 
 vi.mock("../../../src/ai/prompts/about", () => ({
@@ -16,9 +15,6 @@ vi.mock("../../../src/ai/prompts/bill-of-rights", () => ({
 }));
 vi.mock("../../../src/ai/prompts/goal", () => ({
   getGoalPrompt: vi.fn(async () => ""),
-}));
-vi.mock("../../../src/ai/prompts/cobuild-ai-context", () => ({
-  cobuildAiContextPrompt: vi.fn(async () => "context"),
 }));
 vi.mock("../../../src/ai/prompts/user-data", () => ({
   getUserDataPrompt: vi.fn(async () => "user"),
@@ -45,7 +41,6 @@ describe("getAgentPrompts", () => {
     expect(combined).toContain("rights");
     expect(combined).toContain("persona");
     expect(combined).toContain("tool prompt");
-    expect(combined).toContain("context");
     expect(combined).toContain("# Additional user-provided data");
     expect(combined).toContain("extra");
   });
@@ -63,23 +58,5 @@ describe("getAgentPrompts", () => {
     const contents = prompts.map((p) => p.content);
     expect(contents).toContain("user");
     expect(contents).toContain("goal");
-  });
-
-  it("skips cobuild context prompt when disabled", async () => {
-    const cobuildPromptMock = vi.mocked(cobuildAiContextPrompt);
-    cobuildPromptMock.mockClear();
-
-    const prompts = await getAgentPrompts({
-      personality: "persona",
-      user: null,
-      data: {},
-      tools: [],
-      extraPrompts: [],
-      includeCobuildAiContextPrompt: false,
-    });
-
-    const contents = prompts.map((p) => p.content);
-    expect(contents).not.toContain("context");
-    expect(cobuildPromptMock).not.toHaveBeenCalled();
   });
 });

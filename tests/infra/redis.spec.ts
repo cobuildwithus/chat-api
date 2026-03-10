@@ -102,6 +102,41 @@ describe("redis helpers", () => {
     await expect(withRedisLock("lock-release", async () => "done")).resolves.toBe("done");
   });
 
+  it("acquires and releases semaphore leases", async () => {
+    vi.useFakeTimers();
+    connectMock.mockResolvedValue(client);
+    evalMock.mockResolvedValueOnce([1, 1]).mockResolvedValue(1);
+
+    const { acquireRedisSemaphoreLease } = await import("../../src/infra/redis");
+
+    const lease = await acquireRedisSemaphoreLease("sem-key", {
+      maxCount: 2,
+      ttlMs: 3000,
+      member: "member-1",
+      heartbeatMs: 1000,
+    });
+
+    expect(lease).not.toBeNull();
+    await vi.advanceTimersByTimeAsync(1000);
+    await lease?.release();
+
+    expect(evalMock).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("returns null when semaphore acquisition is denied", async () => {
+    connectMock.mockResolvedValue(client);
+    evalMock.mockResolvedValueOnce([0, 2]);
+
+    const { acquireRedisSemaphoreLease } = await import("../../src/infra/redis");
+    const lease = await acquireRedisSemaphoreLease("sem-key", {
+      maxCount: 1,
+      member: "member-1",
+    });
+
+    expect(lease).toBeNull();
+  });
+
   it("closes redis when open", async () => {
     client.isOpen = true;
     quitMock.mockResolvedValue(undefined);

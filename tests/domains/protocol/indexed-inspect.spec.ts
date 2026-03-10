@@ -38,6 +38,17 @@ describe("indexed protocol inspect", () => {
     expect(mocks.select).not.toHaveBeenCalled();
   });
 
+  it("returns null for other blank protocol inspect identifiers without hitting the database", async () => {
+    await expect(inspectBudget("   ")).resolves.toBeNull();
+    await expect(inspectTcrRequest("   ")).resolves.toBeNull();
+    await expect(inspectDispute("   ")).resolves.toBeNull();
+    await expect(
+      inspectStakePosition("   ", "0x00000000000000000000000000000000000000Bb"),
+    ).resolves.toBeNull();
+    await expect(inspectPremiumEscrow("   ")).resolves.toBeNull();
+    expect(mocks.select).not.toHaveBeenCalled();
+  });
+
   it("inspects goals by address and compacts missing optional indexed state", async () => {
     queueSelectRows(
       [
@@ -289,6 +300,33 @@ describe("indexed protocol inspect", () => {
       },
     });
     expect(mocks.select).toHaveBeenCalledTimes(6);
+  });
+
+  it("throws for ambiguous goal route keys without fanning out into bundle reads", async () => {
+    queueSelectRows([
+      {
+        id: "0xgoal1",
+        canonicalRouteSlug: "alpha",
+        canonicalRouteDomain: "goal-one.cobuild.eth",
+      },
+      {
+        id: "0xgoal2",
+        canonicalRouteSlug: "beta",
+        canonicalRouteDomain: "alpha",
+      },
+    ]);
+
+    await expect(inspectGoal("alpha")).rejects.toThrow(
+      'Goal identifier "alpha" matched multiple canonical routes.',
+    );
+    expect(mocks.select).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns null for missing goal route keys after a single indexed lookup", async () => {
+    queueSelectRows([]);
+
+    await expect(inspectGoal("missing-goal")).resolves.toBeNull();
+    expect(mocks.select).toHaveBeenCalledTimes(1);
   });
 
   it("returns null for non-address, non-recipient budget identifiers without database access", async () => {
@@ -1040,6 +1078,143 @@ describe("indexed protocol inspect", () => {
     expect(mocks.select).toHaveBeenCalledTimes(6);
   });
 
+  it("inspects budget TCR requests through goal-context fallback when the request row omits the goal", async () => {
+    queueSelectRows(
+      [
+        {
+          id: "0xbudgettcr:0xitem:0",
+          tcrAddress: "0xbudgettcr",
+          tcrKind: "budget",
+          itemId: "0xitem",
+          requestIndex: "0",
+          goalTreasury: null,
+          budgetTreasury: "0xbudget",
+          requestType: "registration",
+          requester: "0xrequester",
+          challenger: null,
+          disputeId: null,
+          submittedAt: null,
+          challengedAt: null,
+          txHash: "0xtx",
+          updatedAtTimestamp: null,
+        },
+      ],
+      [
+        {
+          id: "0xbudgettcr:0xitem",
+          currentStatus: 1,
+          evidenceGroupId: null,
+          submitter: "0xsubmitter",
+          latestRequestIndex: "0",
+          goalTreasury: null,
+          budgetTreasury: null,
+        },
+      ],
+      [
+        {
+          id: "0xbudgettcr",
+          goalTreasury: "0xgoal",
+        },
+      ],
+      [
+        {
+          id: "0xbudget",
+          recipientId: "0xitem",
+          childFlow: null,
+          premiumEscrow: null,
+          state: 0,
+          finalized: false,
+        },
+      ],
+      [
+        {
+          id: "0xgoal",
+          goalRevnetId: "55",
+          state: 1,
+          finalized: false,
+          canonicalRouteSlug: "theta",
+          canonicalRouteDomain: null,
+          stakeVault: "0xvault",
+        },
+      ],
+    );
+
+    await expect(inspectTcrRequest("0xBudgetTcr:0xItem:0")).resolves.toMatchObject({
+      identifier: "0xBudgetTcr:0xItem:0",
+      requestId: "0xbudgettcr:0xitem:0",
+      goal: {
+        goalAddress: "0xgoal",
+        goalRevnetId: "55",
+        route: {
+          slug: "theta",
+          domain: null,
+        },
+      },
+      budget: {
+        budgetAddress: "0xbudget",
+        recipientId: "0xitem",
+      },
+      dispute: null,
+      txHash: "0xtx",
+    });
+    expect(mocks.select).toHaveBeenCalledTimes(5);
+  });
+
+  it("returns sparse TCR request context when no goal, budget, or dispute can be derived", async () => {
+    queueSelectRows([
+      {
+        id: "plain-request",
+        tcrAddress: null,
+        tcrKind: null,
+        itemId: null,
+        requestIndex: "0",
+        goalTreasury: null,
+        budgetTreasury: null,
+        requestType: "registration",
+        requester: "0xrequester",
+        challenger: null,
+        disputeId: null,
+        submittedAt: null,
+        challengedAt: null,
+        txHash: null,
+        updatedAtTimestamp: null,
+      },
+    ]);
+
+    await expect(inspectTcrRequest("PLAIN-REQUEST")).resolves.toEqual({
+      identifier: "PLAIN-REQUEST",
+      requestId: "plain-request",
+      requestIndex: "0",
+      requestType: "registration",
+      tcr: {
+        address: null,
+        kind: null,
+      },
+      goal: null,
+      budget: null,
+      item: {
+        itemId: null,
+        currentStatus: null,
+        evidenceGroupId: null,
+        submitter: null,
+        latestRequestIndex: null,
+        latestRequest: false,
+      },
+      actors: {
+        requester: "0xrequester",
+        challenger: null,
+      },
+      dispute: null,
+      timing: {
+        submittedAt: null,
+        challengedAt: null,
+        updatedAt: null,
+      },
+      txHash: null,
+    });
+    expect(mocks.select).toHaveBeenCalledTimes(1);
+  });
+
   it("returns zeroed stake account state when the entity resolves without account rows", async () => {
     queueSelectRows(
       [
@@ -1111,6 +1286,18 @@ describe("indexed protocol inspect", () => {
       juror: null,
     });
     expect(mocks.select).toHaveBeenCalledTimes(4);
+  });
+
+  it("returns null for unresolved non-address stake identifiers after a single goal lookup miss", async () => {
+    queueSelectRows([]);
+
+    await expect(
+      inspectStakePosition(
+        "missing-goal",
+        "0x00000000000000000000000000000000000000Bb",
+      ),
+    ).resolves.toBeNull();
+    expect(mocks.select).toHaveBeenCalledTimes(1);
   });
 
   it("returns synthetic vault state when a goal resolves without a stake vault", async () => {
@@ -1573,5 +1760,200 @@ describe("indexed protocol inspect", () => {
       account: null,
     });
     expect(mocks.select).toHaveBeenCalledTimes(4);
+  });
+
+  it("inspects detached premium escrow state without linked budget or goal context", async () => {
+    queueSelectRows(
+      [],
+      [
+        {
+          id: "0x0000000000000000000000000000000000000fff",
+          budgetTreasury: null,
+          budgetStackId: null,
+          childFlow: null,
+          managerRewardPool: null,
+          baselineReceived: "5",
+          latestDistributedPremium: "1",
+          latestTotalCoverage: "8",
+          latestPremiumIndex: "2",
+          closed: false,
+          finalState: 0,
+          activatedAt: null,
+          closedAt: null,
+          lastIndexedAtTimestamp: null,
+          updatedAtTimestamp: null,
+        },
+      ],
+    );
+
+    await expect(
+      inspectPremiumEscrow("0x0000000000000000000000000000000000000FfF"),
+    ).resolves.toEqual({
+      identifier: "0x0000000000000000000000000000000000000FfF",
+      escrowAddress: "0x0000000000000000000000000000000000000fff",
+      goal: null,
+      budget: null,
+      budgetStack: null,
+      state: {
+        budgetTreasury: null,
+        childFlow: null,
+        managerRewardPool: null,
+        baselineReceived: "5",
+        latestDistributedPremium: "1",
+        latestTotalCoverage: "8",
+        latestPremiumIndex: "2",
+        closed: false,
+        finalState: 0,
+      },
+      timing: {
+        activatedAt: null,
+        closedAt: null,
+        lastIndexedAt: null,
+        updatedAt: null,
+      },
+      account: null,
+    });
+    expect(mocks.select).toHaveBeenCalledTimes(2);
+  });
+
+  it("inspects disputes through mechanism arbitrator context fallback", async () => {
+    queueSelectRows(
+      [
+        {
+          id: "0xarb:12",
+          arbitrator: "0xarb",
+          tcrAddress: null,
+          tcrKind: "mechanism",
+          itemId: null,
+          requestIndex: null,
+          disputeId: "12",
+          currentRound: "0",
+          jurorAddresses: [],
+          budgetTreasury: null,
+          goalTreasury: null,
+          stakeVault: null,
+          ruling: null,
+          choices: null,
+          arbitrationCost: null,
+          extraData: null,
+          creationBlock: null,
+          votingStartTime: null,
+          votingEndTime: null,
+          revealPeriodEndTime: null,
+          executedAt: null,
+          updatedAtTimestamp: null,
+        },
+      ],
+      [],
+      [
+        {
+          goalTreasury: "0xgoal",
+          budgetTreasury: "0xbudget",
+          stakeVault: "0xvault",
+          budgetTcr: "0xmechtcr",
+        },
+      ],
+      [
+        {
+          id: "0xbudget",
+          recipientId: "0xrecipient",
+          childFlow: null,
+          premiumEscrow: null,
+          state: 1,
+          finalized: false,
+        },
+      ],
+      [
+        {
+          id: "0xgoal",
+          goalRevnetId: "88",
+          state: 2,
+          finalized: true,
+          canonicalRouteSlug: "mech-goal",
+          canonicalRouteDomain: null,
+          stakeVault: "0xvault",
+        },
+      ],
+      [],
+    );
+
+    await expect(inspectDispute("0xArb:12")).resolves.toMatchObject({
+      identifier: "0xArb:12",
+      disputeId: "12",
+      arbitrator: "0xarb",
+      goal: {
+        goalAddress: "0xgoal",
+        goalRevnetId: "88",
+        state: "Succeeded",
+        stakeVault: "0xvault",
+      },
+      budget: {
+        budgetAddress: "0xbudget",
+        recipientId: "0xrecipient",
+      },
+      tcr: {
+        address: null,
+        kind: "mechanism",
+        itemId: null,
+      },
+      request: null,
+      juror: null,
+    });
+    expect(mocks.select).toHaveBeenCalledTimes(6);
+  });
+
+  it("returns sparse disputes when no linked goal, budget, or request context can be derived", async () => {
+    queueSelectRows([
+      {
+        id: "0xarb:13",
+        arbitrator: null,
+        tcrAddress: null,
+        tcrKind: null,
+        itemId: null,
+        requestIndex: null,
+        disputeId: "13",
+        currentRound: "0",
+        jurorAddresses: [],
+        budgetTreasury: null,
+        goalTreasury: null,
+        stakeVault: null,
+        ruling: null,
+        choices: null,
+        arbitrationCost: null,
+        extraData: null,
+        creationBlock: null,
+        votingStartTime: null,
+        votingEndTime: null,
+        revealPeriodEndTime: null,
+        executedAt: null,
+        updatedAtTimestamp: null,
+      },
+    ]);
+
+    await expect(inspectDispute("0xArb:13")).resolves.toEqual({
+      identifier: "0xArb:13",
+      disputeId: "13",
+      arbitrator: null,
+      currentRound: "0",
+      jurorCount: 0,
+      ruling: null,
+      choices: null,
+      arbitrationCost: null,
+      extraData: null,
+      creationBlock: null,
+      goal: null,
+      budget: null,
+      tcr: null,
+      request: null,
+      timing: {
+        votingStartAt: null,
+        votingEndAt: null,
+        revealEndAt: null,
+        executedAt: null,
+        updatedAt: null,
+      },
+      juror: null,
+    });
+    expect(mocks.select).toHaveBeenCalledTimes(1);
   });
 });

@@ -20,13 +20,3 @@ export async function getToolPrompts(tools: Tool[]): Promise<SystemModelMessage[
     ),
   );
 }
-
-export function clonePromptList(prompts: SystemModelMessage[]): SystemModelMessage[] {
-  if (prompts.length === 0) return prompts;
-
-  const lastIndex = prompts.length - 1;
-  // v5: provider metadata moved to providerOptions on the request; keep prompts as pure system messages
-  prompts[lastIndex] = { ...prompts[lastIndex] };
-
-  return prompts;
-}

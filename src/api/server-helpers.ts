@@ -35,7 +35,6 @@ const SENSITIVE_HEADERS = new Set([
   "set-cookie",
   "privy-id-token",
   "x-chat-auth",
-  "x-chat-grant",
   "x-chat-internal-key",
 ]);
 
@@ -85,14 +84,13 @@ export function handleError(error: unknown, request: RequestDetails, reply: Repl
   const statusCode =
     typeof errorDetails.statusCode === "number" ? errorDetails.statusCode : 500;
   const requestId = typeof request.id === "string" ? request.id : undefined;
-  const isProd = process.env.NODE_ENV === "production";
   const isServerError = statusCode >= 500;
   const defaultName = "Internal Server Error";
   const defaultMessage = "An unexpected error occurred";
   const publicErrorName =
-    isProd && isServerError ? defaultName : (errorDetails.name ?? defaultName);
+    isServerError ? defaultName : (errorDetails.name ?? defaultName);
   const publicMessage =
-    isProd && isServerError ? defaultName : (errorDetails.message ?? defaultMessage);
+    isServerError ? defaultName : (errorDetails.message ?? defaultMessage);
 
   console.error("Error handler triggered:", {
     requestId,

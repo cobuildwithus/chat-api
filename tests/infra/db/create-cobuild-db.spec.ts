@@ -4,13 +4,15 @@ import { bootstrapCobuildDb, createCobuildDbResources } from "../../../src/infra
 const { poolInstances, PoolMock, drizzleMock, withReplicasMock } = vi.hoisted(() => {
   type PoolInstance = {
     connectionString: string;
+    options?: string;
     on: ReturnType<typeof vi.fn>;
     end: ReturnType<typeof vi.fn>;
   };
   const poolInstances: PoolInstance[] = [];
-  const PoolMock = vi.fn().mockImplementation((opts: { connectionString: string }) => {
+  const PoolMock = vi.fn().mockImplementation((opts: { connectionString: string; options?: string }) => {
     const pool: PoolInstance = {
       connectionString: opts.connectionString,
+      options: opts.options,
       on: vi.fn(),
       end: vi.fn().mockResolvedValue(undefined),
     };
@@ -62,7 +64,11 @@ describe("bootstrapCobuildDb", () => {
 
     const result = bootstrapCobuildDb({ primaryUrl: "pg://primary", replicaUrls: [] });
 
-    expect(PoolMock).toHaveBeenCalledWith({ connectionString: "pg://primary" });
+    expect(PoolMock).toHaveBeenCalledWith({
+      connectionString: "pg://primary",
+      options:
+        "-c statement_timeout=10000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=60000",
+    });
     expect(withReplicasMock).toHaveBeenCalledWith(primaryDb, [primaryDb]);
     expect(result).toEqual({ primary: primaryDb, replicas: [primaryDb] });
   });
@@ -77,8 +83,16 @@ describe("bootstrapCobuildDb", () => {
       replicaUrls: ["pg://replica"],
     });
 
-    expect(PoolMock).toHaveBeenCalledWith({ connectionString: "pg://primary" });
-    expect(PoolMock).toHaveBeenCalledWith({ connectionString: "pg://replica" });
+    expect(PoolMock).toHaveBeenCalledWith({
+      connectionString: "pg://primary",
+      options:
+        "-c statement_timeout=10000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=60000",
+    });
+    expect(PoolMock).toHaveBeenCalledWith({
+      connectionString: "pg://replica",
+      options:
+        "-c statement_timeout=10000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=60000 -c default_transaction_read_only=on",
+    });
     expect(result).toEqual({ primary: primaryDb, replicas: [replicaDb] });
   });
 
@@ -96,9 +110,10 @@ describe("bootstrapCobuildDb", () => {
       max: 20,
       idleTimeoutMillis: 5000,
       connectionTimeoutMillis: 2000,
+      options:
+        "-c statement_timeout=10000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=60000",
     });
     expect(poolInstances[0]?.on).toHaveBeenCalledWith("error", expect.any(Function));
-    expect(poolInstances[0]?.on).toHaveBeenCalledWith("connect", expect.any(Function));
   });
 
   it("registers replica read-only handlers and pool stats when enabled", () => {
@@ -121,31 +136,23 @@ describe("bootstrapCobuildDb", () => {
       replicaUrls: ["pg://replica"],
     });
 
-    expect(poolInstances[1]?.on).toHaveBeenCalledWith("connect", expect.any(Function));
-    expect(poolInstances[0]?.on).toHaveBeenCalledWith("connect", expect.any(Function));
     expect(setIntervalSpy).toHaveBeenCalledTimes(2);
     unrefMocks.forEach((mock) => expect(mock).toHaveBeenCalledTimes(1));
     setIntervalSpy.mockRestore();
   });
 
-  it("applies session timeouts on connect", () => {
+  it("applies session timeouts through connection startup options", () => {
     const primaryDb = { id: "primary" };
     drizzleMock.mockReturnValueOnce(primaryDb);
 
     bootstrapCobuildDb({ primaryUrl: "pg://primary", replicaUrls: [] });
 
-    const connectHandler = poolInstances[0]?.on.mock.calls.find(
-      ([event]) => event === "connect",
-    )?.[1];
-    const query = vi.fn();
-    connectHandler?.({ query });
-
-    expect(query).toHaveBeenCalledWith("SET statement_timeout = '10000ms'");
-    expect(query).toHaveBeenCalledWith("SET lock_timeout = '2000ms'");
-    expect(query).toHaveBeenCalledWith("SET idle_in_transaction_session_timeout = '60000ms'");
+    expect(poolInstances[0]?.options).toBe(
+      "-c statement_timeout=10000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=60000",
+    );
   });
 
-  it("applies read-only and session settings for replica pools", () => {
+  it("applies read-only startup options for replica pools", () => {
     const primaryDb = { id: "primary" };
     const replicaDb = { id: "replica" };
     drizzleMock.mockReturnValueOnce(primaryDb).mockReturnValueOnce(replicaDb);
@@ -155,16 +162,9 @@ describe("bootstrapCobuildDb", () => {
       replicaUrls: ["pg://replica"],
     });
 
-    const connectHandler = poolInstances[1]?.on.mock.calls.find(
-      ([event]) => event === "connect",
-    )?.[1];
-    const query = vi.fn();
-    connectHandler?.({ query });
-
-    expect(query).toHaveBeenCalledWith("SET statement_timeout = '10000ms'");
-    expect(query).toHaveBeenCalledWith("SET lock_timeout = '2000ms'");
-    expect(query).toHaveBeenCalledWith("SET idle_in_transaction_session_timeout = '60000ms'");
-    expect(query).toHaveBeenCalledWith("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY");
+    expect(poolInstances[1]?.options).toBe(
+      "-c statement_timeout=10000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=60000 -c default_transaction_read_only=on",
+    );
   });
 
   it("throws when replica drizzle returns undefined", () => {
