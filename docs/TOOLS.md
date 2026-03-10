@@ -1,6 +1,6 @@
 # Tools
 
-Canonical REST tools are registered in `src/api/tools/registry.ts`.
+Canonical REST tools are implemented in `src/tools/registry.ts`.
 Model-invokable AI wrappers are registered statically in `src/ai/tools/index.ts`.
 Each AI wrapper lives in its own folder with a `tool.ts` (and optionally a `prompt.ts`).
 See [README.md](../README.md) for setup and [ARCHITECTURE.md](../ARCHITECTURE.md) for the module map.
@@ -37,12 +37,17 @@ export const myTool = {
 
 ## Registering a tool
 
-Register the canonical tool in `src/api/tools/registry.ts`, then add an AI wrapper in `src/ai/tools/index.ts` if the model should invoke it directly.
+Register the canonical tool in `src/tools/registry.ts`, then add an AI wrapper in `src/ai/tools/index.ts` if the model should invoke it directly.
 Keep the order stable unless behavior explicitly needs to change.
 
 Example canonical-only CLI tool:
 - `get-wallet-balances` (aliases: `getWalletBalances`, `walletBalances`) is exposed via `/v1/tool-executions` for CLI balance reads and is not registered as a model wrapper.
+- `get-wallet-balances` currently supports `base` only for protocol-adjacent wallet reads.
 - `list-wallet-notifications` (aliases: `listWalletNotifications`, `walletNotifications`) is exposed via `/v1/tool-executions` for subject-wallet inbox reads and is not registered as a model wrapper.
+
+Example canonical + AI-wrapper inspect tools:
+- `get-goal` (aliases: `getGoal`, `goal.inspect`) reads indexed scaffold tables directly and returns concise goal, treasury, route, flow, stake, governance, and budget summary data.
+- `get-budget` (aliases: `getBudget`, `budget.inspect`) reads indexed scaffold tables directly and returns concise budget, parent-goal, treasury, flow, and governance data.
 
 ## Prompt guidance
 

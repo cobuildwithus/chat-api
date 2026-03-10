@@ -1,10 +1,11 @@
 import { eq, sql } from "drizzle-orm";
-import { base, baseSepolia } from "viem/chains";
+import { base } from "viem/chains";
 import {
   InvalidWalletNotificationsCursorError,
   WalletNotificationsSubjectRequiredError,
   listWalletNotifications,
 } from "../domains/notifications/service";
+import { inspectBudget, inspectGoal } from "../domains/protocol/indexed-inspect";
 import { NOTIFICATION_KINDS } from "../domains/notifications/types";
 import { getToolsPrincipalFromContext } from "../domains/notifications/wallet-subject";
 import {
@@ -63,15 +64,12 @@ const SEMANTIC_LIMIT_MAX = 25;
 const ENABLE_CLI_DOCS_SEARCH_ENV = "ENABLE_CLI_DOCS_SEARCH";
 const ENABLE_CLI_GET_CAST_ENV = "ENABLE_CLI_GET_CAST";
 const BASE_RPC_URL_ENV = "COBUILD_BASE_RPC_URL";
-const BASE_SEPOLIA_RPC_URL_ENV = "COBUILD_BASE_SEPOLIA_RPC_URL";
 
 const DEFAULT_BASE_RPC_URL = "https://mainnet.base.org";
-const DEFAULT_BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org";
 const RPC_TIMEOUT_MS = 7_000;
 const RPC_RETRY_COUNT = 1;
 const USDC_DECIMALS = 6;
 const BASE_USDC_CONTRACT = "0x833589fCD6EDB6E08F4C7C32D4F71B54BDA02913" as Address;
-const BASE_SEPOLIA_USDC_CONTRACT = "0x036CbD53842c5426634e7929541eC2318f3dCf7e" as Address;
 
 const ERROR_MAX_LENGTH = 140;
 const SNIPPET_MAX_LENGTH = 420;
@@ -86,7 +84,7 @@ type JsonSchema = Record<string, unknown>;
 
 type DiscussionSort = "last" | "replies" | "views";
 type DiscussionSortDirection = "asc" | "desc";
-type WalletBalanceNetwork = "base" | "base-sepolia";
+type WalletBalanceNetwork = "base";
 
 export type ToolSideEffects = "none" | "read" | "network-read" | "network-write";
 export type ToolWriteCapability = "none" | "requires-tools-write";
@@ -493,7 +491,12 @@ function formatToolInputError(toolName: string, error: z.ZodError): string {
   if (toolName === "get-wallet-balances") {
     if (field === "agentKey" && issue.code === "invalid_type") return "agentKey must be a string.";
     if (field === "agentKey" && issue.code === "too_small") return "agentKey must not be empty.";
-    if (field === "network") return 'network must be either "base" or "base-sepolia".';
+    if (field === "network") return 'network must be "base".';
+  }
+
+  if (toolName === "get-goal" || toolName === "get-budget") {
+    if (field === "identifier" && issue.code === "invalid_type") return "identifier must be a string.";
+    if (field === "identifier" && issue.code === "too_small") return "identifier must not be empty.";
   }
 
   if (toolName === "list-wallet-notifications") {
@@ -593,7 +596,13 @@ const semanticSearchCastsInputSchema = z.object({
 }).strict();
 const getWalletBalancesInputSchema = z.object({
   agentKey: z.string().trim().min(1).max(128).optional(),
-  network: z.enum(["base", "base-sepolia"]).default("base"),
+  network: z.literal("base").default("base"),
+}).strict();
+const getGoalInputSchema = z.object({
+  identifier: z.string().trim().min(1).max(255),
+}).strict();
+const getBudgetInputSchema = z.object({
+  identifier: z.string().trim().min(1).max(255),
 }).strict();
 const listWalletNotificationsInputSchema = z.object({
   limit: z.number().int().min(1).max(50).default(20),
@@ -608,19 +617,12 @@ const docsSearchInputSchema = z.object({
 }).strict();
 
 function getWalletBalanceRpcUrl(network: WalletBalanceNetwork): string {
-  const envName = network === "base" ? BASE_RPC_URL_ENV : BASE_SEPOLIA_RPC_URL_ENV;
-  const fallback = network === "base" ? DEFAULT_BASE_RPC_URL : DEFAULT_BASE_SEPOLIA_RPC_URL;
+  const envName = BASE_RPC_URL_ENV;
+  const fallback = DEFAULT_BASE_RPC_URL;
   return asString(process.env[envName]) ?? fallback;
 }
 
 function getWalletBalanceNetworkConfig(network: WalletBalanceNetwork) {
-  if (network === "base-sepolia") {
-    return {
-      chain: baseSepolia,
-      rpcUrl: getWalletBalanceRpcUrl(network),
-      usdcAddress: BASE_SEPOLIA_USDC_CONTRACT,
-    };
-  }
   return {
     chain: base,
     rpcUrl: getWalletBalanceRpcUrl(network),
@@ -709,6 +711,38 @@ async function executeGetWalletBalances(
     );
   } catch (error) {
     return failure(name, 502, `get-wallet-balances request failed: ${formatErrorMessage(error)}`);
+  }
+}
+
+async function executeGetGoal(
+  input: z.infer<typeof getGoalInputSchema>,
+): Promise<ToolExecutionResult> {
+  const name = "get-goal";
+
+  try {
+    const goal = await inspectGoal(input.identifier);
+    if (!goal) {
+      return failure(name, 404, "Goal not found.");
+    }
+    return success(name, goal, SHORT_PRIVATE_CACHE_CONTROL);
+  } catch (error) {
+    return failure(name, 502, `get-goal request failed: ${formatErrorMessage(error)}`);
+  }
+}
+
+async function executeGetBudget(
+  input: z.infer<typeof getBudgetInputSchema>,
+): Promise<ToolExecutionResult> {
+  const name = "get-budget";
+
+  try {
+    const budget = await inspectBudget(input.identifier);
+    if (!budget) {
+      return failure(name, 404, "Budget not found.");
+    }
+    return success(name, budget, SHORT_PRIVATE_CACHE_CONTROL);
+  } catch (error) {
+    return failure(name, 502, `get-budget request failed: ${formatErrorMessage(error)}`);
   }
 }
 
@@ -1594,6 +1628,97 @@ const RAW_TOOL_DEFINITIONS: RawRegisteredTool[] = [
     version: "1.0.0",
     deprecated: false,
     execute: executeGetWalletBalances,
+  },
+  {
+    name: "get-goal",
+    aliases: ["getGoal", "goal.inspect"],
+    description: "Inspect indexed goal state by goal treasury address or canonical route identifier.",
+    input: getGoalInputSchema,
+    outputSchema: {
+      type: "object",
+      required: [
+        "identifier",
+        "goalAddress",
+        "goalRevnetId",
+        "state",
+        "stateCode",
+        "finalized",
+        "project",
+        "route",
+        "flow",
+        "stakeVault",
+        "budgetTcr",
+        "treasury",
+        "budgets",
+      ],
+      properties: {
+        identifier: { type: "string" },
+        goalAddress: { type: "string" },
+        goalRevnetId: { anyOf: [{ type: "string" }, { type: "null" }] },
+        state: { anyOf: [{ type: "string" }, { type: "null" }] },
+        stateCode: { anyOf: [{ type: "number" }, { type: "null" }] },
+        finalized: { type: "boolean" },
+        project: { anyOf: [{ type: "object" }, { type: "null" }] },
+        route: { anyOf: [{ type: "object" }, { type: "null" }] },
+        flow: { anyOf: [{ type: "object" }, { type: "null" }] },
+        stakeVault: { anyOf: [{ type: "object" }, { type: "null" }] },
+        budgetTcr: { anyOf: [{ type: "string" }, { type: "null" }] },
+        treasury: { type: "object" },
+        governance: { type: "object" },
+        timing: { type: "object" },
+        budgets: { type: "object" },
+      },
+      additionalProperties: false,
+    },
+    scopes: ["cli-tools", "protocol"],
+    sideEffects: "read",
+    writeCapability: "none",
+    version: "1.0.0",
+    deprecated: false,
+    execute: executeGetGoal,
+  },
+  {
+    name: "get-budget",
+    aliases: ["getBudget", "budget.inspect"],
+    description: "Inspect indexed budget state by budget treasury address or recipient id.",
+    input: getBudgetInputSchema,
+    outputSchema: {
+      type: "object",
+      required: [
+        "identifier",
+        "budgetAddress",
+        "recipientId",
+        "goalAddress",
+        "budgetTcr",
+        "state",
+        "stateCode",
+        "finalized",
+        "treasury",
+        "flow",
+        "governance",
+      ],
+      properties: {
+        identifier: { type: "string" },
+        budgetAddress: { type: "string" },
+        recipientId: { anyOf: [{ type: "string" }, { type: "null" }] },
+        goalAddress: { anyOf: [{ type: "string" }, { type: "null" }] },
+        budgetTcr: { anyOf: [{ type: "string" }, { type: "null" }] },
+        state: { anyOf: [{ type: "string" }, { type: "null" }] },
+        stateCode: { anyOf: [{ type: "number" }, { type: "null" }] },
+        finalized: { type: "boolean" },
+        treasury: { type: "object" },
+        flow: { anyOf: [{ type: "object" }, { type: "null" }] },
+        governance: { type: "object" },
+        timing: { type: "object" },
+      },
+      additionalProperties: false,
+    },
+    scopes: ["cli-tools", "protocol"],
+    sideEffects: "read",
+    writeCapability: "none",
+    version: "1.0.0",
+    deprecated: false,
+    execute: executeGetBudget,
   },
   {
     name: "list-wallet-notifications",

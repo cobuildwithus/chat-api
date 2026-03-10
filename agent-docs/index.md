@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-09 (wallet notifications tooling + review-fix follow-up)
+Last verified: 2026-03-10 (indexed goal/budget inspect tools)
 
 ## Purpose
 
@@ -18,7 +18,7 @@ This index is the table of contents for durable, repository-local context that a
 | `agent-docs/references/README.md` | Overview of internal and external reference packs. | `agent-docs/references/**` | Chat API Maintainer | Monthly | Medium | 2026-02-25 |
 | `agent-docs/references/api-contracts.md` | Route schemas, runtime responses, and schema/runtime gaps. | `src/api/**/schema.ts`, handlers | Chat API Maintainer | Per route/schema change | High | 2026-03-09 |
 | `agent-docs/references/runtime-ai-flow.md` | End-to-end request -> agent -> stream execution flow. | `src/api/chat/**`, `src/ai/**` | Chat API Maintainer | Per runtime flow change | High | 2026-03-02 |
-| `agent-docs/references/tool-catalog.md` | Tool-by-tool contract, dependencies, and failure behavior. | `src/tools/registry.ts`, `src/domains/notifications/**`, `src/ai/tools/**`, `src/infra/**` | Chat API Maintainer | Per tool behavior change | High | 2026-03-09 |
+| `agent-docs/references/tool-catalog.md` | Tool-by-tool contract, dependencies, and failure behavior. | `src/tools/registry.ts`, `src/domains/notifications/**`, `src/domains/protocol/**`, `src/ai/tools/**`, `src/infra/**` | Chat API Maintainer | Per tool behavior change | High | 2026-03-10 |
 | `agent-docs/references/data-infra-map.md` | Postgres/Redis/cache/timeout architecture and invariants. | `src/infra/**`, `src/config/env.ts` | Chat API Maintainer | Per infra/config change | High | 2026-03-03 |
 | `agent-docs/references/testing-ci-map.md` | Verification and CI/local enforcement map, including published-wire dependency guards. | `package.json`, `.github/workflows/**`, scripts | Chat API Maintainer | Per CI/process change | Medium | 2026-03-07 |
 | `agent-docs/references/fastify-llms.txt` | External Fastify reference pack for framework-specific implementation details. | Fastify upstream docs snapshot | Chat API Maintainer | When runtime framework guidance changes | Low | 2026-03-05 |

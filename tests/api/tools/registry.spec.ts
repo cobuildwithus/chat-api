@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   executeTool,
   listToolMetadata,
+  resolveToolAuthPolicy,
   requiresWriteScopeForMetadata,
   requiresWriteScopeForTool,
   resolveToolMetadata,
@@ -29,6 +30,10 @@ describe("tool registry", () => {
   it("resolves metadata for aliases", () => {
     expect(resolveToolMetadata("getUser")?.name).toBe("get-user");
     expect(resolveToolMetadata("GETUSER")?.name).toBe("get-user");
+    expect(resolveToolMetadata("getGoal")?.name).toBe("get-goal");
+    expect(resolveToolMetadata("goal.inspect")?.name).toBe("get-goal");
+    expect(resolveToolMetadata("getBudget")?.name).toBe("get-budget");
+    expect(resolveToolMetadata("budget.inspect")?.name).toBe("get-budget");
     expect(resolveToolMetadata("docs.search")?.name).toBe("docs-search");
     expect(resolveToolMetadata("getWalletBalances")?.name).toBe("get-wallet-balances");
     expect(resolveToolMetadata("walletBalances")?.name).toBe("get-wallet-balances");
@@ -48,6 +53,18 @@ describe("tool registry", () => {
       requiredScopes: ["tools:read", "notifications:read"],
       walletBinding: "subject-wallet",
     });
+  });
+
+  it("resolves auth policy metadata for indexed inspect tools", () => {
+    expect(resolveToolAuthPolicy("get-goal")).toEqual({
+      requiredScopes: ["tools:read"],
+      walletBinding: "none",
+    });
+    expect(resolveToolAuthPolicy("get-budget")).toEqual({
+      requiredScopes: ["tools:read"],
+      walletBinding: "none",
+    });
+    expect(resolveToolAuthPolicy("missing-tool")).toBeNull();
   });
 
   it("does not resolve removed treasury compatibility aliases", () => {

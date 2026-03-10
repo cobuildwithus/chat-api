@@ -28,6 +28,8 @@ describe("tools index", () => {
     expect(module.defaultTools.some((tool) => tool.name === "list-wallet-notifications")).toBe(false);
     expect(fileSearch).toHaveBeenCalledWith({ vectorStoreIds: ["vector-store"], maxNumResults: 8 });
     expect(module.toolsByName.getUser).toBeDefined();
+    expect(module.toolsByName.getGoal).toBeDefined();
+    expect(module.toolsByName.getBudget).toBeDefined();
     expect(module.toolsByName.listDiscussions).toBeDefined();
     expect(module.toolsByName.getDiscussionThread).toBeDefined();
     expect(module.toolsByName.semanticSearchCasts).toBeDefined();
@@ -37,5 +39,7 @@ describe("tools index", () => {
     const { module } = await setup(undefined);
     expect(module.defaultTools.some((tool) => tool.name === "file_search")).toBe(false);
     expect(module.defaultTools.some((tool) => tool.name === "list-wallet-notifications")).toBe(false);
+    expect(module.defaultTools.some((tool) => tool.name === "getGoal")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getBudget")).toBe(true);
   });
 });

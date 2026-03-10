@@ -1,7 +1,7 @@
 # Tool Catalog Reference
 
 Source registries:
-- Canonical REST tools: `src/api/tools/registry.ts`
+- Canonical REST tools: `src/tools/registry.ts` (re-exported by `src/api/tools/registry.ts`)
 - AI wrappers: `src/ai/tools/index.ts`
 
 ## `getUser`
@@ -53,12 +53,30 @@ Source registries:
 - Purpose: fetch the latest treasury stats snapshot.
 - Dependencies: treasury stats snapshot service.
 
+## `getGoal`
+
+- Canonical name: `get-goal`
+- Canonical aliases: `getGoal`, `goal.inspect`
+- AI wrapper: `getGoal`
+- Purpose: inspect indexed goal state by goal treasury address, canonical route slug, or canonical route domain.
+- Output: concise DB-derived goal summary including `goalAddress`, `goalRevnetId`, lifecycle state/finalization, canonical project/route linkage, flow/stake relationships, treasury summary, governance linkage, and a compact budgets summary.
+- Dependencies: `cobuild-onchain.goal_treasury`, `goal_factory_deployment`, `goal_context_by_budget_treasury`, `budget_treasury`, `flow_recipient`, `stake_vault`.
+
+## `getBudget`
+
+- Canonical name: `get-budget`
+- Canonical aliases: `getBudget`, `budget.inspect`
+- AI wrapper: `getBudget`
+- Purpose: inspect indexed budget state by budget treasury address or recipient id.
+- Output: concise DB-derived budget summary including `budgetAddress`, `recipientId`, parent `goalAddress`, `budgetTcr`, lifecycle state/finalization, treasury summary, flow linkage, and governance/premium linkage.
+- Dependencies: `cobuild-onchain.budget_treasury`, `goal_context_by_budget_treasury`, `goal_treasury`, `goal_factory_deployment`, `flow_recipient`, `premium_escrow`.
+
 ## `get-wallet-balances`
 
 - Canonical name: `get-wallet-balances`
 - Canonical aliases: `getWalletBalances`, `walletBalances`
 - Purpose: fetch ETH + USDC balances for the authenticated CLI wallet.
-- Dependencies: Base/Base Sepolia JSON-RPC + USDC ERC-20 `balanceOf`.
+- Dependencies: Base JSON-RPC + USDC ERC-20 `balanceOf`.
 - Cache: lock-backed Redis cache (30s TTL), keyed by `<network>:<wallet>`.
 
 ## `list-wallet-notifications`

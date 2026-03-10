@@ -315,6 +315,444 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("executes get-goal from indexed scaffold tables", async () => {
+    queueSelectRows(
+      [
+        {
+          id: "0xgoal",
+          owner: "0xowner",
+          flowAddress: "0xflow",
+          budgetStakeLedger: "0xstakeledger",
+          goalToken: "0xgoaltoken",
+          cobuildToken: "0xcobuildtoken",
+          stakeVault: "0xstakevault",
+          hook: "0xhook",
+          successResolver: "0xresolver",
+          goalRevnetId: "42",
+          canonicalProjectChainId: 8453,
+          canonicalProjectId: 77,
+          canonicalRouteSlug: "alpha",
+          canonicalRouteDomain: "alpha.cobuild.eth",
+          minRaiseDeadline: "1710000000",
+          deadline: "1711000000",
+          minRaise: "1000000",
+          strategy: "0xstrategy",
+          parentFlow: "0xparentflow",
+          state: 1,
+          finalized: false,
+          successAssertionRegisteredAt: "1710500000",
+          reassertGraceDeadline: "1710600000",
+          jurorSlasher: "0xjurorslasher",
+          underwriterSlasher: "0xunderwriterslasher",
+          successAt: "1710700000",
+          lastSyncedTargetRate: "12",
+          lastSyncedAppliedRate: "10",
+          lastSyncedTreasuryBalance: "900",
+          lastSyncedTimeRemaining: "86400",
+          lastResidualFinalState: 2,
+          lastResidualSettledAmount: "30",
+          lastResidualControllerBurnAmount: "7",
+          createdAtTimestamp: "1709000000",
+          updatedAtTimestamp: "1710800000",
+        },
+      ],
+      [
+        {
+          goalTreasury: "0xgoal",
+          budgetTcr: "0xbudgettcr",
+          arbitrator: "0xarbitrator",
+          txHash: "0xtx",
+        },
+      ],
+      [
+        { id: "0xbudget1", goalTreasury: "0xgoal" },
+        { id: "0xbudget2", goalTreasury: "0xgoal" },
+      ],
+      [
+        {
+          id: "0xrecipient1",
+          flowId: "0xflow",
+          budgetTreasury: "0xbudget1",
+          recipient: "0xteam1",
+          recipientIndex: 1,
+          title: "Ops",
+          tagline: "Keep the lights on",
+          isRemoved: false,
+        },
+        {
+          id: "0xrecipient2",
+          flowId: "0xflow",
+          budgetTreasury: "0xbudget2",
+          recipient: "0xteam2",
+          recipientIndex: 2,
+          title: "Growth",
+          tagline: "Find demand",
+          isRemoved: true,
+        },
+      ],
+      [
+        {
+          id: "0xstakevault",
+          resolved: false,
+          goalTotalStaked: "500",
+          goalTotalWithdrawn: "25",
+          cobuildTotalStaked: "800",
+          cobuildTotalWithdrawn: "50",
+        },
+      ],
+      [
+        {
+          id: "0xbudget1",
+          recipientId: "0xrecipientid1",
+          childFlow: "0xchild1",
+          premiumEscrow: "0xpremium1",
+          state: 1,
+          finalized: false,
+        },
+        {
+          id: "0xbudget2",
+          recipientId: "0xrecipientid2",
+          childFlow: "0xchild2",
+          premiumEscrow: null,
+          state: 4,
+          finalized: true,
+        },
+      ],
+    );
+
+    const result = await executeTool("get-goal", { identifier: "alpha.cobuild.eth" });
+
+    expect(result).toEqual({
+      ok: true,
+      name: "get-goal",
+      output: {
+        identifier: "alpha.cobuild.eth",
+        goalAddress: "0xgoal",
+        goalRevnetId: "42",
+        state: "Active",
+        stateCode: 1,
+        finalized: false,
+        project: {
+          chainId: 8453,
+          projectId: 77,
+        },
+        route: {
+          slug: "alpha",
+          domain: "alpha.cobuild.eth",
+        },
+        flow: {
+          address: "0xflow",
+          parentFlow: "0xparentflow",
+          recipientCount: 2,
+          activeRecipientCount: 1,
+          budgetRecipientCount: 2,
+        },
+        stakeVault: {
+          address: "0xstakevault",
+          resolved: false,
+          goalTotalStaked: "500",
+          goalTotalWithdrawn: "25",
+          cobuildTotalStaked: "800",
+          cobuildTotalWithdrawn: "50",
+        },
+        budgetTcr: "0xbudgettcr",
+        treasury: {
+          owner: "0xowner",
+          minRaise: "1000000",
+          minRaiseDeadline: "2024-03-09T16:00:00.000Z",
+          deadline: "2024-03-21T05:46:40.000Z",
+          successAt: "2024-03-17T18:26:40.000Z",
+          lastSyncedTargetRate: "12",
+          lastSyncedAppliedRate: "10",
+          lastSyncedTreasuryBalance: "900",
+          lastSyncedTimeRemaining: "86400",
+          lastResidualFinalState: 2,
+          lastResidualSettledAmount: "30",
+          lastResidualControllerBurnAmount: "7",
+          createdAt: "2024-02-27T02:13:20.000Z",
+          updatedAt: "2024-03-18T22:13:20.000Z",
+        },
+        governance: {
+          arbitrator: "0xarbitrator",
+          deploymentTxHash: "0xtx",
+        },
+        timing: {
+          minRaiseDeadline: "2024-03-09T16:00:00.000Z",
+          deadline: "2024-03-21T05:46:40.000Z",
+          reassertGraceDeadline: "2024-03-16T14:40:00.000Z",
+          successAt: "2024-03-17T18:26:40.000Z",
+          successAssertionRegisteredAt: "2024-03-15T10:53:20.000Z",
+          createdAt: "2024-02-27T02:13:20.000Z",
+          updatedAt: "2024-03-18T22:13:20.000Z",
+        },
+        budgets: {
+          total: 2,
+          finalized: 1,
+          byState: {
+            Funding: 0,
+            Active: 1,
+            Succeeded: 0,
+            Failed: 0,
+            Expired: 1,
+          },
+          items: [
+            {
+              budgetAddress: "0xbudget1",
+              recipientId: "0xrecipientid1",
+              state: "Active",
+              stateCode: 1,
+              finalized: false,
+              childFlow: "0xchild1",
+              premiumEscrow: "0xpremium1",
+              recipient: {
+                address: "0xteam1",
+                recipientIndex: 1,
+                title: "Ops",
+                tagline: "Keep the lights on",
+                isRemoved: false,
+              },
+            },
+            {
+              budgetAddress: "0xbudget2",
+              recipientId: "0xrecipientid2",
+              state: "Expired",
+              stateCode: 4,
+              finalized: true,
+              childFlow: "0xchild2",
+              premiumEscrow: null,
+              recipient: {
+                address: "0xteam2",
+                recipientIndex: 2,
+                title: "Growth",
+                tagline: "Find demand",
+                isRemoved: true,
+              },
+            },
+          ],
+        },
+      },
+      cacheControl: "private, max-age=60",
+    });
+  });
+
+  it("executes get-budget from indexed scaffold tables", async () => {
+    queueSelectRows(
+      [
+        {
+          id: "0xbudget1",
+          controller: "0xcontroller",
+          recipientId: "0xrecipientid1",
+          childFlow: "0xchild1",
+          premiumEscrow: "0xpremium1",
+          fundingDeadline: "1712000000",
+          executionDuration: "604800",
+          activationThreshold: "250",
+          runwayCap: "1200",
+          state: 2,
+          finalized: false,
+          successAssertionRegisteredAt: "1712100000",
+          successResolutionDisabled: false,
+          reassertGraceDeadline: "1712200000",
+          lastSyncedTargetRate: "18",
+          lastSyncedAppliedRate: "16",
+          lastSyncedTreasuryBalance: "550",
+          lastSyncedTimeRemaining: "7200",
+          lastResidualDestination: "0xgoal",
+          lastResidualSettledAmount: "12",
+          createdAtTimestamp: "1711800000",
+          updatedAtTimestamp: "1712300000",
+        },
+      ],
+      [
+        {
+          id: "0xbudget1",
+          goalTreasury: "0xgoal",
+        },
+      ],
+      [
+        {
+          id: "0xrecipient1",
+          budgetTreasury: "0xbudget1",
+          recipient: "0xteam1",
+          recipientIndex: 1,
+          title: "Ops",
+          tagline: "Keep the lights on",
+          isRemoved: false,
+        },
+      ],
+      [
+        {
+          id: "0xpremium1",
+          baselineReceived: "100",
+          latestDistributedPremium: "12",
+          latestTotalCoverage: "300",
+          latestPremiumIndex: "8",
+          closed: false,
+          finalState: 1,
+          activatedAt: "1712150000",
+          closedAt: null,
+        },
+      ],
+      [
+        {
+          id: "0xgoal",
+          goalRevnetId: "42",
+          canonicalRouteSlug: "alpha",
+          canonicalRouteDomain: "alpha.cobuild.eth",
+        },
+      ],
+      [
+        {
+          goalTreasury: "0xgoal",
+          budgetTcr: "0xbudgettcr",
+          arbitrator: "0xarbitrator",
+        },
+      ],
+    );
+
+    const result = await executeTool("get-budget", { identifier: "0xrecipientid1" });
+
+    expect(result).toEqual({
+      ok: true,
+      name: "get-budget",
+      output: {
+        identifier: "0xrecipientid1",
+        budgetAddress: "0xbudget1",
+        recipientId: "0xrecipientid1",
+        goalAddress: "0xgoal",
+        budgetTcr: "0xbudgettcr",
+        state: "Succeeded",
+        stateCode: 2,
+        finalized: false,
+        treasury: {
+          controller: "0xcontroller",
+          activationThreshold: "250",
+          runwayCap: "1200",
+          fundingDeadline: "2024-04-01T19:33:20.000Z",
+          executionDurationSeconds: "604800",
+          successResolutionDisabled: false,
+          lastSyncedTargetRate: "18",
+          lastSyncedAppliedRate: "16",
+          lastSyncedTreasuryBalance: "550",
+          lastSyncedTimeRemaining: "7200",
+          lastResidualDestination: "0xgoal",
+          lastResidualSettledAmount: "12",
+          createdAt: "2024-03-30T12:00:00.000Z",
+          updatedAt: "2024-04-05T06:53:20.000Z",
+        },
+        flow: {
+          childFlow: "0xchild1",
+          recipientAddress: "0xteam1",
+          recipientIndex: 1,
+          title: "Ops",
+          tagline: "Keep the lights on",
+          isRemoved: false,
+        },
+        governance: {
+          arbitrator: "0xarbitrator",
+          goal: {
+            goalRevnetId: "42",
+            route: {
+              slug: "alpha",
+              domain: "alpha.cobuild.eth",
+            },
+          },
+          premiumEscrow: {
+            address: "0xpremium1",
+            baselineReceived: "100",
+            latestDistributedPremium: "12",
+            latestTotalCoverage: "300",
+            latestPremiumIndex: "8",
+            closed: false,
+            finalState: 1,
+            activatedAt: "2024-04-03T13:13:20.000Z",
+            closedAt: null,
+          },
+        },
+        timing: {
+          fundingDeadline: "2024-04-01T19:33:20.000Z",
+          reassertGraceDeadline: "2024-04-04T03:06:40.000Z",
+          successAssertionRegisteredAt: "2024-04-02T23:20:00.000Z",
+          createdAt: "2024-03-30T12:00:00.000Z",
+          updatedAt: "2024-04-05T06:53:20.000Z",
+        },
+      },
+      cacheControl: "private, max-age=60",
+    });
+  });
+
+  it("returns 404 for missing indexed protocol inspect rows", async () => {
+    queueSelectRows([], []);
+
+    expect(await executeTool("get-goal", { identifier: "missing-goal" })).toEqual({
+      ok: false,
+      name: "get-goal",
+      statusCode: 404,
+      error: "Goal not found.",
+    });
+
+    expect(await executeTool("get-budget", { identifier: "0xdeadbeef" })).toEqual({
+      ok: false,
+      name: "get-budget",
+      statusCode: 404,
+      error: "Budget not found.",
+    });
+  });
+
+  it("validates indexed protocol inspect identifiers before hitting the database", async () => {
+    expect(await executeTool("get-goal", {})).toEqual({
+      ok: false,
+      name: "get-goal",
+      statusCode: 400,
+      error: "identifier must be a string.",
+    });
+
+    expect(await executeTool("get-goal", { identifier: "   " })).toEqual({
+      ok: false,
+      name: "get-goal",
+      statusCode: 400,
+      error: "identifier must not be empty.",
+    });
+
+    expect(await executeTool("get-budget", {})).toEqual({
+      ok: false,
+      name: "get-budget",
+      statusCode: 400,
+      error: "identifier must be a string.",
+    });
+
+    expect(await executeTool("get-budget", { identifier: "   " })).toEqual({
+      ok: false,
+      name: "get-budget",
+      statusCode: 400,
+      error: "identifier must not be empty.",
+    });
+  });
+
+  it("returns 502 when indexed protocol inspect queries throw", async () => {
+    mocks.select.mockImplementation(() => ({
+      from: () => ({
+        where: () => {
+          throw new Error("db unavailable");
+        },
+      }),
+    }));
+
+    await expect(executeTool("get-goal", { identifier: "alpha" })).resolves.toEqual({
+      ok: false,
+      name: "get-goal",
+      statusCode: 502,
+      error: "get-goal request failed: db unavailable",
+    });
+
+    await expect(executeTool("get-budget", { identifier: "0xrecipientid1" })).resolves.toEqual({
+      ok: false,
+      name: "get-budget",
+      statusCode: 502,
+      error: "get-budget request failed: db unavailable",
+    });
+  });
+
   it("executes list-wallet-notifications with cursor pagination and unread state", async () => {
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x00000000000000000000000000000000000000aA",
@@ -1002,7 +1440,7 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-wallet-balances",
       statusCode: 400,
-      error: 'network must be either "base" or "base-sepolia".',
+      error: 'network must be "base".',
     });
 
     expect(await executeTool("get-wallet-balances", { agentKey: "  " })).toEqual({
@@ -1115,7 +1553,7 @@ describe("tool registry execution", () => {
     });
   });
 
-  it("executes get-wallet-balances on base-sepolia and accepts matching explicit agent", async () => {
+  it("executes get-wallet-balances with explicit matching agent on base", async () => {
     const getBalance = vi.fn().mockResolvedValue(10000000000000000n);
     const readContract = vi.fn().mockResolvedValue(500000n);
     mocks.requestContextGet.mockReturnValue({
@@ -1129,7 +1567,7 @@ describe("tool registry execution", () => {
     });
 
     const result = await executeTool("get-wallet-balances", {
-      network: "base-sepolia",
+      network: "base",
       agentKey: "ops",
     });
 
@@ -1138,11 +1576,11 @@ describe("tool registry execution", () => {
       name: "get-wallet-balances",
       output: {
         agentKey: "ops",
-        network: "base-sepolia",
+        network: "base",
       },
     });
     expect(readContract).toHaveBeenCalledWith({
-      address: "0x036CbD53842c5426634e7929541eC2318f3dCf7e",
+      address: "0x833589fCD6EDB6E08F4C7C32D4F71B54BDA02913",
       abi: expect.any(Array),
       functionName: "balanceOf",
       args: ["0x0000000000000000000000000000000000000001"],
