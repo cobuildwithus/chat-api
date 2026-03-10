@@ -225,7 +225,7 @@ describe("wallet notifications service", () => {
         targetHash: `0x${"c".repeat(40)}`,
         appPath: `/cast/0x${"b".repeat(40)}?post=0x${"a".repeat(40)}`,
       },
-      payload: null,
+      payload: { foo: "bar" },
     });
     expect(result.items[0].summary.title?.length).toBe(160);
     expect(result.items[0].summary.excerpt?.length).toBe(180);
@@ -365,7 +365,7 @@ describe("wallet notifications service", () => {
     ]);
   });
 
-  it("allowlists notification payload keys while keeping JSON-safe DTOs and safe fid coercion", async () => {
+  it("preserves full normalized protocol payloads for presentation and client parity", async () => {
     mocks.requestContextGet.mockImplementation((key: string) => {
       if (key === "toolsPrincipal") {
         return {
@@ -384,7 +384,7 @@ describe("wallet notifications service", () => {
           {
             id: 43n,
             kind: "protocol",
-            reason: "budget_accepted",
+            reason: "budget_removal_requested",
             eventAt: "2026-03-08T12:00:03.123456Z",
             eventAtCursor: "2026-03-08T12:00:03.123456Z",
             createdAt: "2026-03-08T12:00:06.123456Z",
@@ -403,12 +403,19 @@ describe("wallet notifications service", () => {
             sourceText: null,
             rootText: null,
             payload: {
-              role: "requester",
+              role: "proposer",
               protocol: true,
               labels: { goalName: "Alpha" },
               resource: { goalTreasury: "0x00000000000000000000000000000000000000bb" },
+              actor: { walletAddress: "0x00000000000000000000000000000000000000dd" },
+              schedule: {
+                deliverAt: new Date("2026-03-08T12:00:00.000Z"),
+              },
+              amounts: {
+                claimable: 7n,
+                snapshotWeight: 9007199254740993n,
+              },
               amount: 9007199254740993n,
-              ignored: "drop-me",
               nested: {
                 when: new Date("2026-03-08T12:00:00.000Z"),
                 entries: ["ok", 7n, Number.POSITIVE_INFINITY],
@@ -427,14 +434,30 @@ describe("wallet notifications service", () => {
     expect(result.items[0]).toMatchObject({
       actor: {
         fid: null,
-        name: "fid:9007199254740993",
+        name: "0x0000...00dd",
+      },
+      summary: {
+        title: "Removal requested for your budget in Alpha.",
+        excerpt: "0x0000...00dd requested removal of your budget.",
       },
       payload: {
-        role: "requester",
+        role: "proposer",
         protocol: true,
         labels: { goalName: "Alpha" },
         resource: { goalTreasury: "0x00000000000000000000000000000000000000bb" },
+        actor: { walletAddress: "0x00000000000000000000000000000000000000dd" },
+        schedule: {
+          deliverAt: "2026-03-08T12:00:00.000Z",
+        },
+        amounts: {
+          claimable: 7,
+          snapshotWeight: "9007199254740993",
+        },
         amount: "9007199254740993",
+        nested: {
+          when: "2026-03-08T12:00:00.000Z",
+          entries: ["ok", 7],
+        },
       },
     });
   });

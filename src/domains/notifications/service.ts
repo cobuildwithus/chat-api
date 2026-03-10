@@ -19,14 +19,6 @@ const NEYNAR_SCORE_THRESHOLD = 0.55;
 const ISO_UTC_MICROS_TEMPLATE = `YYYY-MM-DD"T"HH24:MI:SS.US"Z"`;
 const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_INTEGER_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
-const ALLOWED_NOTIFICATION_PAYLOAD_KEYS = new Set([
-  "amount",
-  "labels",
-  "protocol",
-  "resource",
-  "role",
-]);
-
 type NotificationRow = {
   id: bigint | number | string;
   kind: string;
@@ -239,10 +231,7 @@ function toPayload(value: unknown): Record<string, unknown> | null {
   }
 
   const record = dto as Record<string, unknown>;
-  const filtered = Object.fromEntries(
-    Object.entries(record).filter(([key]) => ALLOWED_NOTIFICATION_PAYLOAD_KEYS.has(key)),
-  );
-  return Object.keys(filtered).length > 0 ? filtered : null;
+  return Object.keys(record).length > 0 ? record : null;
 }
 
 function toDtoValue(value: unknown): unknown {
