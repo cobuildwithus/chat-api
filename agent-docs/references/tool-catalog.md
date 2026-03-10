@@ -1,8 +1,11 @@
 # Tool Catalog Reference
 
 Source registries:
-- Canonical REST tools: `src/tools/registry.ts` (re-exported by `src/api/tools/registry.ts`)
+- Canonical REST tools: `src/tools/registry.ts`
 - AI wrappers: `src/ai/tools/index.ts`
+
+Validation source of truth:
+- Registry-backed AI wrappers reuse the canonical Zod input validators from `src/tools/registry.ts`; wrapper-local prompts/descriptions may differ, but validation must not drift.
 
 ## `getUser`
 
@@ -39,7 +42,7 @@ Source registries:
 - Purpose: semantic retrieval over Cobuild casts using pgvector embeddings.
 - Dependencies: OpenAI embeddings API + `farcaster.casts.text_embedding` (`vector(256)`).
 - Timeout: `OPENAI_REQUEST_TIMEOUT_MS`.
-- Error semantics: returns `503` when OpenAI API key is not configured; `502` for upstream embedding failures.
+- Error semantics: returns stable public errors, using `503`/`Tool is unavailable.` when embeddings config is missing and `502`/`Tool request failed.` for execution failures.
 
 ## `castPreview`
 
@@ -52,6 +55,7 @@ Source registries:
 - AI wrapper: `get-treasury-stats`
 - Purpose: fetch the latest treasury stats snapshot.
 - Dependencies: treasury stats snapshot service.
+- Error semantics: returns stable public `502`/`Tool request failed.` when the snapshot service is unavailable.
 
 ## `getGoal`
 

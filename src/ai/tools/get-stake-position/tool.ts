@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { registryBackedTool } from "../registry-backed-tool";
 import type { Tool } from "../tool";
 
@@ -11,12 +10,6 @@ Pass a goal, budget, or stake-vault identifier plus the account address to inspe
 The response is read-only and returns compact vault totals, account stake balances, and juror state when present.`,
   tool: registryBackedTool({
     registryName: "get-stake-position",
-    inputSchema: z.object({
-      identifier: z
-        .string()
-        .describe("Goal route/address, budget address/recipient id, or stake-vault address"),
-      account: z.string().describe("Wallet address to inspect inside the resolved stake vault"),
-    }),
     description: "Inspect indexed stake-vault account state by entity or stake-vault identifier",
   }),
 } satisfies Tool;

@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { registryBackedTool } from "../registry-backed-tool";
 import type { Tool } from "../tool";
 
@@ -12,15 +11,6 @@ Use this tool to list top-level Cobuild discussion posts.
 `,
   tool: registryBackedTool({
     registryName: "list-discussions",
-    inputSchema: z
-      .object({
-        limit: z.number().int().min(1).max(50).optional(),
-        offset: z.number().int().min(0).max(10_000).optional(),
-        sort: z.enum(["last", "replies", "views"]).optional(),
-        direction: z.enum(["asc", "desc"]).optional(),
-      })
-      .optional()
-      .default({}),
     description: "List Cobuild discussion root posts with pagination and sorting.",
   }),
 } satisfies Tool;

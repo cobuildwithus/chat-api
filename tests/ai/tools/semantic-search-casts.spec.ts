@@ -1,10 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ModelMessage } from "ai";
+import { z } from "zod";
 import { semanticSearchCastsTool } from "../../../src/ai/tools/semantic-search-casts/semantic-search-casts";
 import { executeTool } from "../../../src/tools/registry";
 
-vi.mock("../../../src/tools/registry", () => ({
+const mocks = vi.hoisted(() => ({
   executeTool: vi.fn(),
+  resolveToolExposure: vi.fn(() => "chat-safe"),
+  resolveToolInputSchema: vi.fn(() =>
+    z.object({
+      query: z.string(),
+      limit: z.number().optional(),
+      rootHash: z.string().optional(),
+    }),
+  ),
+}));
+
+vi.mock("../../../src/tools/registry", () => ({
+  executeTool: mocks.executeTool,
+  resolveToolExposure: mocks.resolveToolExposure,
+  resolveToolInputSchema: mocks.resolveToolInputSchema,
 }));
 
 describe("semanticSearchCastsTool", () => {
@@ -30,7 +45,7 @@ describe("semanticSearchCastsTool", () => {
       ok: false,
       name: "semantic-search-casts",
       statusCode: 502,
-      error: "semantic-search-casts request failed: OpenAI embeddings request failed.",
+      error: "Tool request failed.",
     });
 
     const context: { toolCallId: string; messages: ModelMessage[] } = {
@@ -39,7 +54,7 @@ describe("semanticSearchCastsTool", () => {
     };
     const result = await semanticSearchCastsTool.tool.execute!({ query: "test" }, context);
     expect(result).toEqual({
-      error: "semantic-search-casts request failed: OpenAI embeddings request failed.",
+      error: "Tool request failed.",
     });
   });
 

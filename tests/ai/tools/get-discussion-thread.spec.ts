@@ -5,6 +5,8 @@ import { executeTool } from "../../../src/tools/registry";
 
 vi.mock("../../../src/tools/registry", () => ({
   executeTool: vi.fn(),
+  resolveToolExposure: vi.fn(() => "chat-safe"),
+  resolveToolInputSchema: vi.fn(() => ({})),
 }));
 
 describe("getDiscussionThreadTool", () => {

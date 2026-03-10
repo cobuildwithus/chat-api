@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { registryBackedTool } from "../registry-backed-tool";
 import type { Tool } from "../tool";
 
@@ -11,11 +10,6 @@ Pass the canonical composite request id from the indexer: <tcrAddress>:<itemId>:
 The response is read-only and returns concise request, dispute, goal, and budget context.`,
   tool: registryBackedTool({
     registryName: "get-tcr-request",
-    inputSchema: z.object({
-      identifier: z
-        .string()
-        .describe("Composite TCR request id: <tcrAddress>:<itemId>:<requestIndex>"),
-    }),
     description: "Inspect indexed TCR request state by composite request identifier",
   }),
 } satisfies Tool;

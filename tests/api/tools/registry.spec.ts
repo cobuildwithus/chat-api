@@ -3,6 +3,8 @@ import {
   executeTool,
   listToolMetadata,
   resolveToolAuthPolicy,
+  resolveToolExposure,
+  resolveToolInputSchema,
   requiresWriteScopeForMetadata,
   requiresWriteScopeForTool,
   resolveToolMetadata,
@@ -20,6 +22,7 @@ describe("tool registry", () => {
       expect(Array.isArray(tool.scopes)).toBe(true);
       expect(Array.isArray(tool.authPolicy.requiredScopes)).toBe(true);
       expect(typeof tool.authPolicy.walletBinding).toBe("string");
+      expect(typeof tool.exposure).toBe("string");
       expect(tool.version).toBeTruthy();
       expect(typeof tool.deprecated).toBe("boolean");
       expect(tool.inputSchema).toBeTruthy();
@@ -89,6 +92,37 @@ describe("tool registry", () => {
       walletBinding: "none",
     });
     expect(resolveToolAuthPolicy("missing-tool")).toBeNull();
+  });
+
+  it("requires explicit chat-safe exposure for internal AI tools", () => {
+    expect(resolveToolExposure("get-user")).toBe("chat-safe");
+    expect(resolveToolExposure("get-goal")).toBe("chat-safe");
+    expect(resolveToolExposure("get-budget")).toBe("chat-safe");
+    expect(resolveToolExposure("get-tcr-request")).toBe("chat-safe");
+    expect(resolveToolExposure("get-dispute")).toBe("chat-safe");
+    expect(resolveToolExposure("get-stake-position")).toBe("chat-safe");
+    expect(resolveToolExposure("get-premium-escrow")).toBe("chat-safe");
+    expect(resolveToolExposure("get-cast")).toBe("chat-safe");
+    expect(resolveToolExposure("list-discussions")).toBe("chat-safe");
+    expect(resolveToolExposure("get-discussion-thread")).toBe("chat-safe");
+    expect(resolveToolExposure("semantic-search-casts")).toBe("chat-safe");
+    expect(resolveToolExposure("get-treasury-stats")).toBe("chat-safe");
+
+    expect(resolveToolExposure("get-wallet-balances")).toBe("bearer-only");
+    expect(resolveToolExposure("list-wallet-notifications")).toBe("bearer-only");
+    expect(resolveToolExposure("cast-preview")).toBe("bearer-only");
+    expect(resolveToolExposure("docs-search")).toBe("bearer-only");
+    expect(resolveToolExposure("missing-tool")).toBeNull();
+  });
+
+  it("resolves canonical input schemas for names and aliases", () => {
+    expect(resolveToolInputSchema("get-goal")).toBeTruthy();
+    expect(resolveToolInputSchema("getGoal")).toBe(resolveToolInputSchema("get-goal"));
+    expect(resolveToolInputSchema("goal.inspect")).toBe(resolveToolInputSchema("get-goal"));
+    expect(resolveToolInputSchema("semanticSearchCasts")).toBe(
+      resolveToolInputSchema("semantic-search-casts"),
+    );
+    expect(resolveToolInputSchema("missing-tool")).toBeNull();
   });
 
   it("does not resolve removed treasury compatibility aliases", () => {

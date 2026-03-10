@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { registryBackedTool } from "../registry-backed-tool";
 import type { Tool } from "../tool";
 
@@ -12,7 +11,6 @@ Use this tool to fetch the latest treasury stats snapshot.
 - Prefer the built-in snapshot prompt unless the user asks for the latest data.`,
   tool: registryBackedTool({
     registryName: "get-treasury-stats",
-    inputSchema: z.object({}),
     description: "Fetch the latest treasury stats snapshot.",
   }),
 } satisfies Tool;

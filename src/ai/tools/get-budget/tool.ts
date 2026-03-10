@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { registryBackedTool } from "../registry-backed-tool";
 import type { Tool } from "../tool";
 
@@ -11,9 +10,6 @@ Pass a budget treasury address or recipient id.
 The response is read-only and returns concise budget, parent goal, treasury, flow, and governance data.`,
   tool: registryBackedTool({
     registryName: "get-budget",
-    inputSchema: z.object({
-      identifier: z.string().describe("Budget treasury address or recipient id"),
-    }),
     description: "Inspect indexed budget state by budget address or recipient id",
   }),
 } satisfies Tool;

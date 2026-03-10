@@ -39,6 +39,7 @@ export const myTool = {
 
 Register the canonical tool in `src/tools/registry.ts`, then add an AI wrapper in `src/ai/tools/index.ts` if the model should invoke it directly.
 Keep the order stable unless behavior explicitly needs to change.
+For registry-backed AI tools, reuse the canonical registry validator as the wrapper `inputSchema` instead of defining a second schema in `src/ai/tools/**`.
 
 Example canonical-only CLI tool:
 - `get-wallet-balances` (aliases: `getWalletBalances`, `walletBalances`) is exposed via `/v1/tool-executions` for CLI balance reads and is not registered as a model wrapper.

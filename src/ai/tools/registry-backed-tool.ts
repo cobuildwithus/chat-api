@@ -1,21 +1,36 @@
 import { tool } from "ai";
-import { z } from "zod";
-import { executeTool } from "../../tools/registry";
+import {
+  executeTool,
+  resolveToolExposure,
+  resolveToolInputSchema,
+} from "../../tools/registry";
 
-type RegistryBackedToolOptions<TInputSchema extends z.ZodTypeAny> = {
+type RegistryBackedToolOptions = {
   description: string;
-  inputSchema: TInputSchema;
   registryName: string;
 };
 
-export function registryBackedTool<TInputSchema extends z.ZodTypeAny>(
-  options: RegistryBackedToolOptions<TInputSchema>,
-) {
+export function registryBackedTool(options: RegistryBackedToolOptions) {
+  const exposure = resolveToolExposure(options.registryName);
+  if (!exposure) {
+    throw new Error(`Unknown registry-backed AI tool "${options.registryName}".`);
+  }
+  if (exposure !== "chat-safe") {
+    throw new Error(
+      `Registry-backed AI tool "${options.registryName}" must be explicitly marked chat-safe.`,
+    );
+  }
+
+  const inputSchema = resolveToolInputSchema(options.registryName);
+  if (!inputSchema) {
+    throw new Error(`Unknown registry-backed AI tool "${options.registryName}".`);
+  }
+
   return tool({
     description: options.description,
-    inputSchema: options.inputSchema,
-    execute: async (input: z.infer<TInputSchema>) => {
-      const result = await executeTool(options.registryName, input as Record<string, unknown>);
+    inputSchema,
+    execute: async (input) => {
+      const result = await executeTool(options.registryName, input);
       if (result.ok) {
         return result.output;
       }
