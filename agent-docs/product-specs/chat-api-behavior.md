@@ -88,6 +88,26 @@ Error behavior:
 - propagates tool execution errors as stable public `{ error }` strings with tool-defined HTTP status codes
 - dependency/configuration failures use stable mapped messages (`Tool request failed.` / `Tool is unavailable.`) instead of raw upstream text
 
+### POST `/v1/farcaster/profiles/link-wallet`
+
+Request body:
+- required: `fid` (positive integer), `address` (EVM address)
+
+Behavior:
+- requires bearer token `Authorization: Bearer <bbt_...>`
+- requires `wallet:execute` on the backing CLI session/token
+- only accepts wallets already authorized for that CLI session:
+  - session owner wallet for local signup sync
+  - server-known hosted agent wallet for hosted/CDP signup sync
+- verifies onchain via Farcaster IdRegistry that `idOf(address) === fid`
+- upserts `farcaster.profiles` so `verified_addresses` preserves existing verified/manual values and `manual_verified_addresses` always includes the linked wallet
+- returns `{ ok: true, fid, address }`
+
+Error behavior:
+- `401` when bearer auth context is missing/invalid
+- `403` when `wallet:execute` is missing, the requested wallet is not authorized for the CLI session, or the wallet does not currently own the supplied `fid`
+- `502` when Farcaster ownership verification is temporarily unavailable
+
 ## Auth Compatibility
 
 - Chat authorization is based on authenticated wallet ownership of the target chat.

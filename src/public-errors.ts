@@ -25,6 +25,9 @@ export type PublicErrorKey =
   | "contextUnavailable"
   | "toolsUnauthorized"
   | "toolsReadScopeRequired"
+  | "walletExecuteScopeRequired"
+  | "farcasterWalletLinkUnauthorized"
+  | "farcasterWalletLinkVerificationUnavailable"
   | "toolPrincipalRequired"
   | "toolAgentKeyMismatch"
   | "toolScopeRequired"
@@ -105,6 +108,18 @@ const STATIC_PUBLIC_ERRORS = {
   toolsReadScopeRequired: {
     statusCode: 403,
     error: "tools:read scope required.",
+  },
+  walletExecuteScopeRequired: {
+    statusCode: 403,
+    error: "wallet:execute scope required.",
+  },
+  farcasterWalletLinkUnauthorized: {
+    statusCode: 403,
+    error: "Wallet link request is not authorized for this CLI session.",
+  },
+  farcasterWalletLinkVerificationUnavailable: {
+    statusCode: 502,
+    error: "Farcaster wallet ownership verification unavailable.",
   },
   toolPrincipalRequired: {
     statusCode: 401,

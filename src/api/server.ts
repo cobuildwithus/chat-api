@@ -9,7 +9,12 @@ import { handleChatGetRequest } from "./chat/get";
 import { handleChatListRequest } from "./chat/list";
 import { handleChatPostRequest } from "./chat/route";
 import { handleCobuildAiContextRequest } from "./cobuild-ai-context/route";
-import { enforceToolsBearerAuth } from "./tools/internal-auth";
+import { handleFarcasterWalletLinkRequest } from "./farcaster-wallet-link/route";
+import { farcasterWalletLinkSchema } from "./farcaster-wallet-link/schema";
+import {
+  enforceToolsBearerAuth,
+  enforceWalletExecuteBearerAuth,
+} from "./tools/internal-auth";
 import {
   handleCliSessionRevokeRequest,
   handleCliSessionsListRequest,
@@ -61,15 +66,19 @@ const applyServerTimeouts = (server: FastifyInstance["server"]) => {
 
 const IP_RATE_LIMIT_MULTIPLIER = 3;
 const TOOL_EXECUTIONS_BODY_LIMIT_BYTES = 64 * 1024;
-const TOOLS_RATE_LIMIT_PATH_PREFIXES = ["/v1/tool-executions", "/v1/tools"];
+const BEARER_RATE_LIMIT_PATH_PREFIXES = [
+  "/v1/tool-executions",
+  "/v1/tools",
+  "/v1/farcaster/profiles/link-wallet",
+];
 
 function hashRateLimitToken(rawToken: string): string {
   return digestOAuthSecret(rawToken);
 }
 
-function isToolsRateLimitPath(path: string): boolean {
+function isBearerRateLimitPath(path: string): boolean {
   const normalizedPath = path.split("?", 1)[0] ?? path;
-  return TOOLS_RATE_LIMIT_PATH_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
+  return BEARER_RATE_LIMIT_PATH_PREFIXES.some((prefix) => normalizedPath.startsWith(prefix));
 }
 
 const getAllowedOrigins = () => {
@@ -151,7 +160,7 @@ export const setupServer = async () => {
       keyGenerator: (request) => {
         const routerPath = (request as { routerPath?: string }).routerPath;
         const requestPath = routerPath ?? request.url ?? "";
-        if (isToolsRateLimitPath(requestPath)) {
+        if (isBearerRateLimitPath(requestPath)) {
           const bearerToken = parseBearerToken(
             typeof request.headers.authorization === "string" ? request.headers.authorization : undefined,
           );
@@ -173,7 +182,7 @@ export const setupServer = async () => {
         }
         const routerPath = (request as { routerPath?: string }).routerPath;
         const requestPath = routerPath ?? request.url ?? "";
-        if (isToolsRateLimitPath(requestPath)) {
+        if (isBearerRateLimitPath(requestPath)) {
           const bearerToken = parseBearerToken(
             typeof request.headers.authorization === "string" ? request.headers.authorization : undefined,
           );
@@ -206,6 +215,15 @@ export const setupServer = async () => {
       "country-region",
     ],
   });
+
+  server.post(
+    "/v1/farcaster/profiles/link-wallet",
+    {
+      preValidation: [enforceWalletExecuteBearerAuth],
+      schema: farcasterWalletLinkSchema,
+    },
+    handleFarcasterWalletLinkRequest,
+  );
 
   server.post(
     "/api/chat",

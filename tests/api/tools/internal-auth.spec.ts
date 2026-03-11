@@ -1,6 +1,9 @@
 import type { FastifyRequest } from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { enforceToolsBearerAuth } from "../../../src/api/tools/internal-auth";
+import {
+  enforceToolsBearerAuth,
+  enforceWalletExecuteBearerAuth,
+} from "../../../src/api/tools/internal-auth";
 import { resetEnvCacheForTests } from "../../../src/config/env";
 import { createReply } from "../../utils/fastify";
 
@@ -197,5 +200,83 @@ describe("enforceToolsBearerAuth", () => {
     expect(reply.status).toHaveBeenCalledWith(403);
     expect(reply.send).toHaveBeenCalledWith({ error: "tools:read scope required." });
     expect(mocks.requestContextSet).not.toHaveBeenCalled();
+  });
+});
+
+describe("enforceWalletExecuteBearerAuth", () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env = { ...originalEnv };
+    delete process.env.CHAT_TRUST_PROXY;
+    resetEnvCacheForTests();
+  });
+
+  it("returns 403 when the token lacks wallet:execute", async () => {
+    const request = {
+      ip: "127.0.0.1",
+      headers: { authorization: "Bearer bbt_valid" },
+    } as unknown as FastifyRequest;
+    const reply = createReply();
+    mocks.authenticateToolsBearerToken.mockResolvedValueOnce({
+      sessionId: "45",
+      ownerAddress: "0x0000000000000000000000000000000000000004",
+      agentKey: "ops",
+      scope: "tools:read offline_access",
+      scopes: ["tools:read", "offline_access"],
+      hasToolsRead: true,
+      hasToolsWrite: false,
+      hasWalletExecute: false,
+      hasAnyWriteScope: false,
+    });
+
+    await enforceWalletExecuteBearerAuth(request, reply);
+
+    expect(reply.status).toHaveBeenCalledWith(403);
+    expect(reply.send).toHaveBeenCalledWith({ error: "wallet:execute scope required." });
+    expect(mocks.requestContextSet).not.toHaveBeenCalled();
+  });
+
+  it("stores principals when the token has wallet:execute", async () => {
+    const request = {
+      ip: "127.0.0.1",
+      headers: { authorization: "Bearer bbt_valid" },
+    } as unknown as FastifyRequest;
+    const reply = createReply();
+    mocks.authenticateToolsBearerToken.mockResolvedValueOnce({
+      sessionId: "46",
+      ownerAddress: "0x0000000000000000000000000000000000000005",
+      agentKey: "agent-1",
+      scope: "tools:read wallet:execute offline_access",
+      scopes: ["tools:read", "wallet:execute", "offline_access"],
+      hasToolsRead: true,
+      hasToolsWrite: false,
+      hasWalletExecute: true,
+      hasAnyWriteScope: true,
+    });
+
+    await enforceWalletExecuteBearerAuth(request, reply);
+
+    expect(mocks.requestContextSet).toHaveBeenCalledWith("user", {
+      address: "0x0000000000000000000000000000000000000005",
+      city: null,
+      country: null,
+      countryRegion: null,
+      userAgent: null,
+    });
+    expect(mocks.requestContextSet).toHaveBeenCalledWith("toolsPrincipal", {
+      sessionId: "46",
+      ownerAddress: "0x0000000000000000000000000000000000000005",
+      agentKey: "agent-1",
+      scope: "tools:read wallet:execute offline_access",
+      scopes: ["tools:read", "wallet:execute", "offline_access"],
+      hasToolsRead: true,
+      hasToolsWrite: false,
+      hasWalletExecute: true,
+      hasAnyWriteScope: true,
+    });
+    expect(reply.status).not.toHaveBeenCalled();
+    expect(reply.send).not.toHaveBeenCalled();
   });
 });

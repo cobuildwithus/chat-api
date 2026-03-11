@@ -116,7 +116,7 @@ describe("setupServer", () => {
     const corsCall = serverMock.register.mock.calls.find((call) => call[0] === corsMock);
     expect(corsCall?.[1]?.origin).toEqual(["https://a.com", "https://b.com"]);
     expect(registerRequestLoggingMock).toHaveBeenCalledWith(serverMock);
-    expect(serverMock.post).toHaveBeenCalledTimes(5);
+    expect(serverMock.post).toHaveBeenCalledTimes(6);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/docs/search")).toBe(false);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/api/cli/tools/get-user")).toBe(
       false,
@@ -128,6 +128,11 @@ describe("setupServer", () => {
       serverMock.post.mock.calls.some((call) => call[0] === "/api/cli/tools/cobuild-ai-context"),
     ).toBe(false);
     expect(serverMock.post.mock.calls.some((call) => call[0] === "/v1/tool-executions")).toBe(true);
+    expect(
+      serverMock.post.mock.calls.some(
+        (call) => call[0] === "/v1/farcaster/profiles/link-wallet",
+      ),
+    ).toBe(true);
     const chatCall = serverMock.post.mock.calls.find((call) => call[0] === "/api/chat");
     const chatOptions = chatCall?.[1] as {
       preValidation?: Array<{ name?: string }>;
@@ -151,6 +156,19 @@ describe("setupServer", () => {
       "enforceToolsBearerAuth",
     ]);
     expect(toolExecutionsOptions?.bodyLimit).toBe(64 * 1024);
+
+    const farcasterWalletLinkCall = serverMock.post.mock.calls.find(
+      (call) => call[0] === "/v1/farcaster/profiles/link-wallet",
+    );
+    const farcasterWalletLinkOptions = farcasterWalletLinkCall?.[1] as {
+      preValidation?: Array<{ name?: string }>;
+      schema?: object;
+    };
+    expect(farcasterWalletLinkOptions?.schema).toBeTruthy();
+    expect(Array.isArray(farcasterWalletLinkOptions?.preValidation)).toBe(true);
+    expect(farcasterWalletLinkOptions?.preValidation?.map((handler) => handler.name)).toEqual([
+      "enforceWalletExecuteBearerAuth",
+    ]);
 
     expect(serverMock.get.mock.calls.some((call) => call[0] === "/v1/tools")).toBe(true);
     const toolsCall = serverMock.get.mock.calls.find((call) => call[0] === "/v1/tools");
@@ -348,6 +366,15 @@ describe("setupServer", () => {
     } as { headers: Record<string, string>; ip: string; routerPath: string; url: string });
     expect(typeof tokenFallbackKey).toBe("string");
     expect(String(tokenFallbackKey).startsWith("tools-token:")).toBe(true);
+
+    const walletLinkTokenKey = userLimitCall?.[1]?.keyGenerator?.({
+      headers: { authorization: "Bearer bbt_example" },
+      ip: "127.0.0.1",
+      routerPath: "/v1/farcaster/profiles/link-wallet",
+      url: "/v1/farcaster/profiles/link-wallet",
+    } as { headers: Record<string, string>; ip: string; routerPath: string; url: string });
+    expect(typeof walletLinkTokenKey).toBe("string");
+    expect(String(walletLinkTokenKey).startsWith("tools-token:")).toBe(true);
   });
 
   it("exposes source info with default url", async () => {

@@ -12,10 +12,11 @@
 1. Client -> API boundary (`src/api/**`)
 - Request schema validation
 - Header auth handling
-2. Interface backend -> canonical tools boundary (`/v1/tools`, `/v1/tools/:name`, `/v1/tool-executions`)
+2. Interface/CLI runtime -> bearer-authenticated `/v1` boundary (`/v1/tools`, `/v1/tools/:name`, `/v1/tool-executions`, `/v1/farcaster/profiles/link-wallet`)
 - Bearer PAT gate via `Authorization: Bearer <bbt_...>`
 - Shared `@cobuild/wire` bearer verifier parses tokens, derives principals, and requires the backing CLI session to remain active with a matching stored scope
-- Per-tool required-scope enforcement after bearer auth succeeds
+- Per-route scope enforcement after bearer auth succeeds (`tools:read` for discovery/execution metadata, `wallet:execute` for Farcaster wallet-link sync)
+- The Farcaster wallet-link route only accepts wallets already authorized for the CLI session (owner wallet for local signup, hosted agent wallet for hosted/CDP signup) and verifies the `fid` onchain before mutating `farcaster.profiles`
 - Invalid or missing bearer token returns `401`
 3. API -> Auth boundary (`src/api/auth/**`)
 - Privy JWT verification mode
@@ -59,6 +60,8 @@
 4. Are ownership checks preserved on all chat read/write paths?
 5. If tool auth handling changes, are bearer tokens validated and redacted?
 6. If a wallet-scoped tool reads private inbox state, is the wallet derived only from authenticated context?
+7. If a bearer-authenticated `/v1` route mutates wallet-linked state, does it require `wallet:execute`?
+8. If a bearer-authenticated `/v1` route persists Farcaster wallet links, does it prove both wallet authorization and onchain `fid` ownership before writing?
 
 ## Escalation
 

@@ -11,12 +11,14 @@ Routes and schemas are bound in `src/api/server.ts`:
 - `GET /v1/tools` -> `toolsListSchema` + `handleToolsListRequest`
 - `GET /v1/tools/:name` -> `toolMetadataSchema` + `handleToolMetadataRequest`
 - `POST /v1/tool-executions` -> `toolExecutionSchema` + `handleToolExecutionRequest`
+- `POST /v1/farcaster/profiles/link-wallet` -> `farcasterWalletLinkSchema` + `handleFarcasterWalletLinkRequest`
 - `GET /v1/tokens` -> `cliTokensListSchema` + `handleCliTokensListRequest`
 - `POST /v1/tokens` -> `cliTokenCreateSchema` + `handleCliTokenCreateRequest`
 - `DELETE /v1/tokens` -> `cliTokenRevokeSchema` + `handleCliTokenRevokeRequest`
 
 Chat routes run `validateChatUser` as `preValidation`.
 Canonical tool routes run `enforceToolsBearerAuth` as `preValidation`.
+The wallet-link sync route runs `enforceWalletExecuteBearerAuth` as `preValidation`.
 Token management routes run `validateChatUser` as `preValidation`.
 
 ## Request Schema Summary
@@ -57,6 +59,17 @@ Source: route schema modules under `src/api/**/schema.ts`, generated from shared
 - Optional body: `input` (object)
 - Requires header: `Authorization: Bearer <bbt_...>`
 
+### `POST /v1/farcaster/profiles/link-wallet`
+
+- Requires body: `fid`, `address`
+- Requires header: `Authorization: Bearer <bbt_...>`
+- Requires the backing CLI session/token to include `wallet:execute`
+- `address` must be a valid EVM address
+- Route only accepts:
+  - the CLI session owner wallet for local signup sync
+  - the server-known hosted agent wallet for the CLI session owner + agent key on hosted/CDP signup sync
+- Route verifies onchain via Farcaster IdRegistry that `idOf(address) === fid` before writing
+
 ### `GET /v1/tokens`
 
 - Requires header: `privy-id-token`
@@ -74,6 +87,7 @@ Source: route schema modules under `src/api/**/schema.ts`, generated from shared
 ### Canonical tools auth
 
 - `/v1/tools`, `/v1/tools/:name`, and `/v1/tool-executions` require a valid cli PAT bearer token.
+- `/v1/farcaster/profiles/link-wallet` requires a valid cli PAT bearer token with `wallet:execute`.
 
 ## Runtime Response Summary
 
@@ -84,6 +98,7 @@ Source: route schema modules under `src/api/**/schema.ts`, generated from shared
 - `GET /v1/tools`: `{ tools: ToolMetadata[] }`
 - `GET /v1/tools/:name`: `{ tool: ToolMetadata }` or `404` with `{ error }`
 - `POST /v1/tool-executions`: success `{ ok: true, name, output }`; failure `{ ok: false, name, statusCode, error }`
+- `POST /v1/farcaster/profiles/link-wallet`: `{ ok: true, fid, address }`
 - `GET /v1/tokens`: `{ ok: true, tokens }`
 - `POST /v1/tokens`: `{ ok: true, token, tokenInfo }`
 - `DELETE /v1/tokens`: `{ ok: true, revoked }`
@@ -92,6 +107,9 @@ Source: route schema modules under `src/api/**/schema.ts`, generated from shared
 
 - Missing or unauthorized chat access returns `404` on read/write chat-id paths.
 - Auth pre-validation returns `401` for invalid/missing auth.
+- `POST /v1/farcaster/profiles/link-wallet` returns `403` when the bearer token lacks `wallet:execute`.
+- `POST /v1/farcaster/profiles/link-wallet` returns `403` when the requested wallet is not authorized for the authenticated CLI session or the onchain `fid` owner does not match.
+- `POST /v1/farcaster/profiles/link-wallet` returns `502` when Farcaster ownership verification cannot be completed.
 - Usage limiter returns `429` for token-budget overage.
 - Canonical tools auth returns `401` for missing/invalid bearer token.
 - Canonical tool execution returns `403` when the bearer token is missing a tool-specific required scope.

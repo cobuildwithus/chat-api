@@ -127,7 +127,7 @@ describe("setupServer rate-limit keying order", () => {
     ).toBe("tools:0x0000000000000000000000000000000000000001:default:42");
   });
 
-  it("uses hashed tools token before user on tools routes, and user on non-tools routes", async () => {
+  it("uses hashed bearer tokens before user on authenticated /v1 routes, and user on non-/v1 routes", async () => {
     const keyGenerator = await getPreHandlerKeyGenerator();
 
     requestContextGetMock.mockImplementation((key: string) => {
@@ -146,6 +146,15 @@ describe("setupServer rate-limit keying order", () => {
         ip: "127.0.0.1",
         routerPath: "/v1/tools",
         url: "/v1/tools",
+      }),
+    ).toBe(`tools-token:${expectedTokenHash}`);
+
+    expect(
+      keyGenerator({
+        headers: { authorization: `Bearer ${token}` },
+        ip: "127.0.0.1",
+        routerPath: "/v1/farcaster/profiles/link-wallet",
+        url: "/v1/farcaster/profiles/link-wallet",
       }),
     ).toBe(`tools-token:${expectedTokenHash}`);
 

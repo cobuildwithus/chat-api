@@ -6,7 +6,7 @@ Use this file only for currently active coding work. Keep it minimal and current
 
 | Agent/Session | Task | Files in Scope | Symbols (add/rename/delete) | Dependency Notes | Updated (YYYY-MM-DD) |
 | --- | --- | --- | --- | --- | --- |
-| codex-farcaster-wallet-link-route | Add a CLI-authenticated Farcaster wallet-link persistence route for agent signup flows. | `src/api/farcaster-wallet-link/**`, `src/api/server.ts`, `src/api/tools/token-auth.ts`, `src/api/auth/principals.ts`, `src/infra/db/queries/profiles/persist-wallet-link.ts`, matching tests/docs` | add wallet-execute auth enforcement, add Farcaster wallet-link request parser/handler, add profile upsert helper | Keep scope limited to `farcaster.profiles`; do not expand into linked social accounts or tool registry flows | 2026-03-11 |
+| codex-wire-release-sync | Update chat-api to the newly published `@cobuild/wire` package version. | `package.json`, `pnpm-lock.yaml` | bump published `@cobuild/wire` dependency version and lockfile entry | Keep scope to package metadata only; avoid wallet-link files already owned by the active task above | 2026-03-11 |
 ## Rules
 
 1. Add a row before your first code edit for every coding task (single-agent and multi-agent).

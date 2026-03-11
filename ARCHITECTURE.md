@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-03-02
+Last updated: 2026-03-11
 
 See `README.md` for setup/deployment and `docs/TOOLS.md` for tool contribution steps. The canonical docs map is `agent-docs/index.md`.
 
@@ -28,7 +28,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 - optional request rate limiting
 - CORS
 - chat routes
-- canonical tools routes (`/v1/tools`, `/v1/tools/:name`, `/v1/tool-executions`) guarded by bearer PAT auth
+- bearer-authenticated CLI routes (`/v1/tools`, `/v1/tools/:name`, `/v1/tool-executions`, `/v1/farcaster/profiles/link-wallet`) guarded by bearer PAT auth
 - global error handler
 4. Process handlers (`SIGTERM`, `SIGINT`, `uncaughtException`, `unhandledRejection`) close server, DB, and Redis in controlled order.
 
@@ -38,6 +38,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 2. For authenticated routes, auth runs in `preValidation` so `requestContext` is set before `preHandler` rate-limit key generation:
 - chat + token routes use `validateChatUser`
 - canonical tools routes use `enforceToolsBearerAuth`
+- CLI wallet-link sync route uses `enforceWalletExecuteBearerAuth`
 - these auth hooks resolve `requestContext.user` / `requestContext.toolsPrincipal`
 - Privy JWT mode (`privy-id-token`)
 - Self-hosted mode (`x-chat-user`/default address and optional `x-chat-auth` shared secret)
@@ -100,6 +101,17 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 2. Parse execution request (`name`, optional `input`).
 3. Resolve tool auth policy from the canonical registry, enforce any required scopes, and execute the shared tool executor.
 4. Return normalized success (`{ ok, name, output }`) or structured error.
+
+### POST `/v1/farcaster/profiles/link-wallet`
+
+1. Verify bearer token authorization (`Authorization: Bearer <bbt_...>`) and require `wallet:execute`.
+2. Parse and normalize the wallet-link request (`fid`, `address`) with route-level EVM validation.
+3. Authorize the requested address against the authenticated CLI session:
+- local signup sync may link the session owner wallet
+- hosted/CDP signup sync may link the server-known hosted agent wallet for the session owner + agent key
+4. Verify onchain via Farcaster IdRegistry that the authorized wallet currently owns the supplied `fid`.
+5. Upsert `farcaster.profiles` so `verified_addresses` preserves existing verified/manual values and `manual_verified_addresses` always includes the linked wallet.
+6. Return `{ ok, fid, address }`.
 
 ## AI Layer
 
