@@ -42,10 +42,10 @@ Keep the order stable unless behavior explicitly needs to change.
 For registry-backed AI tools, reuse the canonical registry validator as the wrapper `inputSchema` instead of defining a second schema in `src/ai/tools/**`.
 
 Example canonical-only CLI tool:
-- `get-wallet-balances` (aliases: `getWalletBalances`, `walletBalances`) is exposed via `/v1/tool-executions` for CLI balance reads and is not registered as a model wrapper.
-- `get-wallet-balances` currently supports `base` only for protocol-adjacent wallet reads.
+- `get-wallet-balances` (aliases: `getWalletBalances`, `walletBalances`) is exposed via `/v1/tool-executions` for hosted execution wallet balance reads and is not registered as a model wrapper.
+- `get-wallet-balances` currently supports `base` only for hosted execution wallet reads.
 - `list-wallet-notifications` (aliases: `listWalletNotifications`, `walletNotifications`) is exposed via `/v1/tool-executions` for subject-wallet inbox reads and is not registered as a model wrapper.
-- `list-wallet-notifications` returns shaped public payload DTOs only: discussion payloads are omitted, payment payloads expose the allowlisted payment fields, and protocol payloads are parsed through the shared wire notification DTO.
+- `list-wallet-notifications` returns shaped public payload DTOs only: discussion payloads are omitted, payment payloads expose the allowlisted payment fields, and protocol payloads are currently normalized with `normalizeWalletNotificationPayload` from `@cobuild/wire` while the tool output schema mirrors that shared payload shape.
 
 Example canonical + AI-wrapper inspect tools:
 - `get-goal` (aliases: `getGoal`, `goal.inspect`) reads indexed scaffold tables directly and returns concise goal, treasury, route, flow, stake, governance, and budget summary data.

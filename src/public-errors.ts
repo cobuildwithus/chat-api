@@ -136,7 +136,7 @@ const STATIC_PUBLIC_ERRORS = {
   },
   toolHostedWalletRequired: {
     statusCode: 409,
-    error: "Hosted CLI wallet has not been provisioned for this token yet.",
+    error: "Hosted execution wallet has not been provisioned for this token yet.",
   },
   toolWalletSubjectRequired: {
     statusCode: 401,

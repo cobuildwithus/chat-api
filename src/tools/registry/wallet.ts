@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type {
   ProtocolNotificationActor,
@@ -56,6 +57,7 @@ const RPC_TIMEOUT_MS = 7_000;
 const RPC_RETRY_COUNT = 1;
 const USDC_DECIMALS = 6;
 const BASE_USDC_CONTRACT = "0x833589fCD6EDB6E08F4C7C32D4F71B54BDA02913" as Address;
+const CLI_SMART_ACCOUNT_PREFIX = "cli-smart";
 
 const getWalletBalancesInputSchema = z.object({
   agentKey: z.string().trim().min(1).max(128).optional(),
@@ -231,6 +233,15 @@ function getWalletBalanceNetworkConfig() {
   };
 }
 
+function deterministicHostedExecutionWalletAccountName(params: {
+  ownerAddress: string;
+  agentKey: string;
+}): string {
+  const seed = `${params.ownerAddress}:${params.agentKey}`;
+  const suffix = createHash("sha256").update(seed).digest("hex").slice(0, 20);
+  return `${CLI_SMART_ACCOUNT_PREFIX}-${suffix}`;
+}
+
 async function resolveHostedWalletAddress(params: {
   ownerAddress: string;
   agentKey: string;
@@ -238,6 +249,7 @@ async function resolveHostedWalletAddress(params: {
   const rows = await cobuildPrimaryDb()
     .select({
       address: cliAgentWallets.address,
+      cdpAccountName: cliAgentWallets.cdpAccountName,
     })
     .from(cliAgentWallets)
     .where(
@@ -248,8 +260,15 @@ async function resolveHostedWalletAddress(params: {
     )
     .limit(1);
 
-  const address = rows[0]?.address;
-  if (typeof address !== "string" || address.length === 0) {
+  const row = rows[0];
+  const address = row?.address;
+  const cdpAccountName = row?.cdpAccountName;
+  if (
+    typeof address !== "string" ||
+    address.length === 0 ||
+    typeof cdpAccountName !== "string" ||
+    cdpAccountName !== deterministicHostedExecutionWalletAccountName(params)
+  ) {
     return null;
   }
 
@@ -378,7 +397,7 @@ export const walletToolDefinitions: RawRegisteredTool[] = [
   {
     name: "get-wallet-balances",
     aliases: ["getWalletBalances", "walletBalances"],
-    description: "Fetch ETH and USDC balances for the authenticated CLI wallet.",
+    description: "Fetch ETH and USDC balances for the hosted execution wallet associated with the authenticated CLI token.",
     input: getWalletBalancesInputSchema,
     outputSchema: {
       type: "object",

@@ -14,6 +14,7 @@
 - Header auth handling
 2. Interface backend -> canonical tools boundary (`/v1/tools`, `/v1/tools/:name`, `/v1/tool-executions`)
 - Bearer PAT gate via `Authorization: Bearer <bbt_...>`
+- Shared `@cobuild/wire` bearer verifier parses tokens, derives principals, and requires the backing CLI session to remain active with a matching stored scope
 - Per-tool required-scope enforcement after bearer auth succeeds
 - Invalid or missing bearer token returns `401`
 3. API -> Auth boundary (`src/api/auth/**`)

@@ -12,7 +12,7 @@ import {
 const mocks = vi.hoisted(() => ({
   getToolsPrincipalFromContext: vi.fn(),
   listWalletNotifications: vi.fn(),
-  hostedWalletRows: [] as Array<{ address: string }>,
+  hostedWalletRows: [] as Array<{ address: string; cdpAccountName?: string }>,
   hostedWalletLookupError: null as Error | null,
 }));
 
@@ -56,6 +56,7 @@ vi.mock("../../../src/infra/db/cobuildDb", () => ({
 vi.mock("../../../src/infra/db/schema", () => ({
   cliAgentWallets: {
     address: "address",
+    cdpAccountName: "cdpAccountName",
     ownerAddress: "ownerAddress",
     agentKey: "agentKey",
   },
@@ -179,6 +180,29 @@ describe("wallet tool direct execution branches", () => {
       name: "get-wallet-balances",
       statusCode: 502,
       error: "Tool request failed.",
+    });
+  });
+
+  it("treats legacy CLI wallet rows as missing hosted execution wallets", async () => {
+    mocks.getToolsPrincipalFromContext.mockReturnValue({
+      ownerAddress: "0x00000000000000000000000000000000000000aa",
+      agentKey: "default",
+      scopes: ["tools:read"],
+    });
+    mocks.hostedWalletRows = [{
+      address: "0x00000000000000000000000000000000000000bb",
+      cdpAccountName: "cli-legacy",
+    }];
+
+    const result = await getWalletBalancesTool?.execute({
+      network: "base",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 409,
+      error: "Hosted execution wallet has not been provisioned for this token yet.",
     });
   });
 

@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-10 (indexed goal/budget inspect tools)
+Last verified: 2026-03-10 (indexed chat-list compatibility contract docs)
 
 ## Purpose
 

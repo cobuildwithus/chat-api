@@ -102,7 +102,7 @@ Source: route schema modules under `src/api/**/schema.ts`, generated from shared
 
 ## Schema/Runtime Mismatches (Current)
 
-1. `goalAddress` accepts any string in schema; handler applies filter only if value parses as valid address.
+1. `goalAddress` remains in the chat-list query schema for compatibility, but the handler ignores it.
 2. Zod-to-JSON-Schema generation does not encode runtime-only transform/coercion behavior, so routes that rely on those paths need integration coverage.
 3. Request schemas exist, but route response schemas are not defined.
 

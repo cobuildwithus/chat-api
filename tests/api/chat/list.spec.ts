@@ -23,7 +23,7 @@ beforeEach(() => {
 });
 
 describe("handleChatListRequest", () => {
-  it("filters chats by goal address (case-insensitive)", async () => {
+  it("accepts the compatibility goalAddress query without changing the response shape", async () => {
     const now = new Date("2025-01-01T00:00:00Z");
     setCobuildDbResponse(chat, [
       {

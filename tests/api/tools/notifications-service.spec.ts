@@ -629,7 +629,7 @@ describe("wallet notifications service", () => {
         },
       }),
     });
-    expect(result.items[0]?.payload).not.toHaveProperty("reward");
+    expect(result.items[0]?.payload).toHaveProperty("reward", null);
   });
 
   it("preserves unknown kinds instead of coercing them", async () => {

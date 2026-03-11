@@ -118,7 +118,7 @@ Validation source of truth:
 
 - Canonical name: `get-wallet-balances`
 - Canonical aliases: `getWalletBalances`, `walletBalances`
-- Purpose: fetch ETH + USDC balances for the authenticated CLI wallet.
+- Purpose: fetch ETH + USDC balances for the hosted execution wallet associated with the authenticated CLI token.
 - Dependencies: Base JSON-RPC + USDC ERC-20 `balanceOf`.
 - Cache: lock-backed Redis cache (30s TTL), keyed by `<network>:<wallet>`.
 

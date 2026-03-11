@@ -135,4 +135,26 @@ describe("authenticateToolsBearerToken", () => {
 
     await expect(authenticateToolsBearerToken("token")).resolves.toBeNull();
   });
+
+  it("returns null when the backing CLI session scope no longer matches the token", async () => {
+    mocks.readActiveCliSession.mockResolvedValueOnce({
+      sessionId: "43",
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "ops",
+      scope: "tools:read offline_access",
+      expiresAt: new Date("2026-03-10T00:00:00.000Z"),
+    });
+    mocks.verifyCliAccessToken.mockResolvedValueOnce({
+      sub: "0x0000000000000000000000000000000000000001",
+      sid: "43",
+      agentKey: "ops",
+      scope: "tools:read wallet:execute offline_access",
+      iat: 1,
+      exp: 2,
+      iss: "issuer",
+      aud: "audience",
+    });
+
+    await expect(authenticateToolsBearerToken("token")).resolves.toBeNull();
+  });
 });

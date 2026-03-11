@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { executeTool } from "../../../src/tools/registry";
 
@@ -74,6 +75,11 @@ function queueSelectRows(...rowsQueue: unknown[][]) {
       where: () => makeSelectChain(rowsQueue[index++] ?? []),
     }),
   }));
+}
+
+function expectedHostedExecutionWalletAccountName(ownerAddress: string, agentKey: string): string {
+  const seed = `${ownerAddress.toLowerCase()}:${agentKey}`;
+  return `cli-smart-${createHash("sha256").update(seed).digest("hex").slice(0, 20)}`;
 }
 
 function embeddingPayload() {
@@ -278,7 +284,13 @@ describe("tool registry execution", () => {
   it("executes get-wallet-balances with short-term cache", async () => {
     const getBalance = vi.fn().mockResolvedValue(1_250_000_000_000_000_000n);
     const readContract = vi.fn().mockResolvedValue(2_500_000n);
-    queueSelectRows([{ address: "0x00000000000000000000000000000000000000aa" }]);
+    queueSelectRows([{
+      address: "0x00000000000000000000000000000000000000aa",
+      cdpAccountName: expectedHostedExecutionWalletAccountName(
+        "0x00000000000000000000000000000000000000aa",
+        "default",
+      ),
+    }]);
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x00000000000000000000000000000000000000aA",
       agentKey: "default",
@@ -1620,8 +1632,20 @@ describe("tool registry execution", () => {
     const readContract = vi.fn().mockResolvedValue(2_500_000n);
     const cache = new Map<string, unknown>();
     queueSelectRows(
-      [{ address: "0x00000000000000000000000000000000000000aa" }],
-      [{ address: "0x00000000000000000000000000000000000000bb" }],
+      [{
+        address: "0x00000000000000000000000000000000000000aa",
+        cdpAccountName: expectedHostedExecutionWalletAccountName(
+          "0x00000000000000000000000000000000000000aa",
+          "default",
+        ),
+      }],
+      [{
+        address: "0x00000000000000000000000000000000000000bb",
+        cdpAccountName: expectedHostedExecutionWalletAccountName(
+          "0x00000000000000000000000000000000000000aa",
+          "ops",
+        ),
+      }],
     );
     mocks.createPublicClient.mockReturnValue({
       getBalance,
@@ -2504,7 +2528,13 @@ describe("tool registry execution", () => {
   it("executes get-wallet-balances with explicit matching agent on base", async () => {
     const getBalance = vi.fn().mockResolvedValue(10000000000000000n);
     const readContract = vi.fn().mockResolvedValue(500000n);
-    queueSelectRows([{ address: "0x00000000000000000000000000000000000000ff" }]);
+    queueSelectRows([{
+      address: "0x00000000000000000000000000000000000000ff",
+      cdpAccountName: expectedHostedExecutionWalletAccountName(
+        "0x0000000000000000000000000000000000000001",
+        "ops",
+      ),
+    }]);
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "ops",
@@ -2565,7 +2595,13 @@ describe("tool registry execution", () => {
   });
 
   it("returns 502 when balance fetch fails upstream", async () => {
-    queueSelectRows([{ address: "0x0000000000000000000000000000000000000001" }]);
+    queueSelectRows([{
+      address: "0x0000000000000000000000000000000000000001",
+      cdpAccountName: expectedHostedExecutionWalletAccountName(
+        "0x0000000000000000000000000000000000000001",
+        "default",
+      ),
+    }]);
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x0000000000000000000000000000000000000001",
       agentKey: "default",
@@ -2581,7 +2617,7 @@ describe("tool registry execution", () => {
     });
   });
 
-  it("returns 409 when the hosted CLI wallet has not been provisioned", async () => {
+  it("returns 409 when the hosted execution wallet has not been provisioned", async () => {
     queueSelectRows([]);
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x0000000000000000000000000000000000000001",
@@ -2593,7 +2629,26 @@ describe("tool registry execution", () => {
       ok: false,
       name: "get-wallet-balances",
       statusCode: 409,
-      error: "Hosted CLI wallet has not been provisioned for this token yet.",
+      error: "Hosted execution wallet has not been provisioned for this token yet.",
+    });
+  });
+
+  it("returns 409 when the stored CLI wallet row is not the hosted execution wallet", async () => {
+    queueSelectRows([{
+      address: "0x0000000000000000000000000000000000000001",
+      cdpAccountName: "cli-legacy",
+    }]);
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+      scopes: ["tools:read"],
+    });
+
+    expect(await executeTool("get-wallet-balances", {})).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 409,
+      error: "Hosted execution wallet has not been provisioned for this token yet.",
     });
   });
 

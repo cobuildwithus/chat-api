@@ -39,7 +39,6 @@ Query:
 
 Behavior:
 - returns current user chat list sorted by `updatedAt`
-- applies optional goal-address filtering when address is valid
 
 ### GET `/api/chat/:chatId`
 
@@ -96,7 +95,7 @@ Error behavior:
 
 ## Known Schema/Runtime Caveats
 
-1. `goalAddress` schema accepts any string, runtime filters only when value is valid address.
+1. `goalAddress` remains accepted on chat-list requests for compatibility, but runtime does not filter on it.
 2. Route schemas validate request bodies but currently do not define response schemas.
 
 ## Required Update Triggers
