@@ -1,3 +1,4 @@
+import { COBUILD_PROJECT_ID as WIRE_COBUILD_PROJECT_ID } from "@cobuild/wire";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { getOrSetCachedResultWithLock } from "./cache/cacheResult";
 import { formatErrorLogMessage, formatErrorMessage } from "./errors";
@@ -14,7 +15,7 @@ const CACHE_PREFIX = "cobuild:ai-context:";
 const CACHE_KEY = "snapshot";
 const CACHE_TTL_SECONDS = 60 * 15;
 const COBUILD_CHAIN_ID = Number(process.env.COBUILD_CHAIN_ID ?? "8453");
-const COBUILD_PROJECT_ID = Number(process.env.COBUILD_JUICEBOX_PROJECT_ID ?? "6");
+const COBUILD_PROJECT_ID = Number(process.env.COBUILD_JUICEBOX_PROJECT_ID ?? WIRE_COBUILD_PROJECT_ID);
 const JB_TOKEN_DECIMALS = 18;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);

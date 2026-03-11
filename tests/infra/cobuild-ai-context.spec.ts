@@ -15,6 +15,77 @@ import {
 import { queueCobuildDbResponse, resetAllMocks, setCobuildDbResponse } from "../utils/mocks/db";
 import { resetCacheMocks } from "../utils/mocks/cache";
 
+type DrizzleCondition = {
+  kind: "and" | "eq";
+  args: unknown[];
+};
+
+async function captureSelectedProjectId(params: {
+  envProjectId?: string;
+  wireProjectId: number;
+}): Promise<number> {
+  const capturedConditions: DrizzleCondition[] = [];
+  const originalEnv = process.env;
+
+  vi.resetModules();
+  process.env = { ...originalEnv };
+  if (params.envProjectId === undefined) {
+    delete process.env.COBUILD_JUICEBOX_PROJECT_ID;
+  } else {
+    process.env.COBUILD_JUICEBOX_PROJECT_ID = params.envProjectId;
+  }
+
+  vi.doMock("@cobuild/wire", () => ({
+    COBUILD_PROJECT_ID: params.wireProjectId,
+  }));
+  vi.doMock("drizzle-orm", async () => {
+    const actual = await vi.importActual<typeof import("drizzle-orm")>("drizzle-orm");
+    return {
+      ...actual,
+      and: (...args: unknown[]) => ({ kind: "and", args }),
+      eq: (...args: unknown[]) => ({ kind: "eq", args }),
+    };
+  });
+  vi.doMock("../../src/infra/db/cobuildDb", () => ({
+    cobuildDb: {
+      select: () => ({
+        from: () => ({
+          where: (condition: DrizzleCondition) => {
+            capturedConditions.push(condition);
+            const chain = {
+              limit: () => chain,
+              orderBy: () => chain,
+              then: (resolve: (rows: unknown[]) => unknown) => resolve([]),
+            };
+            return chain;
+          },
+        }),
+      }),
+    },
+  }));
+
+  try {
+    const isolatedModule = await import("../../src/infra/cobuild-ai-context");
+    await expect(isolatedModule.fetchCobuildAiContextFresh()).rejects.toThrow(
+      "Cobuild Juicebox project not found.",
+    );
+  } finally {
+    process.env = originalEnv;
+  }
+
+  const projectQuery = capturedConditions[0];
+  if (!projectQuery || projectQuery.kind !== "and") {
+    throw new Error("Expected project query condition to be captured.");
+  }
+
+  const projectIdCondition = projectQuery.args[1] as DrizzleCondition | undefined;
+  if (!projectIdCondition || projectIdCondition.kind !== "eq") {
+    throw new Error("Expected project-id equality condition to be captured.");
+  }
+
+  return Number(projectIdCondition.args[1]);
+}
+
 describe("cobuild ai context", () => {
   beforeEach(() => {
     resetAllMocks();
@@ -399,5 +470,22 @@ describe("cobuild ai context", () => {
     expect(snapshot.data.issuance.nextPrice.basePerToken).toBeNull();
     expect(snapshot.data.issuance.nextChangeType).toBe("stage");
     expect(snapshot.data.issuance.activeStage).toBeNull();
+  });
+
+  it("prefers the env project id over the wire fallback", async () => {
+    const selectedProjectId = await captureSelectedProjectId({
+      envProjectId: "777",
+      wireProjectId: 138,
+    });
+
+    expect(selectedProjectId).toBe(777);
+  });
+
+  it("uses the wire project id when no env override is configured", async () => {
+    const selectedProjectId = await captureSelectedProjectId({
+      wireProjectId: 138,
+    });
+
+    expect(selectedProjectId).toBe(138);
   });
 });
