@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-10 (indexed chat-list compatibility contract docs)
+Last verified: 2026-03-11 (active execution-plan docs refreshed for DB-owned discussion visibility consumers)
 
 ## Purpose
 

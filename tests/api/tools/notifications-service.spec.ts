@@ -766,13 +766,17 @@ describe("wallet notifications service", () => {
     expect(unreadQuery.sql).toContain(
       "notification.id > COALESCE(state.last_read_notification_id, 0)",
     );
+    expect(unreadQuery.sql).toContain("cobuild.notification_row_is_visible(");
+    expect(unreadQuery.sql).not.toContain("root_author.neynar_user_score");
     expect(unreadQuery.sql).toContain("SELECT cursor");
     expect(unreadQuery.sql).not.toContain("notification.event_at IS NULL");
     expect(unreadQuery.params).toContain("payment");
 
     expect(listQuery.sql).toContain("notification.kind IN (");
+    expect(listQuery.sql).toContain("cobuild.notification_row_is_visible(");
     expect(listQuery.sql).toContain("notification.event_at IS NULL");
     expect(listQuery.sql).not.toContain("notification.event_at <");
+    expect(listQuery.sql).not.toContain("target.deleted_at IS NULL");
     expect(listQuery.sql).toContain(
       "ORDER BY notification.event_at DESC NULLS LAST, notification.created_at DESC, notification.id DESC",
     );

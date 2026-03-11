@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { executeTool } from "../../../src/tools/registry";
 
 const mocks = vi.hoisted(() => ({
@@ -12,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   createPublicClient: vi.fn(),
   requestContextGet: vi.fn(),
 }));
+
+const dialect = new PgDialect();
 
 vi.mock("../../../src/config/env", () => ({
   getOpenAiTimeoutMs: mocks.getOpenAiTimeoutMs,
@@ -560,6 +563,7 @@ describe("tool registry execution", () => {
       },
       cacheControl: "private, max-age=60",
     });
+
   });
 
   it("executes get-budget from indexed scaffold tables", async () => {
@@ -2029,6 +2033,11 @@ describe("tool registry execution", () => {
         ],
       },
     });
+
+    const listQuery = dialect.sqlToQuery(mocks.execute.mock.calls[0]?.[0]);
+    expect(listQuery.sql).toContain("cobuild.visible_discussion_text_casts");
+    expect(listQuery.sql).toContain("cobuild.visible_discussion_profiles");
+    expect(listQuery.sql).not.toContain("c.root_parent_url =");
   });
 
   it("maps list-discussions rows without last reply metadata", async () => {
@@ -2208,6 +2217,15 @@ describe("tool registry execution", () => {
         ],
       },
     });
+
+    const threadQueries = mocks.execute.mock.calls.slice(0, 5).map((call) => dialect.sqlToQuery(call?.[0]));
+
+    for (const query of threadQueries) {
+      expect(query.sql).toContain("cobuild.visible_discussion_text_casts");
+      expect(query.sql).toContain("cobuild.visible_discussion_profiles");
+      expect(query.sql).not.toContain("c.root_parent_url =");
+      expect(query.sql).not.toContain("p.neynar_user_score >=");
+    }
   });
 
   it("executes semantic-search-casts and maps embedding/vector results", async () => {
@@ -2263,6 +2281,11 @@ describe("tool registry execution", () => {
       },
       cacheControl: "private, max-age=60",
     });
+
+    const semanticQuery = dialect.sqlToQuery(mocks.execute.mock.calls[0]?.[0]);
+    expect(semanticQuery.sql).toContain("cobuild.visible_discussion_text_casts");
+    expect(semanticQuery.sql).toContain("cobuild.visible_discussion_profiles");
+    expect(semanticQuery.sql).not.toContain("c.root_parent_url =");
   });
 
   it("returns a 400 when tool name is empty after trim", async () => {
@@ -2785,6 +2808,7 @@ describe("tool registry execution", () => {
         ],
       },
     });
+
   });
 
   it("covers list-discussions parse and failure branches", async () => {

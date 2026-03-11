@@ -89,8 +89,6 @@ const GET_CAST_CACHE_TTL_SECONDS = 60 * 2;
 const OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings";
 const OPENAI_CAST_EMBEDDING_MODEL = "text-embedding-3-small";
 const CAST_EMBEDDING_DIMENSIONS = 256;
-const DISCUSSION_CHANNEL_URL = "https://farcaster.xyz/~/channel/cobuild";
-const NEYNAR_SCORE_THRESHOLD = 0.55;
 const DEFAULT_DISCUSSION_LIMIT = 20;
 const DEFAULT_THREAD_PAGE = 1;
 const DEFAULT_THREAD_PAGE_SIZE = 20;
@@ -100,6 +98,11 @@ const SNIPPET_MAX_LENGTH = 420;
 const EXCERPT_MAX_LENGTH = 280;
 const TITLE_MAX_LENGTH = 160;
 const CAST_HASH_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+
+const VISIBLE_DISCUSSION_TEXT_FROM_SQL = sql`
+  FROM cobuild.visible_discussion_text_casts c
+  JOIN cobuild.visible_discussion_profiles p ON p.fid = c.fid
+`;
 
 class OpenAiConfigError extends Error {}
 
@@ -384,19 +387,9 @@ async function executeListDiscussions(
         p.display_name AS "authorDisplayName",
         p.avatar_url AS "authorAvatarUrl",
         p.neynar_user_score AS "authorNeynarScore"
-      FROM farcaster.casts c
-      LEFT JOIN farcaster.profiles p ON p.fid = c.fid
+      ${VISIBLE_DISCUSSION_TEXT_FROM_SQL}
       LEFT JOIN farcaster.profiles lr ON lr.fid = c.last_reply_fid AND lr.hidden_at IS NULL
-      WHERE c.deleted_at IS NULL
-        AND c.hidden_at IS NULL
-        AND c.parent_hash IS NULL
-        AND c.root_parent_url = ${DISCUSSION_CHANNEL_URL}
-        AND c.text IS NOT NULL
-        AND btrim(c.text) <> ''
-        AND c.fid IS NOT NULL
-        AND p.hidden_at IS NULL
-        AND p.neynar_user_score IS NOT NULL
-        AND p.neynar_user_score >= ${NEYNAR_SCORE_THRESHOLD}
+      WHERE c.parent_hash IS NULL
       ORDER BY ${orderBy}
       LIMIT ${input.limit + 1}
       OFFSET ${input.offset}
@@ -462,19 +455,9 @@ async function executeGetDiscussionThread(
         p.display_name AS "authorDisplayName",
         p.avatar_url AS "authorAvatarUrl",
         p.neynar_user_score AS "authorNeynarScore"
-      FROM farcaster.casts c
-      LEFT JOIN farcaster.profiles p ON p.fid = c.fid
+      ${VISIBLE_DISCUSSION_TEXT_FROM_SQL}
       WHERE c.hash = ${rootBuffer}
-        AND c.deleted_at IS NULL
-        AND c.hidden_at IS NULL
         AND c.parent_hash IS NULL
-        AND c.root_parent_url = ${DISCUSSION_CHANNEL_URL}
-        AND c.text IS NOT NULL
-        AND btrim(c.text) <> ''
-        AND c.fid IS NOT NULL
-        AND p.hidden_at IS NULL
-        AND p.neynar_user_score IS NOT NULL
-        AND p.neynar_user_score >= ${NEYNAR_SCORE_THRESHOLD}
       LIMIT 1
     `)) as { rows?: ThreadCastRow[] };
 
@@ -485,19 +468,9 @@ async function executeGetDiscussionThread(
 
     const countResult = (await cobuildDb.execute(sql`
       SELECT COUNT(*)::bigint AS count
-      FROM farcaster.casts c
-      JOIN farcaster.profiles p ON p.fid = c.fid
-      WHERE c.deleted_at IS NULL
-        AND c.hidden_at IS NULL
-        AND c.root_parent_hash = ${rootBuffer}
+      ${VISIBLE_DISCUSSION_TEXT_FROM_SQL}
+      WHERE c.root_parent_hash = ${rootBuffer}
         AND c.hash <> ${rootBuffer}
-        AND c.root_parent_url = ${DISCUSSION_CHANNEL_URL}
-        AND c.text IS NOT NULL
-        AND btrim(c.text) <> ''
-        AND c.fid IS NOT NULL
-        AND p.hidden_at IS NULL
-        AND p.neynar_user_score IS NOT NULL
-        AND p.neynar_user_score >= ${NEYNAR_SCORE_THRESHOLD}
     `)) as { rows?: Array<{ count?: string | number | null }> };
 
     const replyCount = asNumber(countResult.rows?.[0]?.count) ?? 0;
@@ -510,20 +483,10 @@ async function executeGetDiscussionThread(
         SELECT
           c.timestamp AS "focusTimestamp",
           encode(c.hash, 'hex') AS "focusHashHex"
-        FROM farcaster.casts c
-        JOIN farcaster.profiles p ON p.fid = c.fid
-        WHERE c.deleted_at IS NULL
-          AND c.hidden_at IS NULL
-          AND c.root_parent_hash = ${rootBuffer}
+        ${VISIBLE_DISCUSSION_TEXT_FROM_SQL}
+        WHERE c.root_parent_hash = ${rootBuffer}
           AND c.hash <> ${rootBuffer}
           AND c.hash = ${focusBuffer}
-          AND c.root_parent_url = ${DISCUSSION_CHANNEL_URL}
-          AND c.text IS NOT NULL
-          AND btrim(c.text) <> ''
-          AND c.fid IS NOT NULL
-          AND p.hidden_at IS NULL
-          AND p.neynar_user_score IS NOT NULL
-          AND p.neynar_user_score >= ${NEYNAR_SCORE_THRESHOLD}
         LIMIT 1
       `)) as { rows?: Array<{ focusTimestamp?: Date | string | null; focusHashHex?: string | null }> };
 
@@ -531,19 +494,9 @@ async function executeGetDiscussionThread(
       if (focusRow?.focusHashHex && focusRow.focusTimestamp) {
         const beforeResult = (await cobuildDb.execute(sql`
           SELECT COUNT(*)::bigint AS count
-          FROM farcaster.casts c
-          JOIN farcaster.profiles p ON p.fid = c.fid
-          WHERE c.deleted_at IS NULL
-            AND c.hidden_at IS NULL
-            AND c.root_parent_hash = ${rootBuffer}
+          ${VISIBLE_DISCUSSION_TEXT_FROM_SQL}
+          WHERE c.root_parent_hash = ${rootBuffer}
             AND c.hash <> ${rootBuffer}
-            AND c.root_parent_url = ${DISCUSSION_CHANNEL_URL}
-            AND c.text IS NOT NULL
-            AND btrim(c.text) <> ''
-            AND c.fid IS NOT NULL
-            AND p.hidden_at IS NULL
-            AND p.neynar_user_score IS NOT NULL
-            AND p.neynar_user_score >= ${NEYNAR_SCORE_THRESHOLD}
             AND (
               c.timestamp < ${focusRow.focusTimestamp}
               OR (c.timestamp = ${focusRow.focusTimestamp} AND c.hash < ${focusBuffer})
@@ -567,19 +520,9 @@ async function executeGetDiscussionThread(
         p.display_name AS "authorDisplayName",
         p.avatar_url AS "authorAvatarUrl",
         p.neynar_user_score AS "authorNeynarScore"
-      FROM farcaster.casts c
-      JOIN farcaster.profiles p ON p.fid = c.fid
-      WHERE c.deleted_at IS NULL
-        AND c.hidden_at IS NULL
-        AND c.root_parent_hash = ${rootBuffer}
+      ${VISIBLE_DISCUSSION_TEXT_FROM_SQL}
+      WHERE c.root_parent_hash = ${rootBuffer}
         AND c.hash <> ${rootBuffer}
-        AND c.root_parent_url = ${DISCUSSION_CHANNEL_URL}
-        AND c.text IS NOT NULL
-        AND btrim(c.text) <> ''
-        AND c.fid IS NOT NULL
-        AND p.hidden_at IS NULL
-        AND p.neynar_user_score IS NOT NULL
-        AND p.neynar_user_score >= ${NEYNAR_SCORE_THRESHOLD}
       ORDER BY c.timestamp ASC NULLS LAST, c.hash ASC
       LIMIT ${input.pageSize}
       OFFSET ${(effectivePage - 1) * input.pageSize}
@@ -710,18 +653,8 @@ async function executeSemanticSearchCasts(
         p.avatar_url AS "authorAvatarUrl",
         p.neynar_user_score AS "authorNeynarScore",
         (c.text_embedding <=> ${vectorLiteral}::vector) AS "distance"
-      FROM farcaster.casts c
-      JOIN farcaster.profiles p ON p.fid = c.fid
-      WHERE c.deleted_at IS NULL
-        AND c.hidden_at IS NULL
-        AND c.root_parent_url = ${DISCUSSION_CHANNEL_URL}
-        AND c.text IS NOT NULL
-        AND btrim(c.text) <> ''
-        AND c.fid IS NOT NULL
-        AND c.text_embedding IS NOT NULL
-        AND p.hidden_at IS NULL
-        AND p.neynar_user_score IS NOT NULL
-        AND p.neynar_user_score >= ${NEYNAR_SCORE_THRESHOLD}
+      ${VISIBLE_DISCUSSION_TEXT_FROM_SQL}
+      WHERE c.text_embedding IS NOT NULL
         ${rootScopeFilter}
       ORDER BY c.text_embedding <=> ${vectorLiteral}::vector ASC
       LIMIT ${input.limit}

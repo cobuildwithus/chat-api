@@ -20,7 +20,6 @@ import {
 } from "./types";
 import { resolveSubjectWalletFromContext } from "./wallet-subject";
 
-const NEYNAR_SCORE_THRESHOLD = 0.55;
 const ISO_UTC_MICROS_TEMPLATE = `YYYY-MM-DD"T"HH24:MI:SS.US"Z"`;
 const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_INTEGER_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
@@ -68,27 +67,6 @@ function columnRef(alias: string, column: string) {
   return sql.raw(`${alias}.${column}`);
 }
 
-function buildHasAttachmentSql(alias: string) {
-  const embedSummaries = columnRef(alias, "embed_summaries");
-  const embedsArray = columnRef(alias, "embeds_array");
-
-  return sql`(
-    COALESCE(array_length(${embedSummaries}, 1), 0) > 0
-    OR (${embedsArray} IS NOT NULL AND jsonb_path_exists(${embedsArray}, '$[*] ? (@.url != null)'))
-  )`;
-}
-
-function buildRenderableCastSql(alias: string) {
-  const text = columnRef(alias, "text");
-  const mentionedFids = columnRef(alias, "mentioned_fids");
-
-  return sql`(
-    (${text} IS NOT NULL AND btrim(${text}) <> '')
-    OR COALESCE(array_length(${mentionedFids}, 1), 0) > 0
-    OR ${buildHasAttachmentSql(alias)}
-  )`;
-}
-
 const NOTIFICATION_FROM_SQL = sql`
   FROM cobuild.notifications notification
   LEFT JOIN cobuild.notification_state state
@@ -109,35 +87,13 @@ function buildVisibleNotificationFilters(subjectWalletAddress: string) {
   return [
     sql`notification.recipient_wallet_address = ${subjectWalletAddress}`,
     sql`notification.invalidated_at IS NULL`,
-    sql`(
-      notification.kind <> 'discussion'
-      OR (
-        source.hash IS NOT NULL
-        AND source.deleted_at IS NULL
-        AND source.hidden_at IS NULL
-        AND ${buildRenderableCastSql("source")}
-        AND root.hash IS NOT NULL
-        AND root.deleted_at IS NULL
-        AND root.hidden_at IS NULL
-        AND ${buildRenderableCastSql("root")}
-        AND root_author.fid IS NOT NULL
-        AND root_author.hidden_at IS NULL
-        AND root_author.neynar_user_score IS NOT NULL
-        AND root_author.neynar_user_score >= ${NEYNAR_SCORE_THRESHOLD}
-        AND actor.fid IS NOT NULL
-        AND actor.hidden_at IS NULL
-        AND actor.neynar_user_score IS NOT NULL
-        AND actor.neynar_user_score >= ${NEYNAR_SCORE_THRESHOLD}
-        AND (
-          notification.reason <> 'reply_to_reply'
-          OR (
-            target.hash IS NOT NULL
-            AND target.deleted_at IS NULL
-            AND target.hidden_at IS NULL
-            AND ${buildRenderableCastSql("target")}
-          )
-        )
-      )
+    sql`cobuild.notification_row_is_visible(
+      notification,
+      source,
+      actor,
+      root,
+      root_author,
+      target
     )`,
   ];
 }
