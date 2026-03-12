@@ -29,3 +29,6 @@ Restore lossy stored chat-data hydration, remove stale compatibility/dead wrappe
 
 ## Status
 Completed.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12
