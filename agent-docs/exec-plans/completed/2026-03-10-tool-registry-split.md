@@ -29,3 +29,6 @@ Refactor `src/tools/registry.ts` into a thin registry manifest backed by domain-
 
 - Required checks: `pnpm typecheck`, `pnpm test`, `pnpm test:coverage`, `bash scripts/check-agent-docs-drift.sh`, `bash scripts/doc-gardening.sh --fail-on-issues`
 - Completion workflow: `simplify` -> `test-coverage-audit` -> `task-finish-review`
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

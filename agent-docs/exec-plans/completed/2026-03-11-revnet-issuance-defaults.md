@@ -1,8 +1,8 @@
 # Revnet Issuance Terms Default Inputs
 
-Status: active
+Status: completed
 Created: 2026-03-11
-Updated: 2026-03-11
+Updated: 2026-03-12
 
 ## Goal
 
@@ -63,3 +63,4 @@ Updated: 2026-03-11
   - `bash scripts/doc-gardening.sh --fail-on-issues`
 - Expected outcomes:
   - All commands pass after the schema/defaulting change and doc updates.
+Completed: 2026-03-12

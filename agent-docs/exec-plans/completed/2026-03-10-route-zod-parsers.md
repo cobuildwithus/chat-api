@@ -25,3 +25,6 @@ Replace duplicated Fastify JSON schema objects plus handler-side request casts w
 
 ## Status
 Implementation completed. Focused route/parser tests passed; repo-wide required checks remain blocked by unrelated existing failures elsewhere in the dirty tree.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

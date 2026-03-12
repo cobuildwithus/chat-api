@@ -25,3 +25,6 @@ Restrict `/api/cli/tools/*` routes to internal callers that present a shared ser
 
 ## Status
 - Completed.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

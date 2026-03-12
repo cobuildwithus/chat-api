@@ -14,3 +14,6 @@ Remove ambiguity between "cli key" and "chat internal key" by renaming the inter
 
 ## Verification
 - Run required checks: typecheck, test, coverage, docs drift, doc gardening.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

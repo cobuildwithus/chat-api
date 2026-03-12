@@ -18,3 +18,6 @@ State
 - Done: re-verified with `pnpm typecheck`, `pnpm test`, `pnpm test:coverage`, `bash scripts/check-agent-docs-drift.sh`, and `bash scripts/doc-gardening.sh --fail-on-issues`.
 - Now: none.
 - Next: none.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

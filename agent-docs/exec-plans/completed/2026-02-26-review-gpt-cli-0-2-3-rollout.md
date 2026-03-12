@@ -18,3 +18,6 @@ Upgrade chat-api's shared review launcher dependency to `@cobuild/review-gpt@^0.
 
 ## Status
 - In progress.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

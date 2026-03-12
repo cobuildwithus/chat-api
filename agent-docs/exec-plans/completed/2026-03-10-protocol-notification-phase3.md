@@ -26,3 +26,6 @@ Expose clean wallet-notification summaries for the new actionable financial/expo
 - Added wallet-notification presentation for the new actionable financial/exposure reasons.
 - `src/domains/notifications/presentation.test.ts` passed.
 - Repo-wide `pnpm typecheck`, `pnpm test`, and `pnpm test:coverage` remain blocked by unrelated in-progress indexed protocol inspect changes in `src/domains/protocol/**`, `src/tools/registry.ts`, and their tests.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

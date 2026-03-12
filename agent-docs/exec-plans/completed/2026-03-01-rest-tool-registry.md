@@ -24,3 +24,6 @@ Introduce a canonical REST-first tool registry and execution path for cli tool r
 
 ## Status
 - Completed.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

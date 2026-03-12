@@ -25,3 +25,6 @@ Replace ambiguous `canWrite` in tools principal auth context with explicit write
 
 ## Status
 Completed implementation; verification in progress.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

@@ -21,3 +21,6 @@ Expose usable protocol notification summaries and app paths from the existing wa
 - `pnpm test:coverage`
 - `bash scripts/check-agent-docs-drift.sh`
 - `bash scripts/doc-gardening.sh --fail-on-issues`
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

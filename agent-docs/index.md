@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-12 (Chat parser cleanup docs refreshed)
+Last verified: 2026-03-12 (active execution plan cleanup)
 
 ## Purpose
 
@@ -47,4 +47,4 @@ This index is the table of contents for durable, repository-local context that a
 - CLI tools auth/rate-limit prehandler ordering changes require updates to Architecture + Security + API Contracts docs in the same change.
 - For multi-file/high-risk work, add a plan in `agent-docs/exec-plans/active/`.
 - Keep `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` current during active coding work.
-- Current active plan examples: `agent-docs/exec-plans/active/2026-03-03-explicit-write-capabilities.md`, `agent-docs/exec-plans/active/2026-03-11-revnet-issuance-read-adapter.md`.
+- When no work is active, leave only `agent-docs/exec-plans/active/README.md` and `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` in `active/`.

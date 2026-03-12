@@ -42,3 +42,6 @@ Replace chat-api-local address normalization and CLI bearer principal derivation
 - The shared-wire cutover is implemented and focused auth/address tests pass.
 - `pnpm typecheck` is currently blocked by unrelated repo issues: existing schema-test readonly typing mismatches plus `@cobuild/wire/protocol-notifications` local-link module-resolution problems outside this slice.
 - Full `pnpm test` is currently blocked by unrelated in-tree failures, including missing `src/tools/registry/wallet` imports and notification-contract regressions outside this normalization scope.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

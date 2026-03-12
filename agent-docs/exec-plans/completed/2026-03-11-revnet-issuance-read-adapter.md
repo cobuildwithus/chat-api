@@ -35,3 +35,6 @@ Add a canonical indexed `get-revnet-issuance-terms` tool in `chat-api` and reuse
 ## Notes
 
 - If local-wire development is required, restore the published dependency flow before close-out.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

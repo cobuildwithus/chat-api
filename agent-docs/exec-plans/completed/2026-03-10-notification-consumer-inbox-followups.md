@@ -24,3 +24,6 @@ Harden wallet notification consumer behavior in `chat-api` so scheduled protocol
 - `pnpm test:coverage`
 - `bash scripts/check-agent-docs-drift.sh`
 - `bash scripts/doc-gardening.sh --fail-on-issues`
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12

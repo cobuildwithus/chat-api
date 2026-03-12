@@ -36,3 +36,6 @@ Close outstanding high/medium/low security findings in chat-api for docs-search 
 ## Risks
 - Tightening docs-search auth may require interface callers to include internal header immediately.
 - Message-id reconciliation changes must preserve idempotent updates for existing chat rows.
+Status: completed
+Updated: 2026-03-12
+Completed: 2026-03-12
