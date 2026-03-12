@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  getChatInternalServiceKey,
   getCliJwtAudience,
   getCliJwtIssuer,
   getCliJwtPrivateKey,
@@ -24,7 +23,6 @@ const baseEnv = {
   REDIS_URL: "redis://localhost",
   POSTGRES_URL: "postgres://localhost",
   PRIVY_APP_ID: "privy",
-  CHAT_INTERNAL_SERVICE_KEY: "internal-secret",
   CLI_TOKEN_PEPPER: "pepper",
   CLI_JWT_PRIVATE_KEY: "private-key",
   CLI_JWT_PUBLIC_KEY: "public-key",
@@ -49,7 +47,6 @@ describe("env helpers", () => {
     process.env = { ...process.env, ...baseEnv };
     expect(validateEnvVariables().PRIVY_APP_ID).toBe("privy");
     expect(getPrivyAppId()).toBe("privy");
-    expect(getChatInternalServiceKey()).toBe("internal-secret");
     expect(getCliJwtPrivateKey()).toBe("private-key");
     expect(getCliJwtPublicKey()).toBe("public-key");
     expect(getCliJwtIssuer()).toBe("issuer");
@@ -163,15 +160,13 @@ describe("env helpers", () => {
     );
   });
 
-  it("does not require chat internal service key in production", () => {
+  it("validates production env without retired internal service keys", () => {
     process.env = {
       ...process.env,
       ...baseEnv,
       NODE_ENV: "production",
       PRIVY_VERIFICATION_KEY: "verification-key",
     };
-    delete process.env.CHAT_INTERNAL_SERVICE_KEY;
-    delete process.env.CLI_TOOLS_INTERNAL_KEY;
     expect(() => validateEnvVariables()).not.toThrow();
   });
 
@@ -238,7 +233,6 @@ describe("env helpers", () => {
       ...process.env,
       ...baseEnv,
       SELF_HOSTED_MODE: "true",
-      CHAT_INTERNAL_SERVICE_KEY: "internal-secret",
     };
     delete process.env.PRIVY_APP_ID;
     delete process.env.PRIVY_VERIFICATION_KEY;
@@ -321,21 +315,6 @@ describe("env helpers", () => {
     process.env = { ...process.env, ...baseEnv };
     delete process.env.PRIVY_APP_ID;
     expect(() => getPrivyAppId()).toThrow("Missing PRIVY_APP_ID");
-  });
-
-  it("returns null from getChatInternalServiceKey when missing", () => {
-    process.env = { ...process.env, ...baseEnv };
-    delete process.env.CHAT_INTERNAL_SERVICE_KEY;
-
-    expect(getChatInternalServiceKey()).toBeNull();
-  });
-
-  it("falls back to legacy cli env key when new key is missing", () => {
-    process.env = { ...process.env, ...baseEnv };
-    delete process.env.CHAT_INTERNAL_SERVICE_KEY;
-    process.env.CLI_TOOLS_INTERNAL_KEY = "legacy-secret";
-
-    expect(getChatInternalServiceKey()).toBe("legacy-secret");
   });
 
   it("re-parses when process.env values change on the same object", () => {

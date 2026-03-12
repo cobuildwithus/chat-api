@@ -64,8 +64,6 @@ const envSchema = z.object({
   SELF_HOSTED_PRODUCTION_ENABLED: z.string().min(1).optional(),
   SELF_HOSTED_DEFAULT_ADDRESS: z.string().min(1).optional(),
   SELF_HOSTED_SHARED_SECRET: z.string().min(1).optional(),
-  CHAT_INTERNAL_SERVICE_KEY: z.string().min(1).optional(),
-  CLI_TOOLS_INTERNAL_KEY: z.string().min(1).optional(),
   CLI_TOKEN_PEPPER: z.string().min(1).optional(),
   CLI_JWT_PRIVATE_KEY: z.string().min(1).optional(),
   CLI_JWT_PUBLIC_KEY: z.string().min(1).optional(),
@@ -343,11 +341,6 @@ export function isTrustedProxyConfigured(): boolean {
   return normalized !== "0" && normalized !== "false" && normalized !== "no";
 }
 
-export function getChatInternalServiceKey(): string | null {
-  const env = getEnv();
-  return env.CHAT_INTERNAL_SERVICE_KEY ?? env.CLI_TOOLS_INTERNAL_KEY ?? null;
-}
-
 export function getCliJwtPrivateKey(): string {
   const env = getEnv();
   const configured = env.CLI_JWT_PRIVATE_KEY?.trim();
@@ -398,11 +391,6 @@ export function getCliJwtAudience(): string {
     return configured;
   }
   return DEFAULT_CLI_JWT_AUDIENCE;
-}
-
-// Backward-compatible alias. Prefer getChatInternalServiceKey.
-export function getCliToolsInternalKey(): string | null {
-  return getChatInternalServiceKey();
 }
 
 function isTruthy(value?: string | null): boolean {

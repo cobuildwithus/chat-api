@@ -26,7 +26,9 @@ const buildRequest = (body: { type: string; data?: Record<string, unknown> }) =>
 beforeEach(() => {
   vi.clearAllMocks();
   resetAllMocks();
-  getChatUserOrThrowMock.mockReturnValue(buildChatUser());
+  getChatUserOrThrowMock.mockReturnValue(
+    buildChatUser() as ReturnType<typeof getChatUserOrThrow>,
+  );
 });
 
 describe("handleChatCreateRequest", () => {

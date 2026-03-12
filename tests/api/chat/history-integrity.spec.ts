@@ -126,7 +126,9 @@ beforeEach(() => {
     .mockReset()
     .mockReturnValueOnce("00000000-0000-0000-0000-000000000001")
     .mockReturnValueOnce("00000000-0000-0000-0000-000000000002");
-  getChatUserOrThrowMock.mockReturnValue(buildChatUser());
+  getChatUserOrThrowMock.mockReturnValue(
+    buildChatUser() as ReturnType<typeof getChatUserOrThrow>,
+  );
   getAgentMock.mockResolvedValue({
     system: [{ role: "system", content: "sys" }],
     tools: {},

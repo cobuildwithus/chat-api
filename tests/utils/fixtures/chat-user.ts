@@ -1,6 +1,8 @@
-import type { ChatUser } from "../../../src/ai/types";
+import type { ChatUserPrincipal } from "../../../src/api/auth/principals";
 
-export const buildChatUser = (overrides: Partial<ChatUser> = {}): ChatUser => ({
+export const buildChatUser = (
+  overrides: Partial<ChatUserPrincipal> = {},
+): ChatUserPrincipal => ({
   address: "0xabc0000000000000000000000000000000000000",
   city: null,
   country: null,

@@ -128,23 +128,16 @@ export async function executeTool(name: string, input: unknown): Promise<ToolExe
     return failureFromPublicError(normalizedName, "toolUnknown");
   }
 
-  if (requiresToolsPrincipal(tool.authPolicy)) {
-    const accessFailure = authorizeToolExecution(tool);
-    if (accessFailure) {
-      return accessFailure;
-    }
-  }
-
   const parsed = tool.input.safeParse(input);
+  const accessFailure =
+    requiresToolsPrincipal(tool.authPolicy) || parsed.success
+      ? authorizeToolExecution(tool)
+      : null;
+  if (accessFailure) {
+    return accessFailure;
+  }
   if (!parsed.success) {
     return toToolInputFailure(tool.name, parsed.error);
-  }
-
-  if (!requiresToolsPrincipal(tool.authPolicy)) {
-    const accessFailure = authorizeToolExecution(tool);
-    if (accessFailure) {
-      return accessFailure;
-    }
   }
 
   const result = await tool.execute(parsed.data);

@@ -1,40 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { LanguageModelUsage, ModelMessage, SystemModelMessage } from "ai";
+import { describe, expect, it, vi } from "vitest";
+import type { ModelMessage, SystemModelMessage } from "ai";
 import {
   CHAT_PERSIST_ERROR,
   CHAT_STREAM_ERROR_MESSAGE,
   buildStreamMessages,
   createReasoningTracker,
-  fireAndForget,
-  recordUsageIfPresent,
   resolveIsMobileRequest,
   streamErrorMessage,
 } from "../../../src/api/chat/chat-helpers";
-import { recordAiUsage } from "../../../src/ai/ai-rate.limit";
-
-vi.mock("../../../src/ai/ai-rate.limit", () => ({
-  recordAiUsage: vi.fn(),
-}));
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
 
 describe("chat helpers", () => {
   it("formats stream error messages", () => {
     expect(streamErrorMessage(new Error("boom"))).toBe(CHAT_STREAM_ERROR_MESSAGE);
     expect(streamErrorMessage("oops")).toBe(CHAT_STREAM_ERROR_MESSAGE);
     expect(CHAT_PERSIST_ERROR).toContain("save");
-  });
-
-  it("records usage only when tokens are present", async () => {
-    const usage = Promise.resolve({ totalTokens: 0 } as LanguageModelUsage);
-    await recordUsageIfPresent(usage, "0xabc");
-    expect(recordAiUsage).not.toHaveBeenCalled();
-
-    const usage2 = Promise.resolve({ totalTokens: 10 } as LanguageModelUsage);
-    await recordUsageIfPresent(usage2, "0xabc");
-    expect(recordAiUsage).toHaveBeenCalledWith("0xabc", 10);
   });
 
   it("resolves mobile requests based on header or user agent", () => {
@@ -96,18 +75,5 @@ describe("chat helpers", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("swallows fire-and-forget promise rejections", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    fireAndForget(Promise.reject(new Error("boom")), "bg-op");
-    await Promise.resolve();
-
-    expect(warnSpy).toHaveBeenCalledWith(
-      "bg-op failed",
-      expect.objectContaining({ message: "boom" }),
-    );
-    warnSpy.mockRestore();
   });
 });

@@ -113,7 +113,9 @@ describe("chat disconnect behavior", () => {
       .mockReset()
       .mockReturnValueOnce("11111111-1111-4111-8111-111111111111")
       .mockReturnValueOnce("22222222-2222-4222-8222-222222222222");
-    getChatUserOrThrowMock.mockReturnValue(buildChatUser());
+    getChatUserOrThrowMock.mockReturnValue(
+      buildChatUser() as ReturnType<typeof getChatUserOrThrow>,
+    );
     getAgentMock.mockResolvedValue({
       system: [{ role: "system", content: "sys" }],
       tools: {},

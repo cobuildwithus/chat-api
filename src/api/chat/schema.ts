@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { CHAT_AGENT_TYPE, type ChatData } from "../../ai/types";
 import {
   buildFastifyRouteSchema,
   createRuntimeSchemaParser,
 } from "../zod-route-schema";
 
-const CHAT_TYPES = ["chat-default"] as const;
+const CHAT_TYPES = [CHAT_AGENT_TYPE] as const;
 
 const chatDataSchema = z.object({
   goalAddress: z.string().optional(),
@@ -15,6 +16,7 @@ const chatDataSchema = z.object({
   startupId: z.string().optional(),
   draftId: z.string().optional(),
 }).strict();
+const chatDataParserSchema = z.object(chatDataSchema.shape).strip();
 
 const filePartSchema = z.object({
   type: z.literal("file"),
@@ -91,6 +93,15 @@ export const parseChatHeaders = chatHeadersParser.parse;
 export const parseChatCreateBody = chatCreateBodyParser.parse;
 export const parseChatGetParams = chatGetParamsParser.parse;
 export const parseChatListQuery = chatListQueryParser.parse;
+
+export function parseChatData(input: unknown): ChatData {
+  const result = chatDataParserSchema.safeParse(input);
+  if (!result.success) {
+    return {};
+  }
+
+  return result.data;
+}
 
 export type ChatRequestBody = z.infer<typeof chatBodySchema>;
 export type ChatCreateRequestBody = z.infer<typeof chatCreateBodySchema>;

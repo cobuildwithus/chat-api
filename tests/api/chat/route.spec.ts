@@ -161,7 +161,9 @@ beforeEach(() => {
   randomUUIDMock
     .mockReturnValueOnce("00000000-0000-0000-0000-000000000001")
     .mockReturnValueOnce("00000000-0000-0000-0000-000000000002");
-  getChatUserOrThrowMock.mockReturnValue(buildChatUser());
+  getChatUserOrThrowMock.mockReturnValue(
+    buildChatUser() as ReturnType<typeof getChatUserOrThrow>,
+  );
   mockModel = {} as LanguageModel;
   getAgentMock.mockResolvedValue({
     system: [{ role: "system", content: "sys" }],
@@ -280,19 +282,15 @@ describe("handleChatPostRequest", () => {
 
     await handleChatPostRequest(buildRequest(baseBody), createReply());
 
-    expect(getAgentMock).toHaveBeenCalledWith(
-      "chat-default",
-      expect.anything(),
-      {
-        goalAddress: "0xgoal",
-        grantId: "grant-1",
-        impactId: "impact-1",
-        castId: "cast-1",
-        opportunityId: "opp-1",
-        startupId: "startup-1",
-        draftId: "draft-1",
-      },
-    );
+    expect(getAgentMock).toHaveBeenCalledWith(expect.anything(), {
+      goalAddress: "0xgoal",
+      grantId: "grant-1",
+      impactId: "impact-1",
+      castId: "cast-1",
+      opportunityId: "opp-1",
+      startupId: "startup-1",
+      draftId: "draft-1",
+    });
   });
 
   it("treats malformed stored chat data as empty agent context", async () => {
@@ -309,7 +307,7 @@ describe("handleChatPostRequest", () => {
 
     await handleChatPostRequest(buildRequest(baseBody), createReply());
 
-    expect(getAgentMock).toHaveBeenCalledWith("chat-default", expect.anything(), {});
+    expect(getAgentMock).toHaveBeenCalledWith(expect.anything(), {});
   });
 
   it("returns 429 when AI admission denies usage", async () => {
@@ -406,7 +404,6 @@ describe("handleChatPostRequest", () => {
       existingTitle: null,
     });
     expect(getAgentMock).toHaveBeenCalledWith(
-      "chat-default",
       expect.objectContaining({ address: "0xabc0000000000000000000000000000000000000" }),
       {},
     );
@@ -825,6 +822,52 @@ describe("handleChatPostRequest", () => {
     });
   });
 
+  it("trusts only assistant ids that actually finish streaming", async () => {
+    randomUUIDMock.mockReturnValueOnce("00000000-0000-0000-0000-000000000003");
+    const { result, toUIMessageStream } = buildStreamResult();
+    streamTextMock.mockReturnValue(result);
+
+    await handleChatPostRequest(buildRequest(baseBody), createReply());
+
+    const options = toUIMessageStream.mock.calls[0]?.[0];
+    expect(options?.generateMessageId?.()).toBe("00000000-0000-0000-0000-000000000002");
+    expect(options?.generateMessageId?.()).toBe("00000000-0000-0000-0000-000000000003");
+
+    await options?.onFinish?.({
+      messages: [
+        {
+          id: "user-1",
+          role: "user",
+          parts: [{ type: "text", text: "hello" }],
+        },
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [{ type: "text", text: "first" }],
+        },
+      ],
+      isContinuation: false,
+      isAborted: false,
+      responseMessage: {
+        id: "00000000-0000-0000-0000-000000000002",
+        role: "assistant",
+        parts: [{ type: "text", text: "first" }],
+      },
+    });
+
+    expect(storeAssistantMessagesMock).toHaveBeenNthCalledWith(2, {
+      chatId: "chat-1",
+      messages: [
+        {
+          id: "00000000-0000-0000-0000-000000000002",
+          role: "assistant",
+          parts: [{ type: "text", text: "first" }],
+        },
+      ],
+      trustedMessageIds: ["00000000-0000-0000-0000-000000000002"],
+    });
+  });
+
   it("does not reserve AI admission when agent construction fails", async () => {
     getAgentMock.mockRejectedValueOnce(new Error("agent unavailable"));
 
@@ -917,11 +960,18 @@ describe("handleChatPostRequest", () => {
   });
 
   it("throws the persistence error when initial assistant persistence fails", async () => {
+    const admission = {
+      reservedUsage: 1000,
+      finalizeUsage: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+    admitAiGenerationMock.mockResolvedValueOnce({ allowed: true, admission });
     storeAssistantMessagesMock.mockRejectedValueOnce("db down");
 
     const reply = createReply();
     await expect(handleChatPostRequest(buildRequest(baseBody), reply)).rejects.toThrow(
       CHAT_PERSIST_ERROR,
     );
+    expect(admission.release).toHaveBeenCalledTimes(1);
   });
 });

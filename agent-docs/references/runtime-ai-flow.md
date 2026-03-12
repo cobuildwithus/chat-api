@@ -7,10 +7,8 @@ Primary path: `POST /api/chat` in `src/api/chat/route.ts`.
 ## Execution Sequence
 
 1. Resolve chat identity and load the stored chat type/data.
-2. In parallel:
-- run usage limiter (`src/ai/ai-rate.limit.ts`)
-- build agent (`src/ai/agents/agent.ts`)
-3. Append or rehydrate the authoritative user turn from DB-backed history (`src/chat/message-store.ts`).
+2. Append or rehydrate the authoritative user turn from DB-backed history (`src/chat/message-store.ts`).
+3. Load the default chat agent and acquire generation admission (`src/ai/agents/agent.ts`, `src/ai/ai-rate.limit.ts`).
 4. Build stream messages from authoritative history/context (`src/api/chat/chat-helpers.ts`).
 5. Persist pending assistant placeholder (`src/chat/message-store.ts`).
 6. Call `streamText` with:
@@ -33,7 +31,7 @@ Primary path: `POST /api/chat` in `src/api/chat/route.ts`.
 
 - Selector: `src/ai/agents/agent.ts`
 - Runtime support: `chat-default`
-- Unknown types throw, so client/request contracts should avoid unsupported values.
+- The selector currently resolves the single supported chat runtime directly.
 
 ## Tool Integration Notes
 

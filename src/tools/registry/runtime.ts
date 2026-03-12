@@ -3,7 +3,7 @@ import {
   formatToolInputPublicError,
   toToolExecutionPublicError,
 } from "../../public-errors";
-import { getToolsPrincipalFromContext } from "../../domains/notifications/wallet-subject";
+import { getToolsPrincipal } from "../../api/auth/principals";
 import type {
   JsonSchema,
   RegisteredTool,
@@ -67,7 +67,7 @@ export function requiresToolsPrincipal(policy: ToolAuthPolicy): boolean {
 }
 
 export function authorizeToolExecution(tool: RegisteredTool): ToolExecutionFailure | null {
-  const toolsPrincipal = getToolsPrincipalFromContext();
+  const toolsPrincipal = getToolsPrincipal();
   if (requiresToolsPrincipal(tool.authPolicy) && !toolsPrincipal) {
     return failureFromPublicError(tool.name, "toolPrincipalRequired");
   }

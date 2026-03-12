@@ -1,5 +1,6 @@
 import type { UIMessage } from "ai";
-import type { AgentType } from "./agents/agent";
+
+export const CHAT_AGENT_TYPE = "chat-default" as const;
 
 export type ChatAttachment =
   | {

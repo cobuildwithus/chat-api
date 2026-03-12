@@ -10,11 +10,15 @@ import { isTrustedProxyConfigured } from "../../config/env";
 export type SubjectWallet = `0x${string}`;
 
 export type ChatUserPrincipal = {
-  address: string;
+  address: SubjectWallet;
   country: string | null;
   countryRegion: string | null;
   city: string | null;
   userAgent: string | null;
+};
+
+type ChatUserPrincipalInput = Omit<ChatUserPrincipal, "address"> & {
+  address: string;
 };
 
 export type ToolsPrincipal = {
@@ -97,8 +101,16 @@ export function createChatUserPrincipal(
   };
 }
 
-export function setChatUserPrincipal(principal: ChatUserPrincipal): void {
-  requestContext.set("user", principal);
+export function setChatUserPrincipal(principal: ChatUserPrincipalInput): void {
+  const address = normalizeSubjectWallet(principal.address);
+  if (!address) {
+    throw new Error("Invalid user address");
+  }
+
+  requestContext.set("user", {
+    ...principal,
+    address,
+  });
 }
 
 export function setChatUserPrincipalFromRequest(
@@ -194,8 +206,8 @@ export function getToolsPrincipal(): ToolsPrincipal | null {
 
 export function getSubjectWalletFromChatUserPrincipal(
   principal: Pick<ChatUserPrincipal, "address">,
-): SubjectWallet | null {
-  return normalizeSubjectWallet(principal.address);
+): SubjectWallet {
+  return principal.address;
 }
 
 export function getSubjectWalletFromToolsPrincipal(

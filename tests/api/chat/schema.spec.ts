@@ -5,6 +5,7 @@ import {
   chatListSchema,
   chatSchema,
   parseChatBody,
+  parseChatData,
   parseChatCreateBody,
   parseChatHeaders,
   parseChatListQuery,
@@ -64,6 +65,17 @@ describe("chat schemas", () => {
     expect(parseChatHeaders({ "x-client-device": "mobile" })).toEqual({
       "x-client-device": "mobile",
     });
+    expect(
+      parseChatData({
+        goalAddress: "0xgoal",
+        ignored: 7,
+        impactId: "impact-1",
+      }),
+    ).toEqual({
+      goalAddress: "0xgoal",
+      impactId: "impact-1",
+    });
+    expect(parseChatData("{not-an-object}")).toEqual({});
     expect(parseChatListQuery({ limit: "7" })).toEqual({ limit: 7 });
     expect(() => parseChatCreateBody({ type: "other" })).toThrow();
   });

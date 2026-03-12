@@ -2,9 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   admitAiGeneration,
   isAiUsageAvailable,
-  isAiUsageAvailablePerFid,
   recordAiUsage,
-  recordAiUsagePerFid,
 } from "../../src/ai/ai-rate.limit";
 import { acquireRedisSemaphoreLease } from "../../src/infra/redis";
 import {
@@ -42,16 +40,6 @@ describe("ai-rate.limit", () => {
 
     await recordAiUsage("0xabc", 25);
     expect(recordUsage).toHaveBeenCalledWith("ai:0xabc", 25);
-  });
-
-  it("checks and records usage per fid", async () => {
-    vi.mocked(getUsage).mockResolvedValueOnce(300000);
-
-    await expect(isAiUsageAvailablePerFid(123)).resolves.toBe(false);
-    expect(getUsage).toHaveBeenCalledWith("ai:fid:123", 1440);
-
-    await recordAiUsagePerFid(123, 500);
-    expect(recordUsage).toHaveBeenCalledWith("ai:fid:123", 500);
   });
 
   it("admits a generation only after inflight leases and atomic quota reservation succeed", async () => {

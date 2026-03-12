@@ -8,13 +8,8 @@ vi.mock("../../../src/ai/agents/chat-default/chat-default", () => ({
 
 describe("agent helpers", () => {
   it("gets the chat-default agent", async () => {
-    const agent = await getAgent("chat-default", null, {});
-    expect(getChatDefault).toHaveBeenCalled();
+    const agent = await getAgent(null, {});
+    expect(getChatDefault).toHaveBeenCalledWith(null, {}, undefined);
     expect(agent.system).toEqual([]);
-  });
-
-  it("throws for unsupported agent types", async () => {
-    const badType = "unknown" as unknown as Parameters<typeof getAgent>[0];
-    await expect(getAgent(badType, null, {})).rejects.toThrow("Unsupported agent");
   });
 });

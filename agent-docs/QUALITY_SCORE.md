@@ -14,6 +14,6 @@ Snapshot date: 2026-03-07
 
 ## Top Risks
 
-1. Request schema vs runtime support drift (`type` accepted broadly, runtime supports only `chat-default`).
-2. Logging redaction currently covers only a narrow header set.
-3. Request schemas currently do not enforce response-shape contracts.
+1. Logging redaction currently covers only a narrow header set.
+2. Request schemas currently do not enforce response-shape contracts.
+3. Chat-list compatibility parameters remain tolerated longer than the active runtime uses them.

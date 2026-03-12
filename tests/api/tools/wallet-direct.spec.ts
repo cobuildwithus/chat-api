@@ -10,15 +10,21 @@ import {
 } from "@cobuild/wire";
 
 const mocks = vi.hoisted(() => ({
-  getToolsPrincipalFromContext: vi.fn(),
+  getToolsPrincipal: vi.fn(),
   listWalletNotifications: vi.fn(),
   hostedWalletRows: [] as Array<{ address: string; cdpAccountName?: string }>,
   hostedWalletLookupError: null as Error | null,
 }));
 
-vi.mock("../../../src/domains/notifications/wallet-subject", () => ({
-  getToolsPrincipalFromContext: mocks.getToolsPrincipalFromContext,
-}));
+vi.mock("../../../src/api/auth/principals", async () => {
+  const actual = await vi.importActual<typeof import("../../../src/api/auth/principals")>(
+    "../../../src/api/auth/principals",
+  );
+  return {
+    ...actual,
+    getToolsPrincipal: mocks.getToolsPrincipal,
+  };
+});
 
 vi.mock("../../../src/domains/notifications/service", () => {
   class WalletNotificationsSubjectRequiredError extends Error {}
@@ -145,7 +151,7 @@ describe("wallet tool direct execution branches", () => {
   });
 
   it("maps invalid tools principal owner addresses to internal tool failures", async () => {
-    mocks.getToolsPrincipalFromContext.mockReturnValue({
+    mocks.getToolsPrincipal.mockReturnValue({
       ownerAddress: "not-an-address",
       agentKey: "default",
       scopes: ["tools:read"],
@@ -164,7 +170,7 @@ describe("wallet tool direct execution branches", () => {
   });
 
   it("maps hosted wallet lookup failures to tool execution failures", async () => {
-    mocks.getToolsPrincipalFromContext.mockReturnValue({
+    mocks.getToolsPrincipal.mockReturnValue({
       ownerAddress: "0x00000000000000000000000000000000000000aa",
       agentKey: "default",
       scopes: ["tools:read"],
@@ -184,7 +190,7 @@ describe("wallet tool direct execution branches", () => {
   });
 
   it("treats legacy CLI wallet rows as missing hosted execution wallets", async () => {
-    mocks.getToolsPrincipalFromContext.mockReturnValue({
+    mocks.getToolsPrincipal.mockReturnValue({
       ownerAddress: "0x00000000000000000000000000000000000000aa",
       agentKey: "default",
       scopes: ["tools:read"],

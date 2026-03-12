@@ -10,7 +10,7 @@ import {
 
 const walletModuleMocks = vi.hoisted(() => ({
   listWalletNotifications: vi.fn(),
-  getToolsPrincipalFromContext: vi.fn(),
+  getToolsPrincipal: vi.fn(),
   getOrSetCachedResultWithLock: vi.fn(),
   createPublicClient: vi.fn(),
 }));
@@ -25,13 +25,13 @@ vi.mock("../../../src/domains/notifications/service", async () => {
   };
 });
 
-vi.mock("../../../src/domains/notifications/wallet-subject", async () => {
-  const actual = await vi.importActual<typeof import("../../../src/domains/notifications/wallet-subject")>(
-    "../../../src/domains/notifications/wallet-subject",
+vi.mock("../../../src/api/auth/principals", async () => {
+  const actual = await vi.importActual<typeof import("../../../src/api/auth/principals")>(
+    "../../../src/api/auth/principals",
   );
   return {
     ...actual,
-    getToolsPrincipalFromContext: walletModuleMocks.getToolsPrincipalFromContext,
+    getToolsPrincipal: walletModuleMocks.getToolsPrincipal,
   };
 });
 

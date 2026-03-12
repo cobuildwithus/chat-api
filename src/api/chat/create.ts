@@ -4,7 +4,7 @@ import { chat } from "../../infra/db/schema";
 import { cobuildDb } from "../../infra/db/cobuildDb";
 import { getPublicError, toPublicErrorBody } from "../../public-errors";
 import { getChatUserOrThrow } from "../auth/validate-chat-user";
-import { parseChatCreateBody } from "./schema";
+import { parseChatCreateBody, parseChatData } from "./schema";
 
 export async function handleChatCreateRequest(
   request: FastifyRequest,
@@ -12,7 +12,8 @@ export async function handleChatCreateRequest(
 ) {
   try {
     const user = getChatUserOrThrow();
-    const { type, data } = parseChatCreateBody(request.body);
+    const { type, data: inputData } = parseChatCreateBody(request.body);
+    const data = parseChatData(inputData);
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const chatId = randomUUID();
@@ -21,7 +22,7 @@ export async function handleChatCreateRequest(
         .values({
           id: chatId,
           type,
-          data: data ?? {},
+          data,
           user: user.address,
           updatedAt: new Date(),
         })

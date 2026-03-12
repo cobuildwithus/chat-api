@@ -4,6 +4,7 @@ import {
   normalizeWalletNotificationPayload,
 } from "@cobuild/wire";
 import { sql } from "drizzle-orm";
+import { resolveSubjectWalletFromContext } from "../../api/auth/principals";
 import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
 import {
   decodeWalletNotificationsCursor,
@@ -18,7 +19,6 @@ import {
   type WalletNotificationPayload,
   type WalletNotificationsUnreadState,
 } from "./types";
-import { resolveSubjectWalletFromContext } from "./wallet-subject";
 
 const ISO_UTC_MICROS_TEMPLATE = `YYYY-MM-DD"T"HH24:MI:SS.US"Z"`;
 const MAX_SAFE_INTEGER_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);

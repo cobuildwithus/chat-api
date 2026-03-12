@@ -110,23 +110,6 @@ export async function admitAiGeneration(
   };
 }
 
-// per fid
-const MAX_AI_USAGE_PER_FID = 250000; // 250k tokens
-const MAX_AI_USAGE_WINDOW_PER_FID = 1440; // per 24 hours (in minutes)
-
-async function getAiUsagePerFid(fid: number) {
-  return await getUsage(`ai:fid:${fid}`, MAX_AI_USAGE_WINDOW_PER_FID);
-}
-
-export async function recordAiUsagePerFid(fid: number, usage: number) {
-  return await recordUsage(`ai:fid:${fid}`, usage);
-}
-
-export async function isAiUsageAvailablePerFid(fid: number) {
-  const usage = await getAiUsagePerFid(fid);
-  return usage < MAX_AI_USAGE_PER_FID;
-}
-
 async function releaseLeases(...leases: RedisSemaphoreLease[]) {
   await Promise.all(leases.map((lease) => lease.release()));
 }

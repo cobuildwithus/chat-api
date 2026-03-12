@@ -6,13 +6,23 @@ import {
   getSelfHostedSharedSecret,
   isSelfHostedMode,
 } from "../../config/env";
-import { getPublicError, toPublicErrorBody } from "../../public-errors";
+import {
+  getPublicError,
+  toPublicErrorBody,
+  type PublicErrorKey,
+} from "../../public-errors";
 import { getUserAddressFromToken } from "./get-user-from-token";
 import {
   getChatUserPrincipalOrThrow,
   normalizeSubjectWallet,
   setChatUserPrincipalFromRequest,
+  type ChatUserPrincipal,
+  type SubjectWallet,
 } from "./principals";
+
+type ChatUserAddressResolution =
+  | { ok: true; address: SubjectWallet }
+  | { ok: false; errorKey: PublicErrorKey };
 
 function isValidSharedSecret(authHeader: string, sharedSecret: string): boolean {
   const authBuffer = Buffer.from(authHeader, "utf8");
@@ -36,67 +46,97 @@ function normalizePrivyToken(rawToken: unknown): string | undefined {
   return trimmed.replace(/^"(.*)"$/, "$1");
 }
 
+function resolveAddress(address: unknown): SubjectWallet | null {
+  return normalizeSubjectWallet(address);
+}
+
+function failAddressResolution(errorKey: PublicErrorKey): ChatUserAddressResolution {
+  return { ok: false, errorKey };
+}
+
+function replyWithPublicError(reply: FastifyReply, errorKey: PublicErrorKey) {
+  const error = getPublicError(errorKey);
+  return reply.code(error.statusCode).send(toPublicErrorBody(errorKey));
+}
+
+function resolveSelfHostedChatUserAddress(
+  request: FastifyRequest,
+): ChatUserAddressResolution {
+  if (!isSelfHostedModeAllowedAtRuntime()) {
+    return failAddressResolution("chatAuthMisconfigured");
+  }
+
+  const sharedSecret = getSelfHostedSharedSecret();
+  if (!sharedSecret) {
+    return failAddressResolution("chatAuthMisconfigured");
+  }
+
+  const authHeader = request.headers["x-chat-auth"];
+  if (!authHeader || typeof authHeader !== "string") {
+    return failAddressResolution("chatAuthRequired");
+  }
+
+  if (!isValidSharedSecret(authHeader, sharedSecret)) {
+    return failAddressResolution("chatAuthInvalid");
+  }
+
+  const headerAddress = request.headers["x-chat-user"];
+  const rawAddress =
+    (typeof headerAddress === "string" ? headerAddress : null) ??
+    getSelfHostedDefaultAddress() ??
+    null;
+  if (!rawAddress) {
+    return failAddressResolution("chatUserRequired");
+  }
+
+  const address = resolveAddress(rawAddress);
+  if (!address) {
+    return failAddressResolution("chatUserInvalid");
+  }
+
+  return { ok: true, address };
+}
+
+async function resolveTokenChatUserAddress(
+  request: FastifyRequest,
+): Promise<ChatUserAddressResolution> {
+  const token = normalizePrivyToken(request.headers["privy-id-token"]);
+  if (!token) {
+    return failAddressResolution("chatTokenRequired");
+  }
+
+  const address = resolveAddress(await getUserAddressFromToken(token));
+  if (!address) {
+    return failAddressResolution("chatUserInvalid");
+  }
+
+  return { ok: true, address };
+}
+
+async function resolveChatUserAddress(
+  request: FastifyRequest,
+): Promise<ChatUserAddressResolution> {
+  if (isSelfHostedMode()) {
+    return resolveSelfHostedChatUserAddress(request);
+  }
+
+  return resolveTokenChatUserAddress(request);
+}
+
 export async function validateChatUser(request: FastifyRequest, reply: FastifyReply) {
   try {
-    if (isSelfHostedMode()) {
-      if (!isSelfHostedModeAllowedAtRuntime()) {
-        const error = getPublicError("chatAuthMisconfigured");
-        return reply.code(error.statusCode).send(toPublicErrorBody("chatAuthMisconfigured"));
-      }
-      const sharedSecret = getSelfHostedSharedSecret();
-      if (!sharedSecret) {
-        const error = getPublicError("chatAuthMisconfigured");
-        return reply.code(error.statusCode).send(toPublicErrorBody("chatAuthMisconfigured"));
-      }
-      const authHeader = request.headers["x-chat-auth"];
-      if (!authHeader || typeof authHeader !== "string") {
-        const error = getPublicError("chatAuthRequired");
-        return reply.code(error.statusCode).send(toPublicErrorBody("chatAuthRequired"));
-      }
-      if (!isValidSharedSecret(authHeader, sharedSecret)) {
-        const error = getPublicError("chatAuthInvalid");
-        return reply.code(error.statusCode).send(toPublicErrorBody("chatAuthInvalid"));
-      }
-
-      const headerAddress = request.headers["x-chat-user"];
-      const rawAddress =
-        (typeof headerAddress === "string" ? headerAddress : null) ??
-        getSelfHostedDefaultAddress() ??
-        null;
-      if (!rawAddress) {
-        const error = getPublicError("chatUserRequired");
-        return reply.code(error.statusCode).send(toPublicErrorBody("chatUserRequired"));
-      }
-      const normalizedAddress = normalizeSubjectWallet(rawAddress);
-      if (!normalizedAddress) {
-        const error = getPublicError("chatUserInvalid");
-        return reply.code(error.statusCode).send(toPublicErrorBody("chatUserInvalid"));
-      }
-
-      setChatUserPrincipalFromRequest(normalizedAddress, request);
-      return;
+    const resolution = await resolveChatUserAddress(request);
+    if (!resolution.ok) {
+      return replyWithPublicError(reply, resolution.errorKey);
     }
 
-    const token = normalizePrivyToken(request.headers["privy-id-token"]);
-    if (!token) {
-      const error = getPublicError("chatTokenRequired");
-      return reply.code(error.statusCode).send(toPublicErrorBody("chatTokenRequired"));
-    }
-
-    const address = await getUserAddressFromToken(token);
-    const normalizedAddress = normalizeSubjectWallet(address);
-    if (!normalizedAddress) {
-      const error = getPublicError("chatUserInvalid");
-      return reply.code(error.statusCode).send(toPublicErrorBody("chatUserInvalid"));
-    }
-
-    setChatUserPrincipalFromRequest(normalizedAddress, request);
+    setChatUserPrincipalFromRequest(resolution.address, request);
   } catch (error) {
     console.error("Error in validateChatUser middleware:", error);
     throw error;
   }
 }
 
-export function getChatUserOrThrow() {
+export function getChatUserOrThrow(): ChatUserPrincipal {
   return getChatUserPrincipalOrThrow();
 }

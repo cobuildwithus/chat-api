@@ -1,11 +1,10 @@
 import type { UIMessage } from "ai";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { and, asc, eq } from "drizzle-orm";
-import { chat, chatMessage } from "../../infra/db/schema";
+import { asc, eq } from "drizzle-orm";
+import { chatMessage } from "../../infra/db/schema";
 import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
-import { parseJson } from "../../chat/parse";
-import { getPublicError, toPublicErrorBody } from "../../public-errors";
 import { getChatUserOrThrow } from "../auth/validate-chat-user";
+import { readOwnedChat, replyWithChatNotFound } from "./owned-chat";
 import { parseChatGetParams } from "./schema";
 
 type UiMessage = UIMessage<{ reasoningDurationMs?: number }>;
@@ -18,18 +17,9 @@ export async function handleChatGetRequest(
     const user = getChatUserOrThrow();
     const { chatId } = parseChatGetParams(request.params);
 
-    const existing = await cobuildPrimaryDb()
-      .select({
-        type: chat.type,
-        data: chat.data,
-      })
-      .from(chat)
-      .where(and(eq(chat.id, chatId), eq(chat.user, user.address)))
-      .limit(1);
-
-    if (!existing.length) {
-      const error = getPublicError("chatNotFound");
-      return reply.status(error.statusCode).send(toPublicErrorBody("chatNotFound"));
+    const existing = await readOwnedChat(chatId, user.address);
+    if (!existing) {
+      return replyWithChatNotFound(reply);
     }
 
     const messageRows = await cobuildPrimaryDb()
@@ -49,12 +39,10 @@ export async function handleChatGetRequest(
       parts: Array.isArray(row.parts) ? row.parts : [],
       ...(isUiMetadata(row.metadata) ? { metadata: row.metadata } : {}),
     }));
-    const data = parseJson(existing[0].data) ?? {};
-
     return reply.send({
       chatId,
-      type: existing[0].type,
-      data,
+      type: existing.type,
+      data: existing.data,
       messages,
     });
   } catch (error) {

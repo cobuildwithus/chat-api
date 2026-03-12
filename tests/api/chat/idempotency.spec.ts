@@ -69,7 +69,9 @@ describe("chat idempotency", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetAllMocks();
-    getChatUserOrThrowMock.mockReturnValue(buildChatUser());
+    getChatUserOrThrowMock.mockReturnValue(
+      buildChatUser() as ReturnType<typeof getChatUserOrThrow>,
+    );
     getAgentMock.mockResolvedValue({
       system: [{ role: "system", content: "sys" }],
       tools: {},

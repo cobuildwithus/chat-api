@@ -2666,6 +2666,32 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("keeps auth precedence for subject-wallet tools before validation", async () => {
+    mocks.requestContextGet.mockReturnValue(undefined);
+
+    expect(await executeTool("get-wallet-balances", { network: "mainnet" })).toEqual({
+      ok: false,
+      name: "get-wallet-balances",
+      statusCode: 401,
+      error: "Authenticated tools principal is required for this tool.",
+    });
+  });
+
+  it("keeps validation precedence for tools that do not require a tools principal", async () => {
+    mocks.requestContextGet.mockReturnValue({
+      ownerAddress: "0x0000000000000000000000000000000000000001",
+      agentKey: "default",
+      scopes: ["wallet:execute"],
+    });
+
+    expect(await executeTool("get-user", {})).toEqual({
+      ok: false,
+      name: "get-user",
+      statusCode: 400,
+      error: "fname must be a string.",
+    });
+  });
+
   it("covers list-wallet-notifications validation and auth branches", async () => {
     mocks.requestContextGet.mockReturnValue({
       ownerAddress: "0x0000000000000000000000000000000000000001",

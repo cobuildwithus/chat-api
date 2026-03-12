@@ -51,9 +51,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 
 1. Parse request body (`chatId`, `clientMessageId`, `userMessage`, optional attachments/context).
 2. Verify chat ownership in DB for the authenticated wallet.
-3. In parallel:
-- enforce token-usage rate limit (`src/ai/ai-rate.limit.ts`)
-- load agent (`src/ai/agents/agent.ts`)
+3. Load the default chat agent and acquire generation admission (`src/ai/agents/agent.ts`, `src/ai/ai-rate.limit.ts`).
 4. Append the new user turn on the server using DB history as the source of truth.
 5. Persist a pending assistant message before streaming.
   - Assistant ids are server-authoritative; route-generated ids are passed as trusted ids to storage for lifecycle consistency.
@@ -116,7 +114,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 ## AI Layer
 
 - Model client: `src/ai/ai.ts` (OpenAI provider with request timeout).
-- Agent selection: `src/ai/agents/agent.ts` (currently supports `chat-default`).
+- Agent selection: `src/ai/agents/agent.ts` (currently resolves the single supported `chat-default` runtime).
 - Prompt assembly: `src/ai/utils/agent-prompts.ts`.
 - Stream preparation: `src/api/chat/chat-helpers.ts`.
 - Tool registry: `src/ai/tools/index.ts` and `src/ai/tools/tool.ts`.

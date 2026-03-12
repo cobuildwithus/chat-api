@@ -86,8 +86,10 @@ describe("chat read consistency", () => {
     const { handleChatGetRequest, primarySelect, replicaSelect } = await loadChatReadHandlers({
       chatRows: [
         {
+          user: "0xabc0000000000000000000000000000000000000",
           type: "chat-default",
           data: {},
+          title: null,
         },
       ],
       messageRows: [

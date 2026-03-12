@@ -3,6 +3,7 @@ import { requestContext } from "@fastify/request-context";
 import {
   getToolsPrincipal,
   resolveSubjectWalletFromContext,
+  setChatUserPrincipal,
   setChatUserPrincipalFromRequest,
   setToolsPrincipal,
 } from "../../../src/api/auth/principals";
@@ -51,6 +52,37 @@ describe("auth principals", () => {
       countryRegion: "IDF",
       userAgent: "agent",
     });
+  });
+
+  it("normalizes direct chat user principal addresses before storing them", () => {
+    setChatUserPrincipal({
+      address: "0x00000000000000000000000000000000000000AA",
+      city: null,
+      country: null,
+      countryRegion: null,
+      userAgent: null,
+    });
+
+    expect(mocks.requestContextSet).toHaveBeenCalledWith("user", {
+      address: "0x00000000000000000000000000000000000000aa",
+      city: null,
+      country: null,
+      countryRegion: null,
+      userAgent: null,
+    });
+  });
+
+  it("rejects invalid direct chat user principal addresses", () => {
+    expect(() =>
+      setChatUserPrincipal({
+        address: "not-an-address",
+        city: null,
+        country: null,
+        countryRegion: null,
+        userAgent: null,
+      }),
+    ).toThrow("Invalid user address");
+    expect(mocks.requestContextSet).not.toHaveBeenCalled();
   });
 
   it("drops geo headers when trust proxy is not configured", () => {

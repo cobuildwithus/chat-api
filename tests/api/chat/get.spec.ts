@@ -19,7 +19,9 @@ const buildRequest = (chatId: string) =>
 beforeEach(() => {
   vi.clearAllMocks();
   resetAllMocks();
-  getChatUserOrThrowMock.mockReturnValue(buildChatUser());
+  getChatUserOrThrowMock.mockReturnValue(
+    buildChatUser() as ReturnType<typeof getChatUserOrThrow>,
+  );
 });
 
 describe("handleChatGetRequest", () => {
@@ -34,7 +36,14 @@ describe("handleChatGetRequest", () => {
   });
 
   it("returns 404 when the owner-scoped lookup finds no matching chat", async () => {
-    setCobuildDbResponse(chat, []);
+    setCobuildDbResponse(chat, [
+      {
+        user: "0x0000000000000000000000000000000000000009",
+        type: "chat-default",
+        data: {},
+        title: null,
+      },
+    ]);
 
     const reply = createReply();
     await handleChatGetRequest(buildRequest("chat-2"), reply);
@@ -48,7 +57,11 @@ describe("handleChatGetRequest", () => {
       {
         user: "0xabc0000000000000000000000000000000000000",
         type: "chat-default",
-        data: "{\"goalAddress\":\"0xabc0000000000000000000000000000000000000\"}",
+        data: JSON.stringify({
+          goalAddress: "0xabc0000000000000000000000000000000000000",
+          ignored: 7,
+        }),
+        title: null,
       },
     ]);
     setCobuildDbResponse(chatMessage, [
@@ -85,6 +98,7 @@ describe("handleChatGetRequest", () => {
         user: "0xabc0000000000000000000000000000000000000",
         type: "chat-default",
         data: "{}",
+        title: null,
       },
     ]);
     setCobuildDbResponse(chatMessage, [

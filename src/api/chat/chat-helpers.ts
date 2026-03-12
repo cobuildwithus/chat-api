@@ -1,5 +1,4 @@
-import type { LanguageModelUsage, ModelMessage, SystemModelMessage } from "ai";
-import { recordAiUsage } from "../../ai/ai-rate.limit";
+import type { ModelMessage, SystemModelMessage } from "ai";
 import { getAttachmentsPrompt, getMessagesWithoutVideos } from "../../ai/utils/attachments";
 
 export const CHAT_PERSIST_ERROR = "We couldn't save this chat. Please retry.";
@@ -14,33 +13,6 @@ export const streamErrorMessage = (error: unknown) => {
   }
   return CHAT_STREAM_ERROR_MESSAGE;
 };
-
-export async function recordUsageIfPresent(
-  usagePromise: PromiseLike<LanguageModelUsage>,
-  address: string,
-) {
-  try {
-    const usage = await usagePromise;
-    if (!usage.totalTokens) return;
-    await recordAiUsage(address, usage.totalTokens);
-  } catch (error) {
-    console.warn("Failed to record AI usage", {
-      address,
-      message: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
-export function fireAndForget(
-  promise: PromiseLike<unknown> | unknown,
-  label: string,
-): void {
-  void Promise.resolve(promise).catch((error) => {
-    console.warn(`${label} failed`, {
-      message: error instanceof Error ? error.message : String(error),
-    });
-  });
-}
 
 function buildUntrustedContextMessage(cleanedContext: string): ModelMessage {
   return {

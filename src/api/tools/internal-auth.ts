@@ -1,6 +1,10 @@
 import { parseBearerToken } from "@cobuild/wire";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { getPublicError, toPublicErrorBody } from "../../public-errors";
+import {
+  getPublicError,
+  toPublicErrorBody,
+  type PublicErrorKey,
+} from "../../public-errors";
 import {
   setChatUserPrincipalFromRequest,
   setToolsPrincipal,
@@ -8,10 +12,24 @@ import {
 import { parseToolsAuthHeaders } from "./schema";
 import { authenticateToolsBearerToken } from "./token-auth";
 
+type AuthenticatedToolsPrincipal = NonNullable<
+  Awaited<ReturnType<typeof authenticateToolsBearerToken>>
+>;
+
+type BearerScopeRequirement = {
+  capability: "hasToolsRead" | "hasWalletExecute";
+  errorKey: Extract<PublicErrorKey, "toolsReadScopeRequired" | "walletExecuteScopeRequired">;
+};
+
+function replyWithPublicError(reply: FastifyReply, errorKey: PublicErrorKey) {
+  const error = getPublicError(errorKey);
+  reply.status(error.statusCode).send(toPublicErrorBody(errorKey));
+}
+
 async function authenticateBearerPrincipal(
   request: FastifyRequest,
   reply: FastifyReply,
-): Promise<Awaited<ReturnType<typeof authenticateToolsBearerToken>> | null> {
+): Promise<AuthenticatedToolsPrincipal | null> {
   let authorization: string | undefined;
   try {
     authorization = parseToolsAuthHeaders(request.headers).authorization;
@@ -23,15 +41,13 @@ async function authenticateBearerPrincipal(
   }
   const rawToken = parseBearerToken(authorization);
   if (!rawToken) {
-    const error = getPublicError("toolsUnauthorized");
-    reply.status(error.statusCode).send(toPublicErrorBody("toolsUnauthorized"));
+    replyWithPublicError(reply, "toolsUnauthorized");
     return null;
   }
 
   const principal = await authenticateToolsBearerToken(rawToken);
   if (!principal) {
-    const error = getPublicError("toolsUnauthorized");
-    reply.status(error.statusCode).send(toPublicErrorBody("toolsUnauthorized"));
+    replyWithPublicError(reply, "toolsUnauthorized");
     return null;
   }
 
@@ -39,49 +55,47 @@ async function authenticateBearerPrincipal(
 }
 
 function setAuthenticatedToolsContext(
-  principal: Awaited<ReturnType<typeof authenticateToolsBearerToken>>,
+  principal: AuthenticatedToolsPrincipal,
   request: FastifyRequest,
 ) {
+  setChatUserPrincipalFromRequest(principal.ownerAddress, request);
+  setToolsPrincipal(principal);
+}
+
+async function enforceBearerAuth(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  requirement: BearerScopeRequirement,
+) {
+  const principal = await authenticateBearerPrincipal(request, reply);
   if (!principal) {
     return;
   }
 
-  setChatUserPrincipalFromRequest(principal.ownerAddress, request);
-  setToolsPrincipal(principal);
+  if (!principal[requirement.capability]) {
+    replyWithPublicError(reply, requirement.errorKey);
+    return;
+  }
+
+  setAuthenticatedToolsContext(principal, request);
 }
 
 export async function enforceToolsBearerAuth(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const principal = await authenticateBearerPrincipal(request, reply);
-  if (!principal) {
-    return;
-  }
-
-  if (!principal.hasToolsRead) {
-    const error = getPublicError("toolsReadScopeRequired");
-    return reply.status(error.statusCode).send(toPublicErrorBody("toolsReadScopeRequired"));
-  }
-
-  setAuthenticatedToolsContext(principal, request);
+  return enforceBearerAuth(request, reply, {
+    capability: "hasToolsRead",
+    errorKey: "toolsReadScopeRequired",
+  });
 }
 
 export async function enforceWalletExecuteBearerAuth(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const principal = await authenticateBearerPrincipal(request, reply);
-  if (!principal) {
-    return;
-  }
-
-  if (!principal.hasWalletExecute) {
-    const error = getPublicError("walletExecuteScopeRequired");
-    return reply
-      .status(error.statusCode)
-      .send(toPublicErrorBody("walletExecuteScopeRequired"));
-  }
-
-  setAuthenticatedToolsContext(principal, request);
+  return enforceBearerAuth(request, reply, {
+    capability: "hasWalletExecute",
+    errorKey: "walletExecuteScopeRequired",
+  });
 }

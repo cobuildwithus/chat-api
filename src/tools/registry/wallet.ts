@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { getToolsPrincipal } from "../../api/auth/principals";
 import type {
   ProtocolNotificationActor,
   ProtocolNotificationAmounts,
@@ -32,7 +33,6 @@ import {
   WalletNotificationsSubjectRequiredError,
   listWalletNotifications,
 } from "../../domains/notifications/service";
-import { getToolsPrincipalFromContext } from "../../domains/notifications/wallet-subject";
 import { getOrSetCachedResultWithLock } from "../../infra/cache/cacheResult";
 import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
 import { cliAgentWallets } from "../../infra/db/schema";
@@ -279,7 +279,7 @@ async function executeGetWalletBalances(
   input: z.infer<typeof getWalletBalancesInputSchema>,
 ) {
   const name = "get-wallet-balances";
-  const principal = getToolsPrincipalFromContext();
+  const principal = getToolsPrincipal();
   if (!principal) {
     return failureFromPublicError(name, "toolPrincipalRequired");
   }
