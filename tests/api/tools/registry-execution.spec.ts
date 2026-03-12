@@ -353,6 +353,110 @@ describe("tool registry execution", () => {
     });
   });
 
+  it("executes get-revnet-issuance-terms with infra defaults when projectId is omitted", async () => {
+    mocks.getRevnetIssuanceTermsSnapshot.mockResolvedValue({
+      chainId: 8453,
+      projectId: 138,
+      asOfMs: 1_700_000_000_000,
+      baseAsset: {
+        address: "0xabc",
+        symbol: "ETH",
+        decimals: 18,
+        priceUsd: 2000,
+      },
+      token: {
+        symbol: "COBUILD",
+        decimals: 18,
+      },
+      summary: {
+        currentIssuance: 5,
+        nextIssuance: 4,
+        currentPrice: { basePerToken: 0.2, usdPerToken: 400 },
+        nextPrice: { basePerToken: 0.25, usdPerToken: 500 },
+        nextChangeAt: 1_800_000_000_000,
+        nextChangeType: "cut",
+        reservedPercent: 5000,
+        cashOutTaxRate: 2500,
+        activeStage: 1,
+        nextStage: null,
+      },
+      activeStageIndex: 0,
+      stages: [],
+      chartData: [],
+      chartStart: 0,
+      chartEnd: 0,
+    });
+
+    const result = await executeTool("get-revnet-issuance-terms", {});
+
+    expect(mocks.getRevnetIssuanceTermsSnapshot).toHaveBeenCalledWith({});
+    expect(result).toMatchObject({
+      ok: true,
+      name: "get-revnet-issuance-terms",
+      output: {
+        chainId: 8453,
+        projectId: 138,
+        summary: {
+          nextChangeType: "cut",
+          currentPrice: { basePerToken: 0.2 },
+        },
+      },
+      cacheControl: "public, max-age=60",
+    });
+  });
+
+  it("executes get-revnet-issuance-terms with a chainId override and default projectId", async () => {
+    mocks.getRevnetIssuanceTermsSnapshot.mockResolvedValue({
+      chainId: 10,
+      projectId: 138,
+      asOfMs: 1_700_000_000_000,
+      baseAsset: {
+        address: "0xabc",
+        symbol: "ETH",
+        decimals: 18,
+        priceUsd: 2000,
+      },
+      token: {
+        symbol: "COBUILD",
+        decimals: 18,
+      },
+      summary: {
+        currentIssuance: 5,
+        nextIssuance: 4,
+        currentPrice: { basePerToken: 0.2, usdPerToken: 400 },
+        nextPrice: { basePerToken: 0.25, usdPerToken: 500 },
+        nextChangeAt: 1_800_000_000_000,
+        nextChangeType: "cut",
+        reservedPercent: 5000,
+        cashOutTaxRate: 2500,
+        activeStage: 1,
+        nextStage: null,
+      },
+      activeStageIndex: 0,
+      stages: [],
+      chartData: [],
+      chartStart: 0,
+      chartEnd: 0,
+    });
+
+    const result = await executeTool("get-revnet-issuance-terms", { chainId: 10 });
+
+    expect(mocks.getRevnetIssuanceTermsSnapshot).toHaveBeenCalledWith({ chainId: 10 });
+    expect(result).toMatchObject({
+      ok: true,
+      name: "get-revnet-issuance-terms",
+      output: {
+        chainId: 10,
+        projectId: 138,
+        summary: {
+          nextChangeType: "cut",
+          currentPrice: { basePerToken: 0.2 },
+        },
+      },
+      cacheControl: "public, max-age=60",
+    });
+  });
+
   it("executes get-wallet-balances with short-term cache", async () => {
     const getBalance = vi.fn().mockResolvedValue(1_250_000_000_000_000_000n);
     const readContract = vi.fn().mockResolvedValue(2_500_000n);
@@ -2494,12 +2598,22 @@ describe("tool registry execution", () => {
     });
   });
 
-  it("covers get-revnet-issuance-terms validation and failure branches", async () => {
-    expect(await executeTool("get-revnet-issuance-terms", {})).toEqual({
+  it("covers get-revnet-issuance-terms validation strictness and failure branches", async () => {
+    const strictFailure = await executeTool("get-revnet-issuance-terms", {
+      chainId: 8453,
+      unexpected: true,
+    });
+    expect(strictFailure.ok).toBe(false);
+    if (!strictFailure.ok) {
+      expect(strictFailure.statusCode).toBe(400);
+      expect(strictFailure.error).toContain("Unrecognized key");
+    }
+
+    expect(await executeTool("get-revnet-issuance-terms", { projectId: "138" })).toEqual({
       ok: false,
       name: "get-revnet-issuance-terms",
       statusCode: 400,
-      error: "Invalid input: expected number, received undefined",
+      error: "Invalid input: expected number, received string",
     });
 
     mocks.getRevnetIssuanceTermsSnapshot.mockRejectedValueOnce(new Error("boom"));

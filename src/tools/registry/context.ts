@@ -36,7 +36,7 @@ const SNIPPET_MAX_LENGTH = 420;
 
 const getTreasuryStatsInputSchema = z.object({}).strict();
 const getRevnetIssuanceTermsInputSchema = z.object({
-  projectId: z.number().int().positive(),
+  projectId: z.number().int().positive().optional(),
   chainId: z.number().int().positive().optional(),
 }).strict();
 const docsSearchInputSchema = z.object({
@@ -133,10 +133,7 @@ async function executeGetRevnetIssuanceTerms(
 ) {
   const name = "get-revnet-issuance-terms";
   try {
-    const snapshot = await getRevnetIssuanceTermsSnapshot({
-      projectId: input.projectId,
-      ...(input.chainId !== undefined ? { chainId: input.chainId } : {}),
-    });
+    const snapshot = await getRevnetIssuanceTermsSnapshot(input);
     return success(name, snapshot, SHORT_PUBLIC_CACHE_CONTROL);
   } catch {
     return failureFromPublicError(name, "toolExecutionFailed");

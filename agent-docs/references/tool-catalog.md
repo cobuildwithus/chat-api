@@ -63,6 +63,7 @@ Validation source of truth:
 - Canonical name: `get-revnet-issuance-terms`
 - Canonical aliases: `getRevnetIssuanceTerms`, `revnetIssuanceTerms`
 - Purpose: fetch indexed revnet issuance terms, summary, and timeline data for a project.
+- Inputs: optional `projectId` and `chainId` overrides; omitted `projectId` falls back to the default Cobuild project configured by the infra layer.
 - Output: indexed `baseAsset`/`token` metadata, wire-backed issuance summary, stage list, and chart data.
 - Dependencies: `cobuild-onchain.project`, `cobuild-onchain.ruleset`, `cobuild.token_metadata`, shared `@cobuild/wire` issuance helpers.
 - Error semantics: returns stable public `502`/`Tool request failed.` when indexed issuance data cannot be produced.
