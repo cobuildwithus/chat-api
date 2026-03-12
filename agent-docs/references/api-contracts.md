@@ -21,6 +21,10 @@ Canonical tool routes run `enforceToolsBearerAuth` as `preValidation`.
 The wallet-link sync route runs `enforceWalletExecuteBearerAuth` as `preValidation`.
 Token management routes run `validateChatUser` as `preValidation`.
 
+Auth middleware now centralizes principal resolution:
+- `validateChatUser` resolves a normalized subject wallet, then writes the chat-user principal once.
+- Bearer `/v1` guards share one bearer-auth flow that authenticates the CLI principal, writes both chat-user and tools-principal context, then applies the route-specific scope requirement.
+
 ## Request Schema Summary
 
 Source: route schema modules under `src/api/**/schema.ts`, generated from shared Zod request definitions via `src/api/zod-route-schema.ts`.

@@ -15,7 +15,8 @@
 2. Interface/CLI runtime -> bearer-authenticated `/v1` boundary (`/v1/tools`, `/v1/tools/:name`, `/v1/tool-executions`, `/v1/farcaster/profiles/link-wallet`)
 - Bearer PAT gate via `Authorization: Bearer <bbt_...>`
 - Shared `@cobuild/wire` bearer verifier parses tokens, derives principals, and requires the backing CLI session to remain active with a matching stored scope
-- Per-route scope enforcement after bearer auth succeeds (`tools:read` for discovery/execution metadata, `wallet:execute` for Farcaster wallet-link sync)
+- A shared bearer-auth guard sets both chat-user and tools-principal request context before per-route scope enforcement runs
+- Per-route scope enforcement then applies (`tools:read` for discovery/execution metadata, `wallet:execute` for Farcaster wallet-link sync)
 - The Farcaster wallet-link route only accepts wallets already authorized for the CLI session (owner wallet for local signup, hosted agent wallet for hosted/CDP signup) and verifies the `fid` onchain before mutating `farcaster.profiles`
 - Invalid or missing bearer token returns `401`
 3. API -> Auth boundary (`src/api/auth/**`)
@@ -33,6 +34,7 @@
 - Self-hosted mode can rely on:
 - `x-chat-user` / default address
 - `x-chat-auth` shared secret
+- Chat-user principals normalize wallet addresses before request-context storage, so downstream ownership checks and tool wallet binding read the canonical subject wallet shape.
 - Production self-hosted mode requires `SELF_HOSTED_SHARED_SECRET` and `SELF_HOSTED_PRODUCTION_ENABLED=1` at startup; middleware rejects misconfigured runtime use as well.
 - Request geo headers are treated as untrusted and ignored unless `CHAT_TRUST_PROXY` is configured for a trusted upstream proxy.
 - Auth for chat/tools/token routes runs in `preValidation`, so authenticated principals are available to `preHandler` rate-limit key generation.

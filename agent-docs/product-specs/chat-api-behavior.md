@@ -23,6 +23,7 @@ Behavior:
 - enforces auth and wallet ownership for the target chat
 - applies usage limiter before streaming
 - stores the user message idempotently by `clientMessageId`
+- normalizes stored chat metadata through the shared chat-data parser before agent construction
 - streams assistant output
 - persists pending + final message state
 
@@ -111,6 +112,7 @@ Error behavior:
 ## Auth Compatibility
 
 - Chat authorization is based on authenticated wallet ownership of the target chat.
+- Authenticated chat users and bearer-authenticated tool callers share the same normalized subject-wallet shape in request context.
 - Self-hosted mode in production requires shared-secret protection.
 
 ## Known Schema/Runtime Caveats

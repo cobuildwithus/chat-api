@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { handleChatPostRequest } from "../../../src/api/chat/route";
+import * as ownedChatModule from "../../../src/api/chat/owned-chat";
 import { getAgent } from "../../../src/ai/agents/agent";
 import { admitAiGeneration } from "../../../src/ai/ai-rate.limit";
 import { getChatUserOrThrow } from "../../../src/api/auth/validate-chat-user";
@@ -222,14 +223,7 @@ describe("handleChatPostRequest", () => {
   });
 
   it("returns 404 when the chat belongs to a different user", async () => {
-    setCobuildDbResponse(chat, [
-      {
-        user: "0x0000000000000000000000000000000000000009",
-        type: "chat-default",
-        data: {},
-        title: null,
-      },
-    ]);
+    vi.spyOn(ownedChatModule, "readOwnedChat").mockResolvedValueOnce(null);
 
     const reply = createReply();
     const result = await handleChatPostRequest(buildRequest(baseBody), reply);

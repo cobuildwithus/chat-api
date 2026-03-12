@@ -1,5 +1,6 @@
 import type { FastifyRequest } from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as ownedChatModule from "../../../src/api/chat/owned-chat";
 import { handleChatGetRequest } from "../../../src/api/chat/get";
 import { chat, chatMessage } from "../../../src/infra/db/schema";
 import { getChatUserOrThrow } from "../../../src/api/auth/validate-chat-user";
@@ -36,14 +37,7 @@ describe("handleChatGetRequest", () => {
   });
 
   it("returns 404 when the owner-scoped lookup finds no matching chat", async () => {
-    setCobuildDbResponse(chat, [
-      {
-        user: "0x0000000000000000000000000000000000000009",
-        type: "chat-default",
-        data: {},
-        title: null,
-      },
-    ]);
+    vi.spyOn(ownedChatModule, "readOwnedChat").mockResolvedValueOnce(null);
 
     const reply = createReply();
     await handleChatGetRequest(buildRequest("chat-2"), reply);

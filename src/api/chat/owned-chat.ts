@@ -1,15 +1,14 @@
-import { isSameEvmAddress } from "@cobuild/wire";
 import type { FastifyReply } from "fastify";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { ChatData } from "../../ai/types";
 import { parseJson } from "../../chat/parse";
 import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
 import { chat } from "../../infra/db/schema";
 import { getPublicError, toPublicErrorBody } from "../../public-errors";
+import type { SubjectWallet } from "../auth/principals";
 import { parseChatData } from "./schema";
 
 export type OwnedChatRecord = {
-  user: string;
   type: string;
   data: ChatData;
   title: string | null;
@@ -17,26 +16,24 @@ export type OwnedChatRecord = {
 
 export async function readOwnedChat(
   chatId: string,
-  ownerAddress: string,
+  ownerAddress: SubjectWallet,
 ): Promise<OwnedChatRecord | null> {
   const rows = await cobuildPrimaryDb()
     .select({
-      user: chat.user,
       type: chat.type,
       data: chat.data,
       title: chat.title,
     })
     .from(chat)
-    .where(eq(chat.id, chatId))
+    .where(and(eq(chat.id, chatId), eq(chat.user, ownerAddress)))
     .limit(1);
 
   const row = rows[0];
-  if (!row || !isSameEvmAddress(row.user, ownerAddress)) {
+  if (!row) {
     return null;
   }
 
   return {
-    user: row.user,
     type: row.type,
     data: parseChatData(parseJson(row.data)),
     title: row.title ?? null,
