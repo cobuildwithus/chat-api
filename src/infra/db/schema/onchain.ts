@@ -37,7 +37,9 @@ export const onchainRulesets = onchainSchema.table("ruleset", {
   projectId: integer("project_id").notNull(),
   rulesetId: bigint("ruleset_id", { mode: "bigint" }).notNull(),
   start: bigint("start", { mode: "bigint" }).notNull(),
+  duration: bigint("duration", { mode: "bigint" }).notNull(),
   weight: text("weight").notNull(),
+  weightCutPercent: integer("weight_cut_percent").notNull(),
   reservedPercent: integer("reserved_percent").notNull(),
   cashOutTaxRate: integer("cash_out_tax_rate").notNull(),
 });

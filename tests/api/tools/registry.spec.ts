@@ -46,6 +46,12 @@ describe("tool registry", () => {
     expect(resolveToolMetadata("getPremiumEscrow")?.name).toBe("get-premium-escrow");
     expect(resolveToolMetadata("premiumEscrow.inspect")?.name).toBe("get-premium-escrow");
     expect(resolveToolMetadata("docs.search")?.name).toBe("docs-search");
+    expect(resolveToolMetadata("getRevnetIssuanceTerms")?.name).toBe(
+      "get-revnet-issuance-terms",
+    );
+    expect(resolveToolMetadata("revnetIssuanceTerms")?.name).toBe(
+      "get-revnet-issuance-terms",
+    );
     expect(resolveToolMetadata("getWalletBalances")?.name).toBe("get-wallet-balances");
     expect(resolveToolMetadata("walletBalances")?.name).toBe("get-wallet-balances");
     expect(resolveToolMetadata("listDiscussions")?.name).toBe("list-discussions");
@@ -107,6 +113,7 @@ describe("tool registry", () => {
     expect(resolveToolExposure("get-discussion-thread")).toBe("chat-safe");
     expect(resolveToolExposure("semantic-search-casts")).toBe("chat-safe");
     expect(resolveToolExposure("get-treasury-stats")).toBe("chat-safe");
+    expect(resolveToolExposure("get-revnet-issuance-terms")).toBe("chat-safe");
 
     expect(resolveToolExposure("get-wallet-balances")).toBe("bearer-only");
     expect(resolveToolExposure("list-wallet-notifications")).toBe("bearer-only");
@@ -119,6 +126,9 @@ describe("tool registry", () => {
     expect(resolveToolInputSchema("get-goal")).toBeTruthy();
     expect(resolveToolInputSchema("getGoal")).toBe(resolveToolInputSchema("get-goal"));
     expect(resolveToolInputSchema("goal.inspect")).toBe(resolveToolInputSchema("get-goal"));
+    expect(resolveToolInputSchema("getRevnetIssuanceTerms")).toBe(
+      resolveToolInputSchema("get-revnet-issuance-terms"),
+    );
     expect(resolveToolInputSchema("semanticSearchCasts")).toBe(
       resolveToolInputSchema("semantic-search-casts"),
     );

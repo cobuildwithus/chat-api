@@ -58,6 +58,15 @@ Validation source of truth:
 - Dependencies: treasury stats snapshot service.
 - Error semantics: returns stable public `502`/`Tool request failed.` when the snapshot service is unavailable.
 
+## `get-revnet-issuance-terms`
+
+- Canonical name: `get-revnet-issuance-terms`
+- Canonical aliases: `getRevnetIssuanceTerms`, `revnetIssuanceTerms`
+- Purpose: fetch indexed revnet issuance terms, summary, and timeline data for a project.
+- Output: indexed `baseAsset`/`token` metadata, wire-backed issuance summary, stage list, and chart data.
+- Dependencies: `cobuild-onchain.project`, `cobuild-onchain.ruleset`, `cobuild.token_metadata`, shared `@cobuild/wire` issuance helpers.
+- Error semantics: returns stable public `502`/`Tool request failed.` when indexed issuance data cannot be produced.
+
 ## `getGoal`
 
 - Canonical name: `get-goal`

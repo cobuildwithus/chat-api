@@ -1,4 +1,8 @@
-import { COBUILD_PROJECT_ID as WIRE_COBUILD_PROJECT_ID } from "@cobuild/wire";
+import {
+  buildRevnetIssuanceTerms,
+  COBUILD_PROJECT_ID as WIRE_COBUILD_PROJECT_ID,
+  issuancePriceFromRevnetWeight,
+} from "@cobuild/wire";
 import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { getOrSetCachedResultWithLock } from "./cache/cacheResult";
 import { formatErrorLogMessage, formatErrorMessage } from "./errors";
@@ -176,12 +180,6 @@ function median(values: number[]): number | null {
     return (sorted[mid - 1]! + sorted[mid]!) / 2;
   }
   return sorted[mid]!;
-}
-
-function issuancePriceFromWeight(weight: number | null): number | null {
-  if (weight === null || !Number.isFinite(weight) || weight <= 0) return null;
-  const price = 1 / weight;
-  return Number.isFinite(price) ? price : null;
 }
 
 function buildWindowCutoffs(nowSec: number) {
@@ -378,7 +376,9 @@ async function deriveCobuildAiContext(): Promise<CobuildAiContextResponse> {
     .select({
       rulesetId: onchainRulesets.rulesetId,
       start: onchainRulesets.start,
+      duration: onchainRulesets.duration,
       weight: onchainRulesets.weight,
+      weightCutPercent: onchainRulesets.weightCutPercent,
       reservedPercent: onchainRulesets.reservedPercent,
       cashOutTaxRate: onchainRulesets.cashOutTaxRate,
     })
@@ -396,7 +396,11 @@ async function deriveCobuildAiContext(): Promise<CobuildAiContextResponse> {
     .select({
       rulesetId: onchainRulesets.rulesetId,
       start: onchainRulesets.start,
+      duration: onchainRulesets.duration,
       weight: onchainRulesets.weight,
+      weightCutPercent: onchainRulesets.weightCutPercent,
+      reservedPercent: onchainRulesets.reservedPercent,
+      cashOutTaxRate: onchainRulesets.cashOutTaxRate,
     })
     .from(onchainRulesets)
     .where(
@@ -423,10 +427,46 @@ async function deriveCobuildAiContext(): Promise<CobuildAiContextResponse> {
     );
 
   const activeStageCount = activeStageCountRow?.count ?? 0;
-  const currentWeight = toFiniteNumber(currentRuleset?.weight);
-  const nextWeight = toFiniteNumber(nextRuleset?.weight);
-  const currentPriceBase = issuancePriceFromWeight(currentWeight);
-  const nextPriceBase = issuancePriceFromWeight(nextWeight);
+  const issuanceTerms = currentRuleset
+    ? buildRevnetIssuanceTerms({
+        rawRulesets: [
+          {
+            chainId: COBUILD_CHAIN_ID,
+            projectId: COBUILD_PROJECT_ID,
+            rulesetId: currentRuleset.rulesetId,
+            start: currentRuleset.start,
+            duration: currentRuleset.duration ?? 0n,
+            weight: currentRuleset.weight,
+            weightCutPercent: currentRuleset.weightCutPercent ?? 0,
+            reservedPercent: currentRuleset.reservedPercent,
+            cashOutTaxRate: currentRuleset.cashOutTaxRate,
+          },
+          ...(nextRuleset
+            ? [
+                {
+                  chainId: COBUILD_CHAIN_ID,
+                  projectId: COBUILD_PROJECT_ID,
+                  rulesetId: nextRuleset.rulesetId,
+                  start: nextRuleset.start,
+                  duration: nextRuleset.duration ?? 0n,
+                  weight: nextRuleset.weight,
+                  weightCutPercent: nextRuleset.weightCutPercent ?? 0,
+                  reservedPercent: nextRuleset.reservedPercent ?? currentRuleset.reservedPercent,
+                  cashOutTaxRate: nextRuleset.cashOutTaxRate ?? currentRuleset.cashOutTaxRate,
+                },
+              ]
+            : []),
+        ],
+        baseSymbol: project.accountingTokenSymbol,
+        tokenSymbol: project.erc20Symbol ?? "TOKEN",
+        nowMs,
+        primaryChainId: COBUILD_CHAIN_ID,
+        primaryProjectId: COBUILD_PROJECT_ID,
+      })
+    : null;
+  const issuanceSummary = issuanceTerms?.summary;
+  const currentPriceBase = issuancePriceFromRevnetWeight(issuanceSummary?.currentIssuance ?? null);
+  const nextPriceBase = issuancePriceFromRevnetWeight(issuanceSummary?.nextIssuance ?? null);
 
   const snapshot: CobuildAiContextResponse = {
     goalAddress: "",
@@ -472,17 +512,15 @@ async function deriveCobuildAiContext(): Promise<CobuildAiContextResponse> {
           basePerToken: nextPriceBase,
           usdPerToken: toUsd(nextPriceBase, basePriceUsd),
         },
-        nextChangeAt: nextRuleset ? Number(nextRuleset.start) * 1000 : null,
-        nextChangeType:
-          nextRuleset && currentRuleset
-            ? String(nextRuleset.weight) === String(currentRuleset.weight)
-              ? "stage"
-              : "cut"
+        nextChangeAt: issuanceSummary?.nextChangeAt ?? null,
+        nextChangeType: issuanceSummary?.nextChangeType ?? null,
+        activeStage: currentRuleset && activeStageCount > 0 ? activeStageCount : null,
+        nextStage:
+          issuanceSummary?.nextChangeType === "stage" && currentRuleset && activeStageCount > 0
+            ? activeStageCount + 1
             : null,
-        activeStage: activeStageCount > 0 ? activeStageCount : null,
-        nextStage: nextRuleset ? activeStageCount + 1 : null,
-        reservedPercent: currentRuleset?.reservedPercent ?? null,
-        cashOutTaxRate: currentRuleset?.cashOutTaxRate ?? null,
+        reservedPercent: issuanceSummary?.reservedPercent ?? null,
+        cashOutTaxRate: issuanceSummary?.cashOutTaxRate ?? null,
       },
       mints: {
         count: {

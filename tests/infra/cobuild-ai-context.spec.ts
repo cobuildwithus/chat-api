@@ -35,9 +35,13 @@ async function captureSelectedProjectId(params: {
     process.env.COBUILD_JUICEBOX_PROJECT_ID = params.envProjectId;
   }
 
-  vi.doMock("@cobuild/wire", () => ({
-    COBUILD_PROJECT_ID: params.wireProjectId,
-  }));
+  vi.doMock("@cobuild/wire", async () => {
+    const actual = await vi.importActual<typeof import("@cobuild/wire")>("@cobuild/wire");
+    return {
+      ...actual,
+      COBUILD_PROJECT_ID: params.wireProjectId,
+    };
+  });
   vi.doMock("drizzle-orm", async () => {
     const actual = await vi.importActual<typeof import("drizzle-orm")>("drizzle-orm");
     return {
@@ -151,7 +155,7 @@ describe("cobuild ai context", () => {
       {
         rulesetId: 1n,
         start: 1_700_000_000n,
-        weight: "5",
+        weight: "5000000000000000000",
         reservedPercent: 5000,
         cashOutTaxRate: 2500,
       },
@@ -160,7 +164,7 @@ describe("cobuild ai context", () => {
       {
         rulesetId: 2n,
         start: 1_800_000_000n,
-        weight: "4",
+        weight: "4000000000000000000",
       },
     ]);
     queueCobuildDbResponse(onchainRulesets, [{ count: 1 }]);
@@ -215,7 +219,7 @@ describe("cobuild ai context", () => {
       {
         rulesetId: 1n,
         start: 1_700_000_000n,
-        weight: "5",
+        weight: "5000000000000000000",
         reservedPercent: 5000,
         cashOutTaxRate: 2500,
       },
@@ -256,7 +260,7 @@ describe("cobuild ai context", () => {
       {
         rulesetId: 1n,
         start: 1_700_000_000n,
-        weight: "5",
+        weight: "5000000000000000000",
         reservedPercent: 5000,
         cashOutTaxRate: 2500,
       },
@@ -295,7 +299,7 @@ describe("cobuild ai context", () => {
       {
         rulesetId: 1n,
         start: 1_700_000_000n,
-        weight: "5",
+        weight: "5000000000000000000",
         reservedPercent: 5000,
         cashOutTaxRate: 2500,
       },
@@ -341,7 +345,7 @@ describe("cobuild ai context", () => {
       {
         rulesetId: 1n,
         start: 1_700_000_000n,
-        weight: "5",
+        weight: "5000000000000000000",
         reservedPercent: 2500,
         cashOutTaxRate: 1000,
       },
@@ -350,7 +354,7 @@ describe("cobuild ai context", () => {
       {
         rulesetId: 2n,
         start: 1_800_000_000n,
-        weight: "5",
+        weight: "5000000000000000000",
       },
     ]);
     queueCobuildDbResponse(onchainRulesets, [{ count: 2 }]);
@@ -397,7 +401,7 @@ describe("cobuild ai context", () => {
       {
         rulesetId: 11n,
         start: 1_700_000_000n,
-        weight: "5",
+        weight: "5000000000000000000",
         reservedPercent: 2500,
         cashOutTaxRate: 1000,
       },
@@ -406,7 +410,7 @@ describe("cobuild ai context", () => {
       {
         rulesetId: 12n,
         start: 1_800_000_000n,
-        weight: "5",
+        weight: "5000000000000000000",
       },
     ]);
     queueCobuildDbResponse(onchainRulesets, [{ count: 2 }]);

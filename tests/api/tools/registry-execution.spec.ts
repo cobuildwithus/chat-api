@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   createTimeoutFetch: vi.fn(),
   getCobuildAiContextSnapshot: vi.fn(),
+  getRevnetIssuanceTermsSnapshot: vi.fn(),
   getOpenAiTimeoutMs: vi.fn(),
   createPublicClient: vi.fn(),
   requestContextGet: vi.fn(),
@@ -46,6 +47,16 @@ vi.mock("../../../src/infra/cobuild-ai-context", async () => {
   return {
     ...actual,
     getCobuildAiContextSnapshot: mocks.getCobuildAiContextSnapshot,
+  };
+});
+
+vi.mock("../../../src/infra/revnet-issuance-terms", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../../src/infra/revnet-issuance-terms")
+  >("../../../src/infra/revnet-issuance-terms");
+  return {
+    ...actual,
+    getRevnetIssuanceTermsSnapshot: mocks.getRevnetIssuanceTermsSnapshot,
   };
 });
 
@@ -280,6 +291,64 @@ describe("tool registry execution", () => {
     expect(result).toMatchObject({
       ok: true,
       output: { asOf: "2026-03-02T00:00:00.000Z" },
+      cacheControl: "public, max-age=60",
+    });
+  });
+
+  it("executes get-revnet-issuance-terms and returns the indexed timeline payload", async () => {
+    mocks.getRevnetIssuanceTermsSnapshot.mockResolvedValue({
+      chainId: 8453,
+      projectId: 138,
+      asOfMs: 1_700_000_000_000,
+      baseAsset: {
+        address: "0xabc",
+        symbol: "ETH",
+        decimals: 18,
+        priceUsd: 2000,
+      },
+      token: {
+        symbol: "COBUILD",
+        decimals: 18,
+      },
+      summary: {
+        currentIssuance: 5,
+        nextIssuance: 4,
+        currentPrice: { basePerToken: 0.2, usdPerToken: 400 },
+        nextPrice: { basePerToken: 0.25, usdPerToken: 500 },
+        nextChangeAt: 1_800_000_000_000,
+        nextChangeType: "cut",
+        reservedPercent: 5000,
+        cashOutTaxRate: 2500,
+        activeStage: 1,
+        nextStage: null,
+      },
+      activeStageIndex: 0,
+      stages: [],
+      chartData: [],
+      chartStart: 0,
+      chartEnd: 0,
+    });
+
+    const result = await executeTool("get-revnet-issuance-terms", {
+      projectId: 138,
+      chainId: 8453,
+    });
+
+    expect(mocks.getRevnetIssuanceTermsSnapshot).toHaveBeenCalledWith({
+      projectId: 138,
+      chainId: 8453,
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      name: "get-revnet-issuance-terms",
+      output: {
+        chainId: 8453,
+        projectId: 138,
+        summary: {
+          nextChangeType: "cut",
+          currentPrice: { basePerToken: 0.2 },
+        },
+      },
       cacheControl: "public, max-age=60",
     });
   });
@@ -2420,6 +2489,23 @@ describe("tool registry execution", () => {
     expect(await executeTool("get-treasury-stats", {})).toEqual({
       ok: false,
       name: "get-treasury-stats",
+      statusCode: 502,
+      error: "Tool request failed.",
+    });
+  });
+
+  it("covers get-revnet-issuance-terms validation and failure branches", async () => {
+    expect(await executeTool("get-revnet-issuance-terms", {})).toEqual({
+      ok: false,
+      name: "get-revnet-issuance-terms",
+      statusCode: 400,
+      error: "Invalid input: expected number, received undefined",
+    });
+
+    mocks.getRevnetIssuanceTermsSnapshot.mockRejectedValueOnce(new Error("boom"));
+    expect(await executeTool("get-revnet-issuance-terms", { projectId: 138 })).toEqual({
+      ok: false,
+      name: "get-revnet-issuance-terms",
       statusCode: 502,
       error: "Tool request failed.",
     });

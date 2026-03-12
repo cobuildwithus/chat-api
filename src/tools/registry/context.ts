@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getOpenAiTimeoutMs } from "../../config/env";
 import { getCobuildAiContextSnapshot } from "../../infra/cobuild-ai-context";
 import { createTimeoutFetch } from "../../infra/http/timeout";
+import { getRevnetIssuanceTermsSnapshot } from "../../infra/revnet-issuance-terms";
 import {
   NO_STORE_CACHE_CONTROL,
   SHORT_PUBLIC_CACHE_CONTROL,
@@ -34,6 +35,10 @@ const ENABLE_CLI_DOCS_SEARCH_ENV = "ENABLE_CLI_DOCS_SEARCH";
 const SNIPPET_MAX_LENGTH = 420;
 
 const getTreasuryStatsInputSchema = z.object({}).strict();
+const getRevnetIssuanceTermsInputSchema = z.object({
+  projectId: z.number().int().positive(),
+  chainId: z.number().int().positive().optional(),
+}).strict();
 const docsSearchInputSchema = z.object({
   query: z.string().trim().min(1).max(DOCS_SEARCH_QUERY_MAX),
   limit: z.number().int().min(1).max(20).default(DEFAULT_DOCS_SEARCH_LIMIT),
@@ -123,6 +128,21 @@ async function executeGetTreasuryStats() {
   }
 }
 
+async function executeGetRevnetIssuanceTerms(
+  input: z.infer<typeof getRevnetIssuanceTermsInputSchema>,
+) {
+  const name = "get-revnet-issuance-terms";
+  try {
+    const snapshot = await getRevnetIssuanceTermsSnapshot({
+      projectId: input.projectId,
+      ...(input.chainId !== undefined ? { chainId: input.chainId } : {}),
+    });
+    return success(name, snapshot, SHORT_PUBLIC_CACHE_CONTROL);
+  } catch {
+    return failureFromPublicError(name, "toolExecutionFailed");
+  }
+}
+
 async function executeDocsSearch(
   input: z.infer<typeof docsSearchInputSchema>,
 ) {
@@ -201,6 +221,23 @@ export const contextToolDefinitions: RawRegisteredTool[] = [
     version: "1.0.0",
     deprecated: false,
     execute: executeGetTreasuryStats,
+  },
+  {
+    name: "get-revnet-issuance-terms",
+    aliases: ["getRevnetIssuanceTerms", "revnetIssuanceTerms"],
+    description: "Fetch indexed revnet issuance terms and timeline data.",
+    input: getRevnetIssuanceTermsInputSchema,
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+    },
+    scopes: ["cli-tools", "cobuild-context"],
+    exposure: "chat-safe",
+    sideEffects: "network-read",
+    writeCapability: "none",
+    version: "1.0.0",
+    deprecated: false,
+    execute: executeGetRevnetIssuanceTerms,
   },
   {
     name: "docs-search",
