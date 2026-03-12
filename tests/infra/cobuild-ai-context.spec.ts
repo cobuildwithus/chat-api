@@ -5,6 +5,7 @@ import {
   getCobuildAiContextUrl,
 } from "../../src/infra/cobuild-ai-context";
 import { formatErrorLogMessage, formatErrorMessage } from "../../src/infra/errors";
+import { getRevnetIssuanceTermsSnapshot } from "../../src/infra/revnet-issuance-terms";
 import {
   onchainParticipants,
   onchainPayEvents,
@@ -151,23 +152,30 @@ describe("cobuild ai context", () => {
       { balance: "30000000000000000000" },
       { balance: "10000000000000000000" },
     ]);
-    queueCobuildDbResponse(onchainRulesets, [
+    setCobuildDbResponse(onchainRulesets, [
       {
+        chainId: 8453,
+        projectId: 138,
         rulesetId: 1n,
         start: 1_700_000_000n,
+        duration: 0n,
         weight: "5000000000000000000",
+        weightCutPercent: 0,
+        reservedPercent: 5000,
+        cashOutTaxRate: 2500,
+      },
+      {
+        chainId: 8453,
+        projectId: 138,
+        rulesetId: 2n,
+        start: 1_800_000_000n,
+        duration: 0n,
+        weight: "4000000000000000000",
+        weightCutPercent: 0,
         reservedPercent: 5000,
         cashOutTaxRate: 2500,
       },
     ]);
-    queueCobuildDbResponse(onchainRulesets, [
-      {
-        rulesetId: 2n,
-        start: 1_800_000_000n,
-        weight: "4000000000000000000",
-      },
-    ]);
-    queueCobuildDbResponse(onchainRulesets, [{ count: 1 }]);
 
     const snapshot = await fetchCobuildAiContextFresh();
 
@@ -179,6 +187,86 @@ describe("cobuild ai context", () => {
     expect(snapshot.data.holders.total).toBe(12);
     expect(snapshot.data.distribution.top10Tokens).toBe(40);
     expect(snapshot.data.issuance.currentPrice.basePerToken).toBeCloseTo(0.2, 6);
+  });
+
+  it("keeps issuance summary parity with the canonical revnet snapshot at the same timestamp", async () => {
+    const stage2StartSec = Math.floor(new Date("2026-02-28T00:00:00.000Z").getTime() / 1000);
+    const stage3StartSec = Math.floor(new Date("2026-03-02T12:00:00.000Z").getTime() / 1000);
+    const nowMs = Date.now();
+
+    setCobuildDbResponse(onchainProjects, [
+      {
+        suckerGroupId: null,
+        accountingToken: "0xabc",
+        accountingDecimals: 6,
+        accountingTokenSymbol: "USDC",
+        erc20Symbol: "COBUILD",
+        currentRulesetId: 22n,
+        erc20Supply: "100000000000000000000",
+      },
+    ]);
+    setCobuildDbResponse(tokenMetadata, [{ priceUsdc: "1" }]);
+    queueCobuildDbResponse(onchainPayEvents, [{ lifetimeAmountRaw: "0" }]);
+    queueCobuildDbResponse(onchainPayEvents, []);
+    queueCobuildDbResponse(onchainParticipants, [
+      { total: 0, newLast6h: 0, newLast24h: 0, newLast7d: 0, newLast30d: 0 },
+    ]);
+    queueCobuildDbResponse(onchainParticipants, []);
+    setCobuildDbResponse(onchainRulesets, [
+      {
+        chainId: 8453,
+        projectId: 138,
+        rulesetId: 21n,
+        start: 1_700_000_000n,
+        duration: 0n,
+        weight: "6000000000000000000",
+        weightCutPercent: 0,
+        reservedPercent: 2000,
+        cashOutTaxRate: 500,
+      },
+      {
+        chainId: 8453,
+        projectId: 138,
+        rulesetId: 22n,
+        start: BigInt(stage2StartSec),
+        duration: 86_400n,
+        weight: "5000000000000000000",
+        weightCutPercent: 100000000,
+        reservedPercent: 2500,
+        cashOutTaxRate: 1000,
+      },
+      {
+        chainId: 8453,
+        projectId: 138,
+        rulesetId: 23n,
+        start: BigInt(stage3StartSec),
+        duration: 0n,
+        weight: "3000000000000000000",
+        weightCutPercent: 0,
+        reservedPercent: 3000,
+        cashOutTaxRate: 1200,
+      },
+    ]);
+
+    const canonicalSnapshot = await getRevnetIssuanceTermsSnapshot({
+      chainId: 8453,
+      projectId: 138,
+      nowMs,
+    });
+    const aiContext = await fetchCobuildAiContextFresh();
+
+    expect(canonicalSnapshot.summary.activeStage).toBe(2);
+    expect(canonicalSnapshot.summary.nextStage).toBe(3);
+    expect(aiContext.data.issuance).toEqual({
+      currentPrice: canonicalSnapshot.summary.currentPrice,
+      nextPrice: canonicalSnapshot.summary.nextPrice,
+      nextChangeAt: canonicalSnapshot.summary.nextChangeAt,
+      nextChangeType: canonicalSnapshot.summary.nextChangeType,
+      activeStage: canonicalSnapshot.summary.activeStage,
+      nextStage: canonicalSnapshot.summary.nextStage,
+      reservedPercent: canonicalSnapshot.summary.reservedPercent,
+      cashOutTaxRate: canonicalSnapshot.summary.cashOutTaxRate,
+    });
   });
 
   it("returns an error when derivation fails", async () => {
@@ -215,17 +303,19 @@ describe("cobuild ai context", () => {
       { total: 0, newLast6h: 0, newLast24h: 0, newLast7d: 0, newLast30d: 0 },
     ]);
     queueCobuildDbResponse(onchainParticipants, []);
-    queueCobuildDbResponse(onchainRulesets, [
+    setCobuildDbResponse(onchainRulesets, [
       {
+        chainId: 8453,
+        projectId: 138,
         rulesetId: 1n,
         start: 1_700_000_000n,
+        duration: 0n,
         weight: "5000000000000000000",
+        weightCutPercent: 0,
         reservedPercent: 5000,
         cashOutTaxRate: 2500,
       },
     ]);
-    queueCobuildDbResponse(onchainRulesets, []);
-    queueCobuildDbResponse(onchainRulesets, [{ count: 0 }]);
 
     const snapshot = await fetchCobuildAiContextFresh();
 
@@ -256,17 +346,19 @@ describe("cobuild ai context", () => {
       { total: 0, newLast6h: 0, newLast24h: 0, newLast7d: 0, newLast30d: 0 },
     ]);
     queueCobuildDbResponse(onchainParticipants, []);
-    queueCobuildDbResponse(onchainRulesets, [
+    setCobuildDbResponse(onchainRulesets, [
       {
+        chainId: 8453,
+        projectId: 138,
         rulesetId: 1n,
         start: 1_700_000_000n,
+        duration: 0n,
         weight: "5000000000000000000",
+        weightCutPercent: 0,
         reservedPercent: 5000,
         cashOutTaxRate: 2500,
       },
     ]);
-    queueCobuildDbResponse(onchainRulesets, []);
-    queueCobuildDbResponse(onchainRulesets, [{ count: 1 }]);
 
     const snapshot = await fetchCobuildAiContextFresh();
 
@@ -295,17 +387,19 @@ describe("cobuild ai context", () => {
     queueCobuildDbResponse(onchainParticipants, Array.from({ length: 10 }, () => ({
       balance: "9007199254740991000000000000000000",
     })));
-    queueCobuildDbResponse(onchainRulesets, [
+    setCobuildDbResponse(onchainRulesets, [
       {
+        chainId: 8453,
+        projectId: 138,
         rulesetId: 1n,
         start: 1_700_000_000n,
+        duration: 0n,
         weight: "5000000000000000000",
+        weightCutPercent: 0,
         reservedPercent: 5000,
         cashOutTaxRate: 2500,
       },
     ]);
-    queueCobuildDbResponse(onchainRulesets, []);
-    queueCobuildDbResponse(onchainRulesets, [{ count: 1 }]);
 
     const snapshot = await fetchCobuildAiContextFresh();
 
@@ -341,23 +435,30 @@ describe("cobuild ai context", () => {
       { total: 1, newLast6h: 1, newLast24h: 1, newLast7d: 1, newLast30d: 1 },
     ]);
     queueCobuildDbResponse(onchainParticipants, [{ balance: "2500000000000000000" }]);
-    queueCobuildDbResponse(onchainRulesets, [
+    setCobuildDbResponse(onchainRulesets, [
       {
+        chainId: 8453,
+        projectId: 138,
         rulesetId: 1n,
         start: 1_700_000_000n,
+        duration: 0n,
         weight: "5000000000000000000",
+        weightCutPercent: 0,
+        reservedPercent: 2500,
+        cashOutTaxRate: 1000,
+      },
+      {
+        chainId: 8453,
+        projectId: 138,
+        rulesetId: 2n,
+        start: 1_800_000_000n,
+        duration: 0n,
+        weight: "5000000000000000000",
+        weightCutPercent: 0,
         reservedPercent: 2500,
         cashOutTaxRate: 1000,
       },
     ]);
-    queueCobuildDbResponse(onchainRulesets, [
-      {
-        rulesetId: 2n,
-        start: 1_800_000_000n,
-        weight: "5000000000000000000",
-      },
-    ]);
-    queueCobuildDbResponse(onchainRulesets, [{ count: 2 }]);
 
     const snapshot = await getCobuildAiContextSnapshot();
 
@@ -367,7 +468,7 @@ describe("cobuild ai context", () => {
     expect(snapshot.data?.data.treasury.balance.usd).toBe(1.5);
     expect(snapshot.data?.data.mints.medianPrice.last30d?.basePerToken).toBe(0.5);
     expect(snapshot.data?.data.issuance.nextChangeType).toBe("stage");
-    expect(snapshot.data?.data.issuance.nextStage).toBe(3);
+    expect(snapshot.data?.data.issuance.nextStage).toBe(2);
   });
 
   it("derives staged price transitions and null holder counters when holder aggregates are missing", async () => {
@@ -397,29 +498,36 @@ describe("cobuild ai context", () => {
     queueCobuildDbResponse(onchainParticipants, [
       { balance: "1000000000000000000" },
     ]);
-    queueCobuildDbResponse(onchainRulesets, [
+    setCobuildDbResponse(onchainRulesets, [
       {
+        chainId: 8453,
+        projectId: 138,
         rulesetId: 11n,
         start: 1_700_000_000n,
+        duration: 0n,
         weight: "5000000000000000000",
+        weightCutPercent: 0,
+        reservedPercent: 2500,
+        cashOutTaxRate: 1000,
+      },
+      {
+        chainId: 8453,
+        projectId: 138,
+        rulesetId: 12n,
+        start: 1_800_000_000n,
+        duration: 0n,
+        weight: "5000000000000000000",
+        weightCutPercent: 0,
         reservedPercent: 2500,
         cashOutTaxRate: 1000,
       },
     ]);
-    queueCobuildDbResponse(onchainRulesets, [
-      {
-        rulesetId: 12n,
-        start: 1_800_000_000n,
-        weight: "5000000000000000000",
-      },
-    ]);
-    queueCobuildDbResponse(onchainRulesets, [{ count: 2 }]);
 
     const snapshot = await fetchCobuildAiContextFresh();
 
     expect(snapshot.data.issuance.nextChangeType).toBe("stage");
-    expect(snapshot.data.issuance.activeStage).toBe(2);
-    expect(snapshot.data.issuance.nextStage).toBe(3);
+    expect(snapshot.data.issuance.activeStage).toBe(1);
+    expect(snapshot.data.issuance.nextStage).toBe(2);
     expect(snapshot.data.holders.total).toBeNull();
     expect(snapshot.data.holders.new).toEqual({
       last6h: null,
@@ -448,23 +556,30 @@ describe("cobuild ai context", () => {
       { total: 0, newLast6h: 0, newLast24h: 0, newLast7d: 0, newLast30d: 0 },
     ]);
     queueCobuildDbResponse(onchainParticipants, []);
-    queueCobuildDbResponse(onchainRulesets, [
+    setCobuildDbResponse(onchainRulesets, [
       {
+        chainId: 8453,
+        projectId: 138,
         rulesetId: 1n,
         start: 1_700_000_000n,
+        duration: 0n,
         weight: "0",
+        weightCutPercent: 0,
+        reservedPercent: 0,
+        cashOutTaxRate: 0,
+      },
+      {
+        chainId: 8453,
+        projectId: 138,
+        rulesetId: 2n,
+        start: 1_800_000_000n,
+        duration: 0n,
+        weight: "0",
+        weightCutPercent: 0,
         reservedPercent: 0,
         cashOutTaxRate: 0,
       },
     ]);
-    queueCobuildDbResponse(onchainRulesets, [
-      {
-        rulesetId: 2n,
-        start: 1_800_000_000n,
-        weight: "0",
-      },
-    ]);
-    queueCobuildDbResponse(onchainRulesets, [{ count: 0 }]);
 
     const snapshot = await fetchCobuildAiContextFresh();
 
@@ -473,7 +588,7 @@ describe("cobuild ai context", () => {
     expect(snapshot.data.issuance.currentPrice.basePerToken).toBeNull();
     expect(snapshot.data.issuance.nextPrice.basePerToken).toBeNull();
     expect(snapshot.data.issuance.nextChangeType).toBe("stage");
-    expect(snapshot.data.issuance.activeStage).toBeNull();
+    expect(snapshot.data.issuance.activeStage).toBe(1);
   });
 
   it("prefers the env project id over the wire fallback", async () => {

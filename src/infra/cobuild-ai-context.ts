@@ -1,16 +1,12 @@
-import {
-  buildRevnetIssuanceTerms,
-  COBUILD_PROJECT_ID as WIRE_COBUILD_PROJECT_ID,
-  issuancePriceFromRevnetWeight,
-} from "@cobuild/wire";
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { COBUILD_PROJECT_ID as WIRE_COBUILD_PROJECT_ID } from "@cobuild/wire";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { getOrSetCachedResultWithLock } from "./cache/cacheResult";
 import { formatErrorLogMessage, formatErrorMessage } from "./errors";
+import { getRevnetIssuanceTermsSnapshot } from "./revnet-issuance-terms";
 import {
   onchainParticipants,
   onchainPayEvents,
   onchainProjects,
-  onchainRulesets,
   tokenMetadata,
 } from "./db/schema";
 import { cobuildDb } from "./db/cobuildDb";
@@ -220,7 +216,6 @@ async function deriveCobuildAiContext(): Promise<CobuildAiContextResponse> {
       accountingDecimals: onchainProjects.accountingDecimals,
       accountingTokenSymbol: onchainProjects.accountingTokenSymbol,
       erc20Symbol: onchainProjects.erc20Symbol,
-      currentRulesetId: onchainProjects.currentRulesetId,
       erc20Supply: onchainProjects.erc20Supply,
     })
     .from(onchainProjects)
@@ -372,101 +367,18 @@ async function deriveCobuildAiContext(): Promise<CobuildAiContextResponse> {
   const top1Share =
     totalSupply !== null && top1Tokens !== null && totalSupply > 0 ? top1Tokens / totalSupply : null;
 
-  const [currentRuleset] = await cobuildDb
-    .select({
-      rulesetId: onchainRulesets.rulesetId,
-      start: onchainRulesets.start,
-      duration: onchainRulesets.duration,
-      weight: onchainRulesets.weight,
-      weightCutPercent: onchainRulesets.weightCutPercent,
-      reservedPercent: onchainRulesets.reservedPercent,
-      cashOutTaxRate: onchainRulesets.cashOutTaxRate,
-    })
-    .from(onchainRulesets)
-    .where(
-      and(
-        eq(onchainRulesets.chainId, COBUILD_CHAIN_ID),
-        eq(onchainRulesets.projectId, COBUILD_PROJECT_ID),
-        eq(onchainRulesets.rulesetId, project.currentRulesetId),
-      ),
-    )
-    .limit(1);
-
-  const [nextRuleset] = await cobuildDb
-    .select({
-      rulesetId: onchainRulesets.rulesetId,
-      start: onchainRulesets.start,
-      duration: onchainRulesets.duration,
-      weight: onchainRulesets.weight,
-      weightCutPercent: onchainRulesets.weightCutPercent,
-      reservedPercent: onchainRulesets.reservedPercent,
-      cashOutTaxRate: onchainRulesets.cashOutTaxRate,
-    })
-    .from(onchainRulesets)
-    .where(
-      and(
-        eq(onchainRulesets.chainId, COBUILD_CHAIN_ID),
-        eq(onchainRulesets.projectId, COBUILD_PROJECT_ID),
-        gte(onchainRulesets.start, BigInt(nowSec + 1)),
-      ),
-    )
-    .orderBy(asc(onchainRulesets.start))
-    .limit(1);
-
-  const [activeStageCountRow] = await cobuildDb
-    .select({
-      count: sql<number>`count(*)::int`,
-    })
-    .from(onchainRulesets)
-    .where(
-      and(
-        eq(onchainRulesets.chainId, COBUILD_CHAIN_ID),
-        eq(onchainRulesets.projectId, COBUILD_PROJECT_ID),
-        lte(onchainRulesets.start, BigInt(nowSec)),
-      ),
-    );
-
-  const activeStageCount = activeStageCountRow?.count ?? 0;
-  const issuanceTerms = currentRuleset
-    ? buildRevnetIssuanceTerms({
-        rawRulesets: [
-          {
-            chainId: COBUILD_CHAIN_ID,
-            projectId: COBUILD_PROJECT_ID,
-            rulesetId: currentRuleset.rulesetId,
-            start: currentRuleset.start,
-            duration: currentRuleset.duration ?? 0n,
-            weight: currentRuleset.weight,
-            weightCutPercent: currentRuleset.weightCutPercent ?? 0,
-            reservedPercent: currentRuleset.reservedPercent,
-            cashOutTaxRate: currentRuleset.cashOutTaxRate,
-          },
-          ...(nextRuleset
-            ? [
-                {
-                  chainId: COBUILD_CHAIN_ID,
-                  projectId: COBUILD_PROJECT_ID,
-                  rulesetId: nextRuleset.rulesetId,
-                  start: nextRuleset.start,
-                  duration: nextRuleset.duration ?? 0n,
-                  weight: nextRuleset.weight,
-                  weightCutPercent: nextRuleset.weightCutPercent ?? 0,
-                  reservedPercent: nextRuleset.reservedPercent ?? currentRuleset.reservedPercent,
-                  cashOutTaxRate: nextRuleset.cashOutTaxRate ?? currentRuleset.cashOutTaxRate,
-                },
-              ]
-            : []),
-        ],
-        baseSymbol: project.accountingTokenSymbol,
-        tokenSymbol: project.erc20Symbol ?? "TOKEN",
-        nowMs,
-        primaryChainId: COBUILD_CHAIN_ID,
-        primaryProjectId: COBUILD_PROJECT_ID,
-      })
-    : null;
-  const issuanceSummary = issuanceTerms?.summary;
-  const currentPriceBase = issuancePriceFromRevnetWeight(issuanceSummary?.currentIssuance ?? null);
-  const nextPriceBase = issuancePriceFromRevnetWeight(issuanceSummary?.nextIssuance ?? null);
+  const issuanceSnapshot = await getRevnetIssuanceTermsSnapshot({
+    chainId: COBUILD_CHAIN_ID,
+    projectId: COBUILD_PROJECT_ID,
+    nowMs,
+    projectMeta: {
+      accountingToken: project.accountingToken,
+      accountingDecimals: project.accountingDecimals,
+      accountingTokenSymbol: project.accountingTokenSymbol,
+      erc20Symbol: project.erc20Symbol,
+    },
+    basePriceUsd,
+  });
 
   const snapshot: CobuildAiContextResponse = {
     goalAddress: "",
@@ -504,23 +416,14 @@ async function deriveCobuildAiContext(): Promise<CobuildAiContextResponse> {
         },
       },
       issuance: {
-        currentPrice: {
-          basePerToken: currentPriceBase,
-          usdPerToken: toUsd(currentPriceBase, basePriceUsd),
-        },
-        nextPrice: {
-          basePerToken: nextPriceBase,
-          usdPerToken: toUsd(nextPriceBase, basePriceUsd),
-        },
-        nextChangeAt: issuanceSummary?.nextChangeAt ?? null,
-        nextChangeType: issuanceSummary?.nextChangeType ?? null,
-        activeStage: currentRuleset && activeStageCount > 0 ? activeStageCount : null,
-        nextStage:
-          issuanceSummary?.nextChangeType === "stage" && currentRuleset && activeStageCount > 0
-            ? activeStageCount + 1
-            : null,
-        reservedPercent: issuanceSummary?.reservedPercent ?? null,
-        cashOutTaxRate: issuanceSummary?.cashOutTaxRate ?? null,
+        currentPrice: issuanceSnapshot.summary.currentPrice,
+        nextPrice: issuanceSnapshot.summary.nextPrice,
+        nextChangeAt: issuanceSnapshot.summary.nextChangeAt,
+        nextChangeType: issuanceSnapshot.summary.nextChangeType,
+        activeStage: issuanceSnapshot.summary.activeStage,
+        nextStage: issuanceSnapshot.summary.nextStage,
+        reservedPercent: issuanceSnapshot.summary.reservedPercent,
+        cashOutTaxRate: issuanceSnapshot.summary.cashOutTaxRate,
       },
       mints: {
         count: {

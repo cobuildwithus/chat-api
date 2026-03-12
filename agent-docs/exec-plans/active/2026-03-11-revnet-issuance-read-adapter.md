@@ -27,6 +27,11 @@ Add a canonical indexed `get-revnet-issuance-terms` tool in `chat-api` and reuse
 - `bash scripts/check-agent-docs-drift.sh`
 - `bash scripts/doc-gardening.sh --fail-on-issues`
 
+## Status
+
+- 2026-03-12: `cobuild-ai-context` now forwards issuance summary fields from `getRevnetIssuanceTermsSnapshot()` instead of rebuilding current/next ruleset state locally.
+- 2026-03-12: Regression coverage now includes helper-level stage metadata/null-price override assertions plus adapter parity against the canonical snapshot for the same timestamp.
+
 ## Notes
 
 - If local-wire development is required, restore the published dependency flow before close-out.

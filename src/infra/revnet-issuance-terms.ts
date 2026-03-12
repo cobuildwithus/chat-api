@@ -122,7 +122,9 @@ export async function getRevnetIssuanceTermsSnapshot(params?: {
   }
 
   const basePriceUsd =
-    params?.basePriceUsd ?? await loadBasePriceUsd(chainId, projectMeta.accountingToken);
+    params?.basePriceUsd !== undefined
+      ? params.basePriceUsd
+      : await loadBasePriceUsd(chainId, projectMeta.accountingToken);
   const rawRulesets = await cobuildDb
     .select({
       chainId: onchainRulesets.chainId,
