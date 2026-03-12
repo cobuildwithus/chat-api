@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-12 (Chat flow simplification docs refreshed)
+Last verified: 2026-03-12 (Chat parser cleanup docs refreshed)
 
 ## Purpose
 

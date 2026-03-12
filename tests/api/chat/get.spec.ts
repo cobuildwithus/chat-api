@@ -53,7 +53,8 @@ describe("handleChatGetRequest", () => {
         type: "chat-default",
         data: JSON.stringify({
           goalAddress: "0xabc0000000000000000000000000000000000000",
-          ignored: 7,
+          grantId: "grant-1",
+          impactId: 7,
         }),
         title: null,
       },
@@ -74,7 +75,10 @@ describe("handleChatGetRequest", () => {
     expect(reply.send).toHaveBeenCalledWith({
       chatId: "chat-3",
       type: "chat-default",
-      data: { goalAddress: "0xabc0000000000000000000000000000000000000" },
+      data: {
+        goalAddress: "0xabc0000000000000000000000000000000000000",
+        grantId: "grant-1",
+      },
       messages: [
         {
           id: "m1",

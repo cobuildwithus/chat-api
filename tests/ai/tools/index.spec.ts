@@ -28,16 +28,16 @@ describe("tools index", () => {
     expect(module.defaultTools.some((tool) => tool.name === "getWalletBalances")).toBe(false);
     expect(module.defaultTools.some((tool) => tool.name === "list-wallet-notifications")).toBe(false);
     expect(fileSearch).toHaveBeenCalledWith({ vectorStoreIds: ["vector-store"], maxNumResults: 8 });
-    expect(module.toolsByName.getUser).toBeDefined();
-    expect(module.toolsByName.getGoal).toBeDefined();
-    expect(module.toolsByName.getBudget).toBeDefined();
-    expect(module.toolsByName.getTcrRequest).toBeDefined();
-    expect(module.toolsByName.getDispute).toBeDefined();
-    expect(module.toolsByName.getStakePosition).toBeDefined();
-    expect(module.toolsByName.getPremiumEscrow).toBeDefined();
-    expect(module.toolsByName.listDiscussions).toBeDefined();
-    expect(module.toolsByName.getDiscussionThread).toBeDefined();
-    expect(module.toolsByName.semanticSearchCasts).toBeDefined();
+    expect(module.defaultTools.some((tool) => tool.name === "getUser")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getGoal")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getBudget")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getTcrRequest")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getDispute")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getStakePosition")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getPremiumEscrow")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "listDiscussions")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "getDiscussionThread")).toBe(true);
+    expect(module.defaultTools.some((tool) => tool.name === "semanticSearchCasts")).toBe(true);
   });
 
   it("omits docs tool when vector store id is missing", async () => {

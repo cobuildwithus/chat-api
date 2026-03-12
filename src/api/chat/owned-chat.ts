@@ -6,7 +6,7 @@ import { cobuildPrimaryDb } from "../../infra/db/cobuildDb";
 import { chat } from "../../infra/db/schema";
 import { getPublicError, toPublicErrorBody } from "../../public-errors";
 import type { SubjectWallet } from "../auth/principals";
-import { parseChatData } from "./schema";
+import { sanitizeStoredChatData } from "./schema";
 
 export type OwnedChatRecord = {
   type: string;
@@ -35,7 +35,7 @@ export async function readOwnedChat(
 
   return {
     type: row.type,
-    data: parseChatData(parseJson(row.data)),
+    data: sanitizeStoredChatData(parseJson(row.data)),
     title: row.title ?? null,
   };
 }

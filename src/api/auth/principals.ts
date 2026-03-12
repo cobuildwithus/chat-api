@@ -6,16 +6,10 @@ import {
 } from "@cobuild/wire";
 import type { FastifyRequest } from "fastify";
 import { isTrustedProxyConfigured } from "../../config/env";
+import type { ChatUser, SubjectWallet } from "../../types/chat-user";
 
-export type SubjectWallet = `0x${string}`;
-
-export type ChatUserPrincipal = {
-  address: SubjectWallet;
-  country: string | null;
-  countryRegion: string | null;
-  city: string | null;
-  userAgent: string | null;
-};
+export type { SubjectWallet } from "../../types/chat-user";
+export type ChatUserPrincipal = ChatUser;
 
 type ChatUserPrincipalInput = Omit<ChatUserPrincipal, "address"> & {
   address: string;
@@ -204,24 +198,12 @@ export function getToolsPrincipal(): ToolsPrincipal | null {
   }
 }
 
-export function getSubjectWalletFromChatUserPrincipal(
-  principal: Pick<ChatUserPrincipal, "address">,
-): SubjectWallet {
-  return principal.address;
-}
-
-export function getSubjectWalletFromToolsPrincipal(
-  principal: Pick<ToolsPrincipal, "ownerAddress">,
-): SubjectWallet {
-  return principal.ownerAddress;
-}
-
 export function resolveSubjectWalletFromContext(options?: {
   allowUserFallback?: boolean;
 }): SubjectWallet | null {
   const toolsPrincipal = getToolsPrincipal();
   if (toolsPrincipal) {
-    return getSubjectWalletFromToolsPrincipal(toolsPrincipal);
+    return toolsPrincipal.ownerAddress;
   }
 
   if (hasToolsPrincipalContext()) {
@@ -237,5 +219,5 @@ export function resolveSubjectWalletFromContext(options?: {
     return null;
   }
 
-  return getSubjectWalletFromChatUserPrincipal(chatUserPrincipal);
+  return chatUserPrincipal.address;
 }

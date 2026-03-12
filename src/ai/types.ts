@@ -1,4 +1,4 @@
-import type { UIMessage } from "ai";
+export type { ChatUser, SubjectWallet } from "../types/chat-user";
 
 export const CHAT_AGENT_TYPE = "chat-default" as const;
 
@@ -33,12 +33,4 @@ export type ChatData = {
   opportunityId?: string;
   startupId?: string;
   draftId?: string;
-};
-
-export type ChatUser = {
-  address: string;
-  country: string | null;
-  countryRegion: string | null;
-  city: string | null;
-  userAgent: string | null;
 };

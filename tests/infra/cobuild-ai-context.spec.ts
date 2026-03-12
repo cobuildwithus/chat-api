@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchCobuildAiContextFresh,
   getCobuildAiContextSnapshot,
-  getCobuildAiContextUrl,
 } from "../../src/infra/cobuild-ai-context";
 import { formatErrorLogMessage, formatErrorMessage } from "../../src/infra/errors";
 import { getRevnetIssuanceTermsSnapshot } from "../../src/infra/revnet-issuance-terms";
@@ -112,7 +111,6 @@ describe("cobuild ai context", () => {
     expect(formatErrorLogMessage("fail")).toBe("fail");
     expect(formatErrorLogMessage({})).toBe("Unknown error");
     expect(formatErrorMessage("x".repeat(200), 120, "y".repeat(200))).toHaveLength(120);
-    expect(getCobuildAiContextUrl()).toBe("/api/cobuild/ai-context");
   });
 
   it("derives a snapshot from local chat-api data sources", async () => {

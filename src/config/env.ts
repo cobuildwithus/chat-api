@@ -232,7 +232,6 @@ export type PostgresPoolOptions = {
 const DEFAULT_RATE_LIMIT_MAX = 30;
 const DEFAULT_RATE_LIMIT_WINDOW_MS = 60_000;
 const DEFAULT_OPENAI_TIMEOUT_MS = 30_000;
-const DEFAULT_COBUILD_AI_CONTEXT_TIMEOUT_MS = 7_000;
 
 export function loadDatabaseConfig(): DatabaseConfig {
   const env = validateEnvVariables();
@@ -281,11 +280,6 @@ export function getRateLimitConfig(): {
 export function getOpenAiTimeoutMs(): number {
   const env = getEnv();
   return env.OPENAI_REQUEST_TIMEOUT_MS ?? DEFAULT_OPENAI_TIMEOUT_MS;
-}
-
-export function getCobuildAiContextTimeoutMs(): number {
-  const env = getEnv();
-  return env.COBUILD_AI_CONTEXT_TIMEOUT_MS ?? DEFAULT_COBUILD_AI_CONTEXT_TIMEOUT_MS;
 }
 
 export function getPrivyAppId(): string {

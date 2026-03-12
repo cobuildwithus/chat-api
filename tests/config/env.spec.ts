@@ -4,7 +4,6 @@ import {
   getCliJwtIssuer,
   getCliJwtPrivateKey,
   getCliJwtPublicKey,
-  getCobuildAiContextTimeoutMs,
   getOpenAiTimeoutMs,
   getPostgresPoolOptions,
   getPostgresPoolStatsIntervalMs,
@@ -141,9 +140,7 @@ describe("env helpers", () => {
   it("uses timeout defaults when not configured", () => {
     process.env = { ...process.env, ...baseEnv };
     delete process.env.OPENAI_REQUEST_TIMEOUT_MS;
-    delete process.env.COBUILD_AI_CONTEXT_TIMEOUT_MS;
     expect(getOpenAiTimeoutMs()).toBe(30_000);
-    expect(getCobuildAiContextTimeoutMs()).toBe(7_000);
   });
 
   it("handles missing privy verification key outside production", () => {

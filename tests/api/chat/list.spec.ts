@@ -25,7 +25,7 @@ beforeEach(() => {
 });
 
 describe("handleChatListRequest", () => {
-  it("accepts the compatibility goalAddress query without changing the response shape", async () => {
+  it("returns chat summaries", async () => {
     const now = new Date("2025-01-01T00:00:00Z");
     setCobuildDbResponse(chat, [
       {
@@ -39,10 +39,7 @@ describe("handleChatListRequest", () => {
     ]);
 
     const reply = createReply();
-    await handleChatListRequest(
-      buildRequest({ goalAddress: "0xabc0000000000000000000000000000000000000" }),
-      reply,
-    );
+    await handleChatListRequest(buildRequest(), reply);
 
     expect(reply.send).toHaveBeenCalledWith({
       chats: [
@@ -57,11 +54,11 @@ describe("handleChatListRequest", () => {
     });
   });
 
-  it("returns all chats when no goal filter is provided", async () => {
+  it("normalizes missing titles to null", async () => {
     const now = new Date("2025-02-01T00:00:00Z");
     setCobuildDbResponse(chat, [
       {
-        id: "chat-1",
+        id: "chat-2",
         title: null,
         data: {},
         type: "chat-default",
@@ -76,7 +73,7 @@ describe("handleChatListRequest", () => {
     expect(reply.send).toHaveBeenCalledWith({
       chats: [
         {
-          id: "chat-1",
+          id: "chat-2",
           title: null,
           type: "chat-default",
           updatedAt: now.toISOString(),
@@ -113,5 +110,18 @@ describe("handleChatListRequest", () => {
         },
       ],
     });
+  });
+
+  it("logs and rethrows query failures", async () => {
+    const error = new Error("db down");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    setCobuildDbResponse(chat, () => {
+      throw error;
+    });
+
+    await expect(handleChatListRequest(buildRequest(), createReply())).rejects.toThrow(error);
+    expect(errorSpy).toHaveBeenCalledWith("Chat list handler error:", error);
+
+    errorSpy.mockRestore();
   });
 });

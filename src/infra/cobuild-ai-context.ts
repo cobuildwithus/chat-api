@@ -14,6 +14,7 @@ import { cobuildDb } from "./db/cobuildDb";
 const CACHE_PREFIX = "cobuild:ai-context:";
 const CACHE_KEY = "snapshot";
 const CACHE_TTL_SECONDS = 60 * 15;
+const COBUILD_AI_CONTEXT_PATH = "/api/cobuild/ai-context";
 const COBUILD_CHAIN_ID = Number(process.env.COBUILD_CHAIN_ID ?? "8453");
 const COBUILD_PROJECT_ID = Number(process.env.COBUILD_JUICEBOX_PROJECT_ID ?? WIRE_COBUILD_PROJECT_ID);
 const JB_TOKEN_DECIMALS = 18;
@@ -84,10 +85,6 @@ export type CobuildAiContextResponse = {
     };
   };
 };
-
-export function getCobuildAiContextUrl(): string {
-  return "/api/cobuild/ai-context";
-}
 
 function roundToCents(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -191,7 +188,7 @@ function buildPrompt(): string {
   return [
     "Cobuild live stats",
     "",
-    "Fetch: `/api/cobuild/ai-context`",
+    `Fetch: \`${COBUILD_AI_CONTEXT_PATH}\``,
     "",
     "The response includes:",
     "- `asOf` / `asOfMs`: timestamp when stats were generated",

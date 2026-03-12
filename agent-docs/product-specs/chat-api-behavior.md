@@ -23,7 +23,7 @@ Behavior:
 - enforces auth and wallet ownership for the target chat
 - applies usage limiter before streaming
 - stores the user message idempotently by `clientMessageId`
-- normalizes stored chat metadata through the shared chat-data parser before agent construction
+- sanitizes stored chat metadata before agent construction, preserving valid recognized fields and dropping invalid or unknown ones
 - streams assistant output
 - persists pending + final message state
 
@@ -36,7 +36,7 @@ Error behavior:
 ### GET `/api/chats`
 
 Query:
-- optional: `goalAddress`, `limit` (`1..100`)
+- optional: `limit` (`1..100`)
 
 Behavior:
 - returns current user chat list sorted by `updatedAt`
@@ -117,8 +117,7 @@ Error behavior:
 
 ## Known Schema/Runtime Caveats
 
-1. `goalAddress` remains accepted on chat-list requests for compatibility, but runtime does not filter on it.
-2. Route schemas validate request bodies but currently do not define response schemas.
+1. Route schemas validate request bodies but currently do not define response schemas.
 
 ## Required Update Triggers
 

@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: 2026-03-11
+Last updated: 2026-03-12
 
 See `README.md` for setup/deployment and `docs/TOOLS.md` for tool contribution steps. The canonical docs map is `agent-docs/index.md`.
 
@@ -72,8 +72,7 @@ tests/        # behavior tests by domain (api, ai, chat, infra, config)
 
 1. Load user-owned chats ordered by recency.
 2. Apply bounded `limit`.
-3. Optionally filter by valid EVM `goalAddress` from chat metadata.
-4. Return compact chat summaries.
+3. Return compact chat summaries.
 
 ### GET `/api/chat/:chatId`
 

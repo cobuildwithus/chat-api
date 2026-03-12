@@ -16,7 +16,6 @@ const chatDataSchema = z.object({
   startupId: z.string().optional(),
   draftId: z.string().optional(),
 }).strict();
-const chatDataParserSchema = z.object(chatDataSchema.shape).strip();
 
 const filePartSchema = z.object({
   type: z.literal("file"),
@@ -61,9 +60,9 @@ const chatGetParamsSchema = z.object({
 }).strict();
 
 const chatListQuerySchema = z.object({
-  goalAddress: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
 }).strict();
+const chatDataKeys = Object.keys(chatDataSchema.shape) as Array<keyof ChatData>;
 
 const chatHeadersParser = createRuntimeSchemaParser(chatHeadersSchema);
 const chatBodyParser = createRuntimeSchemaParser(chatBodySchema);
@@ -94,13 +93,21 @@ export const parseChatCreateBody = chatCreateBodyParser.parse;
 export const parseChatGetParams = chatGetParamsParser.parse;
 export const parseChatListQuery = chatListQueryParser.parse;
 
-export function parseChatData(input: unknown): ChatData {
-  const result = chatDataParserSchema.safeParse(input);
-  if (!result.success) {
+export function sanitizeStoredChatData(input: unknown): ChatData {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
     return {};
   }
 
-  return result.data;
+  const candidate = input as Record<string, unknown>;
+  const sanitized: ChatData = {};
+  for (const key of chatDataKeys) {
+    const value = chatDataSchema.shape[key].safeParse(candidate[key]);
+    if (value.success && value.data !== undefined) {
+      sanitized[key] = value.data;
+    }
+  }
+
+  return sanitized;
 }
 
 export type ChatRequestBody = z.infer<typeof chatBodySchema>;

@@ -5,10 +5,10 @@ import {
   chatListSchema,
   chatSchema,
   parseChatBody,
-  parseChatData,
   parseChatCreateBody,
   parseChatHeaders,
   parseChatListQuery,
+  sanitizeStoredChatData,
 } from "../../../src/api/chat/schema";
 
 describe("chat schemas", () => {
@@ -35,13 +35,14 @@ describe("chat schemas", () => {
     };
     const getSchema = chatGetSchema.params as { required: string[] };
     const listSchema = chatListSchema.querystring as {
-      properties: { limit: { maximum: number } };
+      properties: Record<string, { maximum?: number }>;
     };
 
     expect(createSchema.required).toEqual(["type"]);
     expect(createSchema.properties.type.enum).toEqual(["chat-default"]);
     expect(getSchema.required).toEqual(["chatId"]);
     expect(listSchema.properties.limit.maximum).toBe(100);
+    expect(listSchema.properties.goalAddress).toBeUndefined();
   });
 
   it("uses the same runtime parsers as the generated schemas", () => {
@@ -66,17 +67,19 @@ describe("chat schemas", () => {
       "x-client-device": "mobile",
     });
     expect(
-      parseChatData({
+      sanitizeStoredChatData({
         goalAddress: "0xgoal",
         ignored: 7,
-        impactId: "impact-1",
+        impactId: 7,
+        grantId: "grant-1",
       }),
     ).toEqual({
       goalAddress: "0xgoal",
-      impactId: "impact-1",
+      grantId: "grant-1",
     });
-    expect(parseChatData("{not-an-object}")).toEqual({});
+    expect(sanitizeStoredChatData("{not-an-object}")).toEqual({});
     expect(parseChatListQuery({ limit: "7" })).toEqual({ limit: 7 });
+    expect(() => parseChatListQuery({ goalAddress: "0xgoal" })).toThrow();
     expect(() => parseChatCreateBody({ type: "other" })).toThrow();
   });
 });

@@ -30,7 +30,3 @@ export const defaultTools: Tool[] = [
   ...(docsFileSearchTool ? [docsFileSearchTool] : []),
   webSearchTool,
 ];
-
-export const toolsByName = Object.fromEntries(
-  defaultTools.map((tool) => [tool.name, tool]),
-) as Record<string, Tool>;
