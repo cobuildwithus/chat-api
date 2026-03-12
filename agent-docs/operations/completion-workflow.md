@@ -1,6 +1,6 @@
 # Completion Workflow
 
-Last verified: 2026-02-25
+Last verified: 2026-03-12
 
 ## Sequence
 
@@ -12,6 +12,8 @@ Last verified: 2026-02-25
 6. Re-run required checks after simplify + coverage updates.
 7. Run final completion audit using `agent-docs/prompts/task-finish-review.md`.
 8. Resolve high-severity findings before final handoff.
+9. Final handoff must report required-check results; green required checks remain the default completion bar.
+10. If a required check fails for a credibly unrelated pre-existing reason, commit your exact touched files and hand off with the failing command, failing target, and why your diff did not cause it. If you cannot defend that separation, treat the failure as blocking.
 
 ## Coordination Ledger (Always Required)
 
