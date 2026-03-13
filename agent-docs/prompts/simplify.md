@@ -10,7 +10,7 @@ Simplify and harden modified code without changing externally visible behavior.
 
 Preflight (required):
 - Read `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` before review.
-- Respect active ownership boundaries from the ledger.
+- Honor any explicit exclusive/refactor notes from the ledger; otherwise work carefully on top of active rows without reverting adjacent edits.
 
 Approach:
 - Delete dead code, stale branches, and no-op abstractions first.

@@ -1,6 +1,6 @@
 # Completion Workflow
 
-Last verified: 2026-03-12
+Last verified: 2026-03-13
 
 ## Sequence
 
@@ -18,7 +18,10 @@ Last verified: 2026-03-12
 ## Coordination Ledger (Always Required)
 
 - Before coding work, add an active row to `agent-docs/exec-plans/active/COORDINATION_LEDGER.md`.
-- Update the row if file scope or symbol intent changes.
+- Treat the row as an active-work notice by default, not a hard lock.
+- Overlap is allowed when agents stay within their declared scope, read the current file state first, and preserve adjacent edits.
+- Mark a row as exclusive in `Dependency Notes` only when overlap is unsafe, such as a broad refactor or a delicate cross-cutting rewrite.
+- Update the row if file scope, symbol intent, or exclusivity expectations change.
 - Remove the row immediately when the task is complete or abandoned.
 
 ## Audit Handoff Packet
@@ -30,7 +33,7 @@ When using a fresh subagent for coverage or completion audits, provide:
 - Links to active execution plans (when present).
 - Verification evidence already run (commands + outcomes).
 - Current worktree context and explicit review boundaries.
-- Instruction to read and honor `COORDINATION_LEDGER.md` ownership rows.
+- Instruction to read `COORDINATION_LEDGER.md`, honor any explicit exclusive/refactor notes, and otherwise work carefully on top of overlapping rows.
 
 ## Safety Rules
 

@@ -1,6 +1,8 @@
 # Coordination Ledger (Active Only)
 
 Use this file only for currently active coding work. Keep it minimal and current.
+Rows are active-work notices by default, not hard file locks.
+Use dependency notes to mark a lane as exclusive when overlap is unsafe, such as a large refactor or delicate cross-cutting rewrite.
 
 ## Open Entries
 
