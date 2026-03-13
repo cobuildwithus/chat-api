@@ -31,9 +31,9 @@ This index is the table of contents for durable, repository-local context that a
 | `agent-docs/SECURITY.md` | Security constraints, trust boundaries, and escalation rules. | Auth, grants, headers, data boundaries | Chat API Maintainer | Per security-affecting PR | High | 2026-03-12 |
 | `agent-docs/operations/verification-and-runtime.md` | Verification commands, required-check matrix, and runtime guardrails. | `AGENTS.md`, `package.json`, `scripts/**` | Chat API Maintainer | Per process/CI change | High | 2026-02-25 |
 | `agent-docs/operations/completion-workflow.md` | Required post-implementation audit workflow, including unrelated required-check failure commit handling. | Prompts + completion process | Chat API Maintainer | Per process change | High | 2026-03-12 |
-| `agent-docs/prompts/simplify.md` | Reusable simplification pass prompt. | Completion workflow | Chat API Maintainer | Per process change | Medium | 2026-02-25 |
-| `agent-docs/prompts/test-coverage-audit.md` | Reusable coverage-audit prompt for high-risk changes. | Completion workflow | Chat API Maintainer | Per process change | High | 2026-02-25 |
-| `agent-docs/prompts/task-finish-review.md` | Reusable final completion audit prompt. | Completion workflow | Chat API Maintainer | Per process change | High | 2026-02-25 |
+| `agent-docs/prompts/simplify.md` | Reusable simplification pass prompt with parallel-agent handoff output. | Completion workflow | Chat API Maintainer | Per process change | Medium | 2026-03-13 |
+| `agent-docs/prompts/test-coverage-audit.md` | Reusable coverage-audit prompt for high-risk changes with parallel-agent handoff output. | Completion workflow | Chat API Maintainer | Per process change | High | 2026-03-13 |
+| `agent-docs/prompts/task-finish-review.md` | Reusable final completion audit prompt with parallel-agent handoff output. | Completion workflow | Chat API Maintainer | Per process change | High | 2026-03-13 |
 | `agent-docs/generated/README.md` | Generated doc artifacts produced by scripts. | `agent-docs/generated/**` | Chat API Maintainer | Per script change | Medium | 2026-02-25 |
 | `agent-docs/exec-plans/` | Execution plans for active and completed work. | PR-linked plan docs | Chat API Maintainer | Per multi-file/high-risk PR | High | 2026-03-12 |
 | `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` | Active task ownership ledger for multi-agent safety. | Active coding sessions | Chat API Maintainer | Continuous | High | 2026-03-03 |
