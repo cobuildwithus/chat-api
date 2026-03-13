@@ -22,16 +22,6 @@ review_gpt_register_dir_preset "bad-code" "bad-code-quality.md" \
   "anti-patterns-and-bad-practices" \
   "code-quality" \
   "bad-code-quality"
-review_gpt_register_dir_preset "grief-vectors" "grief-vectors.md" \
-  "Abuse, liveness, and denial-of-service vectors." \
-  "grief" \
-  "dos" \
-  "liveness"
-review_gpt_register_dir_preset "incentives" "incentives.md" \
-  "Abuse economics and resource-extraction incentives." \
-  "economic-security" \
-  "economics" \
-  "economic-security-and-incentives"
 review_gpt_register_dir_preset "reliability" "reliability.md" \
   "Timeouts, retries, streaming lifecycle, and failure safety." \
   "reliability-audit"
