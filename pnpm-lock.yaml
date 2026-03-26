@@ -55,8 +55,8 @@ importers:
         specifier: ^0.1.14
         version: 0.1.14
       '@cobuild/review-gpt':
-        specifier: ^0.4.2
-        version: 0.4.2
+        specifier: ^0.4.4
+        version: 0.4.4
       '@tsconfig/recommended':
         specifier: ^1.0.1
         version: 1.0.13
@@ -140,8 +140,8 @@ packages:
     resolution: {integrity: sha512-/DKNFA3n1Y1pMKnbSiIctY57pZNdnVCNcB9ukKqAwQQRjt7sc9NoYuWBmb9H407Of9GvBNGg2BCMmQemKLtN6w==}
     hasBin: true
 
-  '@cobuild/review-gpt@0.4.2':
-    resolution: {integrity: sha512-6DJvyurd5lupXAVMv5mtjrPjp/G20gDnVuxTPUXHzjaxPLXiJtdzH82/I8ZfnFq6knWxDoPBqZ+y9gODeGqo4Q==}
+  '@cobuild/review-gpt@0.4.4':
+    resolution: {integrity: sha512-h9LY1mXpGX3LttVb1U6rEwMJwZWlJtssVmVn1xAwE3TDos6T5PfULQsnYTvmPhHLGUA6IIwU9nBLxZOPwR7m2g==}
     hasBin: true
 
   '@cobuild/wire@0.3.6':
@@ -1710,7 +1710,7 @@ snapshots:
 
   '@cobuild/repo-tools@0.1.14': {}
 
-  '@cobuild/review-gpt@0.4.2': {}
+  '@cobuild/review-gpt@0.4.4': {}
 
   '@cobuild/wire@0.3.6(typescript@5.9.3)(zod@4.3.5)':
     dependencies:
