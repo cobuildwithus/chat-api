@@ -37,7 +37,7 @@ If instructions still conflict after applying this order, ask the user before ac
 - Ledger rows are active-work notices by default, not hard file locks. Read overlapping rows first, preserve adjacent edits, and coordinate through scope/symbol notes. Treat a row as exclusive only when it explicitly says overlap is unsafe, the lane is a large refactor, or the user gives a conflicting direction.
 - Any spawned subagent that may review or edit code must read `COORDINATION_LEDGER.md`, follow the same hard gate before making code changes, and honor any explicit exclusive/refactor notes on overlapping rows.
 - For non-doc changes that touch production code or tests, run completion workflow audit passes: `simplify` -> `test-coverage-audit` -> `task-finish-review`.
-- When those audit passes are required, do not rush or interrupt them: wait for each `simplify`, `test-coverage-audit`, and `task-finish-review` pass to return, review the result, and resolve or explicitly hand off any follow-up before final handoff.
+- When those audit passes are required, do not rush or interrupt them: expect each `simplify`, `test-coverage-audit`, and `task-finish-review` pass to take about 5 to 10 minutes on non-trivial diffs, wait for each pass to return, and do not cancel one early unless you have concrete evidence it is stuck or off-scope.
 - Docs/process-only changes skip completion workflow audit passes unless the user explicitly asks to run them.
 - Keep this file short and route-oriented; move durable detail into `agent-docs/`.
 
