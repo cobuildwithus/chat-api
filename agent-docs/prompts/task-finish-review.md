@@ -1,5 +1,5 @@
 ---
-description: Final completion audit for regressions, correctness, and security
+description: Final completion audit, including coverage and proof review, for completed changes
 action: thorough review
 ---
 
@@ -9,6 +9,11 @@ Runtime expectation:
 - This audit may take 5 to 10 minutes on a non-trivial diff.
 - Work methodically instead of rushing to a shallow answer.
 - Parent agent: allow the run to continue and do not cancel it early unless there is clear evidence the audit is stuck or off scope.
+
+Coverage/proof responsibility:
+- This final audit replaces any standalone `test-coverage-audit` pass.
+- Inspect modified production files and nearby tests to decide whether the change has direct proof at the highest stable behavior boundary available.
+- If meaningful proof is missing, recommend the smallest high-impact tests or direct scenario checks needed to close the gap.
 
 Preflight (required):
 - Read `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` before review.
@@ -20,13 +25,17 @@ Review for:
 - incorrect assumptions and invariant breaks
 - security and correctness risks
 - unexpected interface or state-transition changes
-- test gaps for newly introduced risk
+- coverage and test gaps for newly introduced risk or modified behavior
+- unnecessary complexity, speculative abstractions, or diff size that is disproportionate to the task
+- missed reuse or duplicated logic that likely came from incomplete codebase recall
+- verification gaps where passing checks still do not prove the changed behavior at a real boundary
+- proof gaps where verification stays inside helpers, mocks, or snapshots and never exercises the highest stable boundary available
 
 Output requirements:
 - Return findings ordered by severity (`high`, `medium`, `low`).
 - For each finding include: `severity`, `file:line`, `issue`, `impact`, `recommended fix`.
 - Include `Open questions / assumptions` when uncertainty remains.
-- If no findings exist, state that explicitly and list residual risk areas.
+- If no findings exist, state that explicitly and list residual risk areas, including any direct-scenario verification still left to human checking.
 
 
 Parallel-agent output:

@@ -19,7 +19,7 @@ Last verified: 2026-02-25
 | Change scope | Required action | Notes |
 | --- | --- | --- |
 | Docs-only (`*.md`, `agent-docs/**`) | Run all required checks | `chat-api` policy keeps docs/process updates under the same check gate. |
-| Non-doc changes (production code or tests) | Run all required checks | Also run completion workflow audit passes (`simplify` -> `test-coverage-audit` -> `task-finish-review`). |
+| Non-doc changes (production code or tests) | Run all required checks | Also run completion workflow audit passes (`simplify` -> `task-finish-review`), with coverage/proof-gap review handled inside the final completion audit. |
 | User explicitly says to skip checks for the turn | Skip checks | User instruction takes precedence for that turn. |
 
 ## Runtime Guardrails
