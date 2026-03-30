@@ -1,6 +1,6 @@
 # Chat API Agent Docs Index
 
-Last verified: 2026-03-30 (completion workflow now folds coverage/proof-gap review into the final completion audit while preserving the legacy coverage prompt path as a compatibility redirect)
+Last verified: 2026-03-30 (completion workflow prompts now request downloadable patch-file output, while the final completion audit still folds in coverage/proof-gap review and preserves the legacy coverage prompt path as a compatibility redirect)
 
 ## Purpose
 
@@ -31,9 +31,9 @@ This index is the table of contents for durable, repository-local context that a
 | `agent-docs/SECURITY.md` | Security constraints, trust boundaries, and escalation rules. | Auth, grants, headers, data boundaries | Chat API Maintainer | Per security-affecting PR | High | 2026-03-12 |
 | `agent-docs/operations/verification-and-runtime.md` | Verification commands, required-check matrix, and runtime guardrails. | `AGENTS.md`, `package.json`, `scripts/**` | Chat API Maintainer | Per process/CI change | High | 2026-02-25 |
 | `agent-docs/operations/completion-workflow.md` | Required post-implementation audit workflow, including unrelated required-check failure commit handling and coverage/proof-gap review inside the final completion audit. | Prompts + completion process | Chat API Maintainer | Per process change | High | 2026-03-30 |
-| `agent-docs/prompts/simplify.md` | Reusable simplification pass prompt with parallel-agent handoff output. | Completion workflow | Chat API Maintainer | Per process change | Medium | 2026-03-28 |
+| `agent-docs/prompts/simplify.md` | Reusable simplification pass prompt with downloadable patch-file output. | Completion workflow | Chat API Maintainer | Per process change | Medium | 2026-03-30 |
 | `agent-docs/prompts/test-coverage-audit.md` | Deprecated compatibility redirect that points older references at `agent-docs/prompts/task-finish-review.md`; it is no longer a separate required audit pass. | Completion workflow compatibility | Chat API Maintainer | Per process change | Low | 2026-03-30 |
-| `agent-docs/prompts/task-finish-review.md` | Reusable final completion audit prompt with parallel-agent handoff output, including coverage/proof-gap review. | Completion workflow | Chat API Maintainer | Per process change | High | 2026-03-30 |
+| `agent-docs/prompts/task-finish-review.md` | Reusable final completion audit prompt with downloadable patch-file output, including coverage/proof-gap review. | Completion workflow | Chat API Maintainer | Per process change | High | 2026-03-30 |
 | `agent-docs/generated/README.md` | Generated doc artifacts produced by scripts. | `agent-docs/generated/**` | Chat API Maintainer | Per script change | Medium | 2026-02-25 |
 | `agent-docs/exec-plans/` | Execution plans for active and completed work. | PR-linked plan docs | Chat API Maintainer | Per multi-file/high-risk PR | High | 2026-03-12 |
 | `agent-docs/exec-plans/active/COORDINATION_LEDGER.md` | Active task coordination ledger for multi-agent safety; rows are notices by default and exclusive only when explicitly marked. | Active coding sessions | Chat API Maintainer | Continuous | High | 2026-03-13 |

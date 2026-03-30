@@ -1,12 +1,12 @@
-# Review GPT parallel-agent output
+# Review GPT patch-file output
 
 Status: in_progress
 Created: 2026-03-13
-Updated: 2026-03-13
+Updated: 2026-03-30
 
 ## Goal
 
-- Update every repo-local Review GPT prompt used by the chat-api repo so the model returns copy/paste-ready prompts for parallel fix agents, with detailed issue context and a best-guess remediation path.
+- Update every repo-local Review GPT prompt used by the chat-api repo so the model returns a downloadable `.patch` attachment instead of copy/paste-ready prompts for parallel fix agents.
 
 ## Scope
 
@@ -17,14 +17,15 @@ Updated: 2026-03-13
 ## Constraints
 
 - Keep the change docs-only and avoid runtime source files.
-- Preserve the current prompt intent and only append the new response-format requirement.
+- Preserve the current prompt intent and only replace the response-format requirement.
 - Keep the docs index aligned with the changed prompt docs.
 
 ## Tasks
 
-1. Append the parallel-agent output instruction to each Review GPT prompt markdown file.
+1. Replace the parallel-agent output instruction in each Review GPT prompt markdown file with the patch-file output instruction.
 2. Update `agent-docs/index.md` to reflect the prompt revision.
-3. Run the required docs-only verification commands before handoff.
+3. Update this active plan so docs-drift checks treat the multi-file prompt sweep as tracked work.
+4. Run the required docs-only verification commands before handoff.
 
 ## Verification
 
