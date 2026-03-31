@@ -34,7 +34,7 @@
   },
   "devDependencies": {
     "@cobuild/repo-tools": "^0.1.15",
-    "@cobuild/review-gpt": "^0.5.12",
+    "@cobuild/review-gpt": "^0.5.13",
     "@tsconfig/recommended": "^1.0.1",
     "@types/node": "^22.14.1",
     "@types/pg": "^8.11.10",
