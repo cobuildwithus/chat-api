@@ -20,7 +20,6 @@
     "docs:drift": "bash scripts/check-agent-docs-drift.sh",
     "docs:gardening": "bash scripts/doc-gardening.sh --fail-on-issues",
     "review:gpt": "cobuild-review-gpt --config scripts/review-gpt.config.sh",
-    "review:gpt:simplify": "cobuild-review-gpt --config scripts/review-gpt.config.sh --preset simplify",
     "zip:src": "bash scripts/package-audit-context.sh --zip",
     "wire:status": "pnpm pkg get dependencies.@cobuild/wire",
     "wire:ensure-published": "bash scripts/wire-ensure-published.sh",
@@ -35,7 +34,7 @@
   },
   "devDependencies": {
     "@cobuild/repo-tools": "^0.1.15",
-    "@cobuild/review-gpt": "^0.5.17",
+    "@cobuild/review-gpt": "^0.5.19",
     "@tsconfig/recommended": "^1.0.1",
     "@types/node": "^22.14.1",
     "@types/pg": "^8.11.10",
