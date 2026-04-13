@@ -55,8 +55,8 @@ importers:
         specifier: ^0.1.15
         version: 0.1.15
       '@cobuild/review-gpt':
-        specifier: ^0.5.57
-        version: 0.5.57(@cfworker/json-schema@4.1.1)
+        specifier: ^0.5.59
+        version: 0.5.59(@cfworker/json-schema@4.1.1)
       '@tsconfig/recommended':
         specifier: ^1.0.1
         version: 1.0.13
@@ -149,8 +149,8 @@ packages:
     resolution: {integrity: sha512-CjzP5OHu6RhOOjmPl/1djZNVEbjttt62rBSzvuPK7u9NrZ37F2lkHT+QmZ4Lb+ZDmMhPTqlwdyqnzwD0Gkhm1Q==}
     hasBin: true
 
-  '@cobuild/review-gpt@0.5.57':
-    resolution: {integrity: sha512-bG+G7h3B6mHkyRO4q6d5NkWjaTCKP4ClJSghlIqxarR5PTIIYPr1EdvxoXOQ3tD4FACAEBWFY/g04Su9xZ+tYA==}
+  '@cobuild/review-gpt@0.5.59':
+    resolution: {integrity: sha512-5oh2FgT34hlGv1TD51yJ/XOaxQlypJe4n6Z2E1FNEXu6F1218QelSGuMF9fbOuRKkCvrr+6SVX+hfGZLtXSWfQ==}
     hasBin: true
 
   '@cobuild/wire@0.3.6':
@@ -751,19 +751,19 @@ packages:
   '@scure/bip39@1.6.0':
     resolution: {integrity: sha512-+lF0BbLiJNwVlev4eKelw1WWLaiKXw7sSl8T6FvBlWkdX+94aGJ4o8XjUdlyhTCjd8c+B3KT3JfS8P0bLRNU6A==}
 
-  '@secretlint/core@11.6.0':
-    resolution: {integrity: sha512-CGrXYXP4efvAv6VdSqu+mW2MxLL3ATrHgqQyVCFdA1tw34aafoaMHKSPQthiEj9RbPiYsGbiE2JmmauDHs0rEw==}
+  '@secretlint/core@11.7.1':
+    resolution: {integrity: sha512-D1a/6U3JT2hhs+OpocAf1j+2t79ExrFqNm8j7pilhCQqpJ9QIEexGs1ty3v9wDACm48v0PFhCNCyn4hyctGYig==}
     engines: {node: '>=20.0.0'}
 
-  '@secretlint/profiler@11.6.0':
-    resolution: {integrity: sha512-ZwgjAIgrYv60LkCfBUTsdfMtROy+iiiwX7DvIcEoPlKFfKC7TEteE1liTgT4mdRg/+9IG5NA9aaOBLWG01byxw==}
+  '@secretlint/profiler@11.7.1':
+    resolution: {integrity: sha512-Fa1fCVT4izv8PRXL8t4KB6FwBEL2OYqOYtNsyssWd7giNoNcohCoLGnDhJNLcTxTyTqkDzLlGV0M4CYsCkcfZQ==}
 
-  '@secretlint/secretlint-rule-preset-recommend@11.6.0':
-    resolution: {integrity: sha512-yEC93K7WWOYN3WBOs7/LwwtsX3LijNKVsR92+Aar3grqM/QfqBZBQQm06sU+gpg/HC9ndn0sd3ljrZe6jcPzcg==}
+  '@secretlint/secretlint-rule-preset-recommend@11.7.1':
+    resolution: {integrity: sha512-LsiEhDWoXi9GNx1Zp5eYRNajeUvBrZ82h3k/vzFqo0WoSdmpyDnkkzBTLXqWqj1VNyPCcTwlxOqnEmlz6lXc7A==}
     engines: {node: '>=20.0.0'}
 
-  '@secretlint/types@11.6.0':
-    resolution: {integrity: sha512-ooPksY3/ad1qmHhIlnernIZI3yKO55PWsX+RCcj44l9VYSlQCZyfz5DnC/e0U5KxecI9P56iQxxNPkMU6nkUWg==}
+  '@secretlint/types@11.7.1':
+    resolution: {integrity: sha512-bIkBwIdQScZX5xm3DsLp3oL5U/KKUYWgmst39dZsDi55X9tKuPd7/uVpO1PqNrDW1I0QD5t6es/2LonG5RjxXg==}
     engines: {node: '>=20.0.0'}
 
   '@sindresorhus/merge-streams@4.0.0':
@@ -2377,7 +2377,7 @@ snapshots:
 
   '@cobuild/repo-tools@0.1.15': {}
 
-  '@cobuild/review-gpt@0.5.57(@cfworker/json-schema@4.1.1)':
+  '@cobuild/review-gpt@0.5.59(@cfworker/json-schema@4.1.1)':
     dependencies:
       '@cobuild/repo-tools': 0.1.15
       incur: 0.3.25
@@ -2641,7 +2641,7 @@ snapshots:
 
   '@modelcontextprotocol/server@2.0.0-alpha.2(@cfworker/json-schema@4.1.1)':
     dependencies:
-      zod: 4.3.6
+      zod: 4.3.5
     optionalDependencies:
       '@cfworker/json-schema': 4.1.1
 
@@ -2790,20 +2790,20 @@ snapshots:
       '@noble/hashes': 1.8.0
       '@scure/base': 1.2.6
 
-  '@secretlint/core@11.6.0':
+  '@secretlint/core@11.7.1':
     dependencies:
-      '@secretlint/profiler': 11.6.0
-      '@secretlint/types': 11.6.0
+      '@secretlint/profiler': 11.7.1
+      '@secretlint/types': 11.7.1
       debug: 4.4.3
       structured-source: 4.0.0
     transitivePeerDependencies:
       - supports-color
 
-  '@secretlint/profiler@11.6.0': {}
+  '@secretlint/profiler@11.7.1': {}
 
-  '@secretlint/secretlint-rule-preset-recommend@11.6.0': {}
+  '@secretlint/secretlint-rule-preset-recommend@11.7.1': {}
 
-  '@secretlint/types@11.6.0': {}
+  '@secretlint/types@11.7.1': {}
 
   '@sindresorhus/merge-streams@4.0.0': {}
 
@@ -3846,8 +3846,8 @@ snapshots:
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)
       '@repomix/strip-comments': 2.4.2
       '@repomix/tree-sitter-wasms': 0.1.16
-      '@secretlint/core': 11.6.0
-      '@secretlint/secretlint-rule-preset-recommend': 11.6.0
+      '@secretlint/core': 11.7.1
+      '@secretlint/secretlint-rule-preset-recommend': 11.7.1
       commander: 14.0.3
       fast-xml-builder: 1.1.4
       git-url-parse: 16.1.0
